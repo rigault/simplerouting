@@ -1,25 +1,23 @@
 #include <stdbool.h>
-#define EPSILON               0.1
-#define GET_GRIB_CMD          "grib_get_data -L \"%.2lf %.2lf\" -F \"%.2lf\" -m -999999 -w shortName=10u/10v/swh -p step,shortName "
-#define GET_GRIB_CURRENT_CMD  "grib_get_data -L \"%.2lf %.2lf\" -F \"%.2lf\" -m -999999 -w shortName=ucurr/vcurr -p step,shortName "
-#define MISSING               (-999999)
+#define MIN_SPEED_FOR_TARGET  5                 // knots. Difficult to explain. See engine.c, optimize()..
+#define MISSING               (-999999)         // for grib file missing values
 #define MS_TO_KN              (3600.0/1852.0)
 #define KN_TO_MS              (1852.0/3600.0)
 #define RAD_TO_DEG            (180.0/M_PI)
 #define DEG_TO_RAD            (M_PI/180.0)
 #define SIZE_T_IS_SEA         (3601 * 1801)
 #define MAX_N_WAY_POINT       10
-#define ROOT_GRIB_SERVER      "https://data.ecmwf.int/forecasts/"  
+#define ROOT_GRIB_SERVER      "https://static1.mclcm.net/" // Meteoconsult
 #define TEMP_FILE_NAME        "grib.tmp"  
-#define PROG_NAME             "Routing"  
+#define PROG_NAME             "routing"  
 #define PROG_VERSION          "0.1"  
 #define PROG_AUTHOR           "René Rigault"
 #define PROG_WEB_SITE         "http://www.orange.com"  
 #define PROG_LOGO             "routing.png"  
 #define MILLION               1000000
 #define NIL                   (-100000)
-#define MAX_N_ISOC            128               // max number of isochrones in isocArray
-#define MAX_SIZE_ISOC         200000            // max number of point in an isochrone
+#define MAX_N_ISOC            512               // max number of isochrones in isocArray
+#define MAX_SIZE_ISOC         100000            // max number of point in an isochrone
 #define MAX_N_POL_MAT_COLS    128
 #define MAX_N_POL_MAT_LINES   128
 #define MAX_SIZE_LINE         256		         // size max of pLine in text files
@@ -31,18 +29,24 @@
 #define MAX_N_SHORT_NAME      64
 #define MAX_N_GRIB_LAT        1024
 #define MAX_N_GRIB_LON        2048
+#define MAX_SIZE_SHORT_NAME   10
 #define MAX_SIZE_NAME         64
 #define MAX_SIZE_FILE_NAME    128               // size max of pLine in text files
 #define MAX_N_SHP_FILES       4                 // max number of shape file
-#define MAX_N_POI             100               // max number of cities in city file
+#define MAX_N_POI             100               // max number of poi in poi file
 #define MAX_SIZE_POI_NAME     32                // max size of city name
 #define GPSD_TCP_PORT         "2947"            // TCP port gor gps demon
-#define MAX_N_SMTP_TO         3                 // max nummber of grib mail providers
+#define MAX_N_SMTP_TO         5                 // max nummber of grib mail providers
 
 enum {WIND, CURRENT};                           // for grib information either WIND or CURRENT
-enum {SAILDOCS, MAILASAIL, GLOBALMARINET};      // grib mail service providers
-enum {DD, DM, DMS};                             // degre decimal, degre minutes, degre minutes seconds
+enum {POLAR, WAVE_POLAR};                       // for polar information either POLAR or WAVE
+enum {BASIC, DD, DM, DMS};                      // degre, degre decimal, degre minutes, degre minutes seconds
 enum {TRIBORD, BABORD};                         // amure
+enum {NO_COLOR, B_W, COLOR};                    // wind representation 
+enum {NONE, ARROW, BARBULE};                    // wind representation 
+enum {SAILDOCS_GFS, SAILDOCS_ECMWF, SAILDOCS_ICON, SAILDOCS_CURR, MAILASAIL, GLOBALMARINET}; // grib mail service providers
+enum {NOTHING, POINT, SEGMENT, BEZIER};         // bezier or segment representation
+enum {UNVISIBLE, VISIBLE};                      // for POI point of interest
 
 /*! My date */
 typedef struct {
@@ -77,6 +81,12 @@ typedef struct {
 
 /*! zone description */
 typedef struct {
+   bool   wellDefined;
+   long   centreId;
+   int    nMessage;
+   long   editionNumber;
+   long   numberOfValues;
+   long   stepUnits;
    double latMin;
    double latMax;
    double lonLeft;
@@ -143,10 +153,11 @@ typedef struct {
    int verbose;                              // verbose level of display
    double constWindTws;                      // if not equal 0, constant wind used in place of grib file
    double constWindTwd;                      // the direction of constant wind if used
-   double constSog;                          // constant speed if used
+   double constWave;                         // constant wave height if used
    double constCurrentS;                     // if not equal 0, contant current speed Knots
    double constCurrentD;                     // the direction of cinstant current if used
-   double distTarget;                        // distance for target point used in sectorOptimize
+   int kFactor;                              // factor for target point distance used in sectorOptimize
+   int minPt;                                // min point per sector. See sectorOptimize
    double maxTheta;                          // angle for optimization by sector
    int nSectors;                             // number of sector for optimization by sector
    char gribFileName [MAX_SIZE_FILE_NAME];   // name of grib file
@@ -163,19 +174,30 @@ typedef struct {
    char shpFileName [MAX_N_SHP_FILES][MAX_SIZE_FILE_NAME];    // name of SHP file for geo map
    char isSeaFileName [MAX_SIZE_FILE_NAME];  // name of file defining sea on earth
    char cliHelpFileName [MAX_SIZE_FILE_NAME];// text help for cli mode
-   char poiFileName [MAX_SIZE_FILE_NAME];    // list of cities
+   char poiFileName [MAX_SIZE_FILE_NAME];    // list of point of interest
    int nShpFiles;                            // number of Shp files
    double startTimeInHours;                  // time of beginning of routing after time0Grib
    Pp pOr;                                   // point of origine
    Pp pDest;                                 // point of destination
+   char pOrName [MAX_SIZE_NAME];             // Name of pOr if exist
+   char pDestName [MAX_SIZE_NAME];           // Name of pDest if exist
    int style;                                // style of isochrones
+   int showColors;                           // colors for wind speed
    char smtpScript [MAX_SIZE_LINE];          // script used to send request for grib files
    char smtpTo[MAX_N_SMTP_TO][MAX_SIZE_LINE];// addresses od SMTP grib providers
+   char smtpName[MAX_N_SMTP_TO][MAX_SIZE_LINE];// names  of SMTP grib providers
    int nSmtp;                                // number of SMTP grib providers
+   char imapToSeen [MAX_SIZE_LINE];          // script used to flag all messages to seen
    char imapScript [MAX_SIZE_LINE];          // script used to receive grib files
    int dispDms;                              // display degre, degre minutes, degre minutes sec
+   int windDisp;                             // display wind nothing or barbule or arrow
+   int currentDisp;                          // display current
+   int waveDisp;                             // display wave height
    double penalty0;                          // penalty in hours when amure change front
    double penalty1;                          // penalty in hours when amure change back
+   double motorSpeed;                        // motor speed if used
+   double threshold;                         // threshold for motor use
+   double efficiency;                        // efficiency of team 
    char editor [MAX_SIZE_NAME];              // name of text file editor
 } Par;
 
@@ -187,6 +209,7 @@ typedef struct {
    double lat;
    double lon;
    char   name [MAX_SIZE_POI_NAME];
+   int    type;
 } Poi;
 
 /*! For GPS management */

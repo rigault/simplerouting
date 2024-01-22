@@ -6,6 +6,7 @@
 #include <math.h>
 #include <unistd.h>
 #include "rtypes.h"
+#include "rutil.h"
 
 /*! Thread for GPS management */
 struct ThreadData {
@@ -22,11 +23,14 @@ pthread_mutex_t gps_data_mutex = PTHREAD_MUTEX_INITIALIZER;
 /*! write gps information in buffer */
 bool gpsToStr (char *buffer) {
    char line [MAX_SIZE_LINE];
+   char strLat [MAX_SIZE_LINE];
+   char strLon [MAX_SIZE_LINE];
    if (isnan (my_gps_data.lon) || isnan (my_gps_data.lat)) {
       strcpy (buffer, "No GPS data available\n");
       return false;
    }
-   sprintf (buffer, "Position: %lf°, %lf°\n",  my_gps_data.lon, my_gps_data.lat);
+   sprintf (buffer, "Position: %s %s\n", \
+      latToStr (my_gps_data.lat, par.dispDms, strLat), lonToStr (my_gps_data.lon, par.dispDms, strLon));
    sprintf (line, "Altitude: %.2f\n", my_gps_data.alt);
    strcat (buffer, line);
    sprintf (line, "Status: %d\n", my_gps_data.status);

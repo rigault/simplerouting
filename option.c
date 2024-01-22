@@ -1,10 +1,10 @@
 /*! compilation gcc -Wall -c option.c */
 #include <stdbool.h>
 #include <stdio.h>
-#include "eccodes.h"
+#include <sys/time.h>
 #include "rtypes.h"
 #include "rutil.h"
-#include <gtk/gtk.h>
+#include "engine.h"
 
 void optionManage (char option) {
 	FILE *f;
@@ -53,13 +53,20 @@ void optionManage (char option) {
          scanf ("%lf", &twa);
          printf ("tws true wind speed = ");
          scanf ("%lf", &tws);
-         printf ("speed over ground: %.2lf\n", estimateSog (twa, tws, polMat));
+         printf ("speed over ground: %.2lf\n", extFindPolar (twa, tws, polMat));
       }
       break;
    case 'P': // Wave polar
       readPolar (par.wavePolFileName, &wavePolMat);
       polToStr (buffer, wavePolMat);
       printf ("%s\n", buffer);
+      while (true) {
+         printf ("angle = " );
+         scanf ("%lf", &twa);
+         printf ("w = ");
+         scanf ("%lf", &w);
+         printf ("coeff: %.2lf\n", extFindPolar (twa, w, wavePolMat)/100.0);
+      }
       break;
    case 's': // isIsea
       readIsSea (par.isSeaFileName);
@@ -76,11 +83,8 @@ void optionManage (char option) {
       }
       break;
    case 'v': // version
-      int major = gtk_get_major_version();
-      int minor = gtk_get_minor_version();
-      int micro = gtk_get_micro_version();
-      printf ("GTK version : %d.%d.%d\n", major, minor, micro);
       printf ("Prog version: %s, %s, %s\n", PROG_NAME, PROG_VERSION, PROG_AUTHOR);
+      printf ("Compilation-date: %s\n", __DATE__);
       break;
    case 'w': // findflow wind
       readGrib (NULL);
