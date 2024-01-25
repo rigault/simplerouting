@@ -20,21 +20,20 @@
 #include "rutil.h"
 
 /*! global variables */
-Pp isocArray [MAX_N_ISOC][MAX_SIZE_ISOC];
-double tDistance [MAX_N_ISOC];   // best distance from isoc to dest
-int nIsoc = 0;
-int sizeIsoc [MAX_N_ISOC] = {0}; // size isoc
+Pp isocArray [MAX_N_ISOC][MAX_SIZE_ISOC]; // list of isochrones
+IsoDesc isoDesc [MAX_N_ISOC];             // Isochrone meta data
+int nIsoc = 0;                            // total number of isochrones 
+
 double pOrTtoPDestDist = 0;      // distance from par.pOr to par.pDest.
 double pOrTtoPDestCog = 0;       // cog from par.pOr to par.pDest.
-double tDist [MAX_SIZE_ISOC];    // distance to dest
+double tDist [MAX_SIZE_ISOC];    // distance to pDest
 double nPt [MAX_SIZE_ISOC];      // nb of point per sector
-int firstInIsoc [MAX_N_ISOC];    // index of fiest point, useful for drawAllIsocrones
 int first;
 int pId = 1;                     // global ID for points. -1 and 0 are reserved for pOr and pDest
 Route route;                     // store route found by routing
-double tDeltaCurrent = 0.0;      // delta time in hours betwwen Wind zone and current zone
-Pp lastClosest;                  // closest point to destination in last isocgrone computed
-double lastClosestDist;          // closest distance to destination in last isocgrone computed
+double tDeltaCurrent = 0.0;      // delta time in hours between Wind zone and current zone
+Pp lastClosest;                  // closest point to destination in last isochrone computed
+double lastClosestDist;          // closest distance to destination in last isochrone computed
 double globalMaxSpeedInPolarAt;  // memorise result of last call to maxSpeedinPolarAt
 
 /*! true if P is within the zone */
@@ -96,6 +95,7 @@ static inline double maxSpeedInPolarAt (double tws, PolMat mat) {
 
 /*! say if point is in sea */
 static inline bool isSea (double lon, double lat) {
+   if (tIsSea == NULL) return true;
    int iLon = round (lon * 10  + 1800);
    int iLat = round (-lat * 10  + 900);
    return tIsSea [(iLat * 3601) + iLon];
@@ -130,8 +130,8 @@ static inline int findFirst (int nIsoc) {
    int next;
    double d;
    double distMax = 0;
-   for (int i = 0; i < sizeIsoc [nIsoc]; i++) {
-      next = (i >= (sizeIsoc [nIsoc] -1)) ? 0 : i + 1;
+   for (int i = 0; i < isoDesc [nIsoc].size; i++) {
+      next = (i >= (isoDesc[nIsoc].size -1)) ? 0 : i + 1;
       d = orthoDist (isocArray [nIsoc][i].lat, isocArray [nIsoc][i].lon, isocArray [nIsoc][next].lat, isocArray [nIsoc][next].lon);
       //d = loxoDist (isocArray [nIsoc][i], isocArray [nIsoc][next]);
       if (d > distMax) {
@@ -140,6 +140,104 @@ static inline int findFirst (int nIsoc) {
       }
    }
    return best;
+}
+
+/*! reduce the size of Isolist */
+static inline int forwardSectorOptimize (Isoc isoList, int isoLen, Isoc optIsoc, int nMaxOptIsoc, double distTarget) {
+   int iSector, k;
+   double alpha, theta, d;
+   // nMaxOptIsoc = nSector (lastClosestDist);
+   double thetaStep = 360.0 / nMaxOptIsoc;
+   Pp ptTarget;
+   double dPtTarget = -distTarget;
+   double dLat = dPtTarget * cos (DEG_TO_RAD * pOrTtoPDestCog);            // nautical miles in N S direction
+   ptTarget.lat = lastClosest.lat + dLat / 60;
+   double dLon = dPtTarget * sin (DEG_TO_RAD * pOrTtoPDestCog) / cos (DEG_TO_RAD * ptTarget.lat);  // nautical miles in E W direction
+   ptTarget.lon = lastClosest.lon + dLon / 60;
+   isoDesc [nIsoc].focalLat = ptTarget.lat;
+   isoDesc [nIsoc].focalLon = ptTarget.lon;
+  
+   //ptTarget = par.pDest; 
+   double beta = directCap (par.pOr, par.pDest);
+   for (int i = 0; i < nMaxOptIsoc; i++) { 
+	  tDist [i] = DBL_MAX;
+     nPt [i] = 0;
+     optIsoc [i].lat = DBL_MAX;
+   }
+
+   for (int i = 0; i < isoLen; i++) {
+      alpha = directCap (isoList [i], ptTarget);
+      theta = beta - alpha;
+      if (round ((180.0 - theta) / thetaStep) == 0)
+         first = i; 
+      if (theta < 0) theta += 360;
+      iSector = round ((360.0 - theta) / thetaStep);
+      d = orthoDist (par.pDest.lat, par.pDest.lon, isoList [i].lat, isoList [i].lon);
+	   // d = loxoDist (par.pDest, isoList [i]);
+		if (d < tDist [iSector]) {
+         tDist[iSector] = d;
+         optIsoc [iSector] = isoList [i];
+      }
+      nPt [iSector] += 1;
+   }
+   // on retasse si certains secteurs vides ou faiblement peuples
+   k = 0;
+   for (iSector = 0; iSector < nMaxOptIsoc; iSector++) {
+      if ((nPt [iSector] >= par.minPt) && (tDist [iSector] < DBL_MAX -1)) { //&& (optIsoc [iSector].lat < DBL_MAX -1)) {
+         optIsoc [k] = optIsoc [iSector];
+	      k += 1;
+      }
+	}
+	return k; 
+}
+
+/*! reduce the size of Isolist */
+static inline int NsectorOptimize (Isoc isoList, int isoLen, Isoc optIsoc, int nMaxOptIsoc, double distTarget) {
+   int iSector, k;
+   double alpha, theta, d;
+   // nMaxOptIsoc = nSector (lastClosestDist);
+   double thetaStep = 360.0 / nMaxOptIsoc;
+   Pp ptTarget;
+   double dPtTarget = pOrTtoPDestDist - lastClosestDist + distTarget;
+   double dLat = dPtTarget * cos (DEG_TO_RAD * pOrTtoPDestCog);            // nautical miles in N S direction
+   ptTarget.lat = lastClosest.lat + dLat / 60;
+   double dLon = dPtTarget * sin (DEG_TO_RAD * pOrTtoPDestCog) / cos (DEG_TO_RAD * ptTarget.lat);  // nautical miles in E W direction
+   ptTarget.lon = lastClosest.lon + dLon / 60;
+   isoDesc [nIsoc].focalLat = ptTarget.lat;
+   isoDesc [nIsoc].focalLon = ptTarget.lon;
+  
+   //ptTarget = par.pDest; 
+   double beta = directCap (par.pOr, par.pDest);
+   for (int i = 0; i < nMaxOptIsoc; i++) { 
+	  tDist [i] = DBL_MAX;
+     nPt [i] = 0;
+     optIsoc [i].lat = DBL_MAX;
+   }
+
+   for (int i = 0; i < isoLen; i++) {
+      alpha = directCap (isoList [i], ptTarget);
+      theta = beta - alpha;
+      if (round ((180.0 - theta) / thetaStep) == 0)
+         first = i; 
+      if (theta < 0) theta += 360;
+      iSector = round ((360.0 - theta) / thetaStep);
+      d = orthoDist (par.pDest.lat, par.pDest.lon, isoList [i].lat, isoList [i].lon);
+	   // d = loxoDist (par.pDest, isoList [i]);
+		if (d < tDist [iSector]) {
+         tDist[iSector] = d;
+         optIsoc [iSector] = isoList [i];
+      }
+      nPt [iSector] += 1;
+   }
+   // on retasse si certains secteurs vides ou faiblement peuples
+   k = 0;
+   for (iSector = 0; iSector < nMaxOptIsoc; iSector++) {
+      if ((nPt [iSector] >= par.minPt) && (tDist [iSector] < DBL_MAX -1)) { //&& (optIsoc [iSector].lat < DBL_MAX -1)) {
+         optIsoc [k] = optIsoc [iSector];
+	      k += 1;
+      }
+	}
+	return k; 
 }
 
 /*! reduce the size of Isolist */
@@ -154,6 +252,8 @@ static inline int sectorOptimize (Isoc isoList, int isoLen, Isoc optIsoc, int nM
    ptTarget.lat = par.pOr.lat + dLat / 60;
    double dLon = dPtTarget * sin (DEG_TO_RAD * pOrTtoPDestCog) / cos (DEG_TO_RAD * ptTarget.lat);  // nautical miles in E W direction
    ptTarget.lon = par.pOr.lon + dLon / 60;
+   isoDesc [nIsoc].focalLat = ptTarget.lat;
+   isoDesc [nIsoc].focalLon = ptTarget.lon;
   
    //ptTarget = par.pDest; 
    double beta = directCap (par.pOr, par.pDest);
@@ -200,13 +300,14 @@ static int Noptimize (Isoc isoList, int isoLen, Isoc optIsoc) {
 /*! choice of algorithm used to reduce the size of Isolist */
 static inline int optimize (int algo, Isoc isoList, int isoLen, Isoc optIsoc) {
    double distTarget;
+   distTarget = (globalMaxSpeedInPolarAt < MIN_SPEED_FOR_TARGET) ? \
+      par.tStep * par.kFactor : par.tStep * globalMaxSpeedInPolarAt * par.kFactor;
+  //printf ("distTarget: %.2lf\n", distTarget);
    switch (algo) {
       case 0: return Noptimize (isoList, isoLen, optIsoc);
-      case 1: 
-         distTarget = (globalMaxSpeedInPolarAt < MIN_SPEED_FOR_TARGET) ? \
-            par.tStep * par.kFactor : par.tStep * globalMaxSpeedInPolarAt * par.kFactor;
-         //printf ("distTarget: %.2lf\n", distTarget);
-         return sectorOptimize (isoList, isoLen, optIsoc, par.nSectors, distTarget);
+      case 1: return sectorOptimize (isoList, isoLen, optIsoc, par.nSectors, distTarget);
+      case 2: return NsectorOptimize (isoList, isoLen, optIsoc, par.nSectors, distTarget);
+      case 3: return forwardSectorOptimize (isoList, isoLen, optIsoc, par.nSectors, distTarget);
       default:; 
    } 
    return 0;
@@ -226,6 +327,7 @@ static int buildNextIsochrone (Isoc isoList, int isoLen, Pp pDest, double t, dou
    double tws = par.constWindTws;
    bool motor = false;
    double efficiency = par.efficiency;
+   double waveCorrection = 0;
    
    for (int k = 0; k < isoLen; k++) {
       uCurr = 0; vCurr = 0; w = 0;
@@ -261,7 +363,9 @@ static int buildNextIsochrone (Isoc isoList, int isoLen, Pp pDest, double t, dou
          // printf ("twa : %.2lf, tws: %.2lf, sog: %.2lf\n", twa, tws, sog);
 	      // if (sog > 7) printf ("bUilN sog %lf twa %lf twd %lf\n", sog, twa, tws);
          newPt.amure = (cog > twd) ? BABORD : TRIBORD;
-         sog = sog * efficiency * findPolar (twa, w, wavePolMat) / 100.0;
+         if ((waveCorrection = findPolar (twa, w, wavePolMat)) > 0) 
+            sog *= waveCorrection / 100.0; 
+         sog *= efficiency;
          if ((!motor) && (newPt.amure != isoList [k].amure)) {                   // changement amure
             if ((twa > 90) && (twa < 270)) penalty = par.penalty1;    // empannage
             else penalty = par.penalty0;                           // virement de bord
@@ -297,6 +401,7 @@ static int findFather (int ptId, Isoc isoc, int lIsoc) {
       if (isoc [k].id == ptId)
          return k;
    }
+   // fprintf (stderr, "Error in father ptId not found;%d\n", ptId);
    return -1;
 }
 
@@ -308,7 +413,7 @@ void allIsocToStr (char *str) {
    Pp pt;
    str [0] = '\n'; // forget first line
    for (int i = 0; i < nIsoc; i++) {
-      for (int k = 0; k < sizeIsoc [i]; k++) {
+      for (int k = 0; k < isoDesc [i].size; k++) {
          pt = isocArray [i][k];
          sprintf (line, "%03d; %-12s; %-12s; %6d; %6d; %6d\n", i, latToStr (pt.lat, par.dispDms, strLat),\
             lonToStr (pt.lon, par.dispDms, strLon), pt.id, pt.father, pt.amure);
@@ -327,7 +432,7 @@ bool dumpAllIsoc (char *fileName) {
    }
    fprintf (f, "n;     Lat;   Lon;      Id; Father;  Amure\n");
    for (int i = 0; i < nIsoc; i++) {
-      for (int k = 0; k < sizeIsoc [i]; k++) {
+      for (int k = 0; k < isoDesc [i].size; k++) {
          pt = isocArray [i][k];
          fprintf (f, "%03d; %06.2f; %06.2f; %6d; %6d; %6d\n", i, pt.lat, pt.lon, pt.id, pt.father, pt.amure);
       }
@@ -351,7 +456,7 @@ bool dumpRoute (char *fileName, Pp dest) {
    fprintf (f, "%4d; %06.2f; %06.2f; %4d; %4d\n", dep, pt.lat, pt.lon, pt.id, pt.father);
       
    for (i = dep - 1; i >= 0; i--) {
-      iFather = findFather (pt.father, isocArray [i], sizeIsoc [i]);
+      iFather = findFather (pt.father, isocArray [i], isoDesc[i].size);
       pt = isocArray [i][iFather];
       fprintf (f, "%4d; %06.2f; %06.2f; %4d; %4d\n", i, pt.lat, pt.lon, pt.id, pt.father);
    }
@@ -368,6 +473,8 @@ void storeRoute (Pp pDest, double lastStepDuration) {
    int k;
    int iFather;
    int dep = (pDest.id == 0) ? nIsoc : nIsoc - 1;
+   bool found = false;
+   if (nIsoc == 0) return;
    Pp ptLast = pDest;
    Pp pt = pDest;
    route.t [dep+1].lat = pDest.lat;
@@ -379,7 +486,9 @@ void storeRoute (Pp pDest, double lastStepDuration) {
    route.t [dep+1].dOrtho = 0;
 
    for (int i = dep - 1; i >= 0; i--) {
-      iFather = findFather (pt.father, isocArray [i], sizeIsoc [i]);
+      iFather = findFather (pt.father, isocArray [i], isoDesc[i].size);
+      if (iFather == -1) continue;
+      found = true;
       pt = isocArray [i][iFather];
       k = i+1;
       route.t [k].lat = pt.lat;
@@ -391,6 +500,10 @@ void storeRoute (Pp pDest, double lastStepDuration) {
       route.t [k].dOrtho = orthoDist (pt.lat, pt.lon, pDest.lat, pDest.lon);;
       route.totDist += route.t [k].d;
       ptLast = pt;
+   }
+   if (!found) {
+      route.totDist = 0;
+      return;
    }
    route.t [0].lat = par.pOr.lat;
    route.t [0].lon = par.pOr.lon;
@@ -449,6 +562,7 @@ static inline bool goalP (Pp pFrom, Pp pDest, double t, double dt, double *timeT
    double penalty;
    bool motor = false;
    double efficiency;
+   double waveCorrection = 0;
    *distance = orthoDist (pDest.lat, pDest.lon, pFrom.lat, pFrom.lon);
    //*distance = 60 * dist (dLat, dLon * coeffLat);
    if (par.constWindTws != 0) {
@@ -479,7 +593,9 @@ static inline bool goalP (Pp pFrom, Pp pDest, double t, double dt, double *timeT
       efficiency = par.efficiency;
       sog = findPolar (twa, tws, polMat);  //speed of the boat considering twa and wind speed (tws) in polar
    }
-   sog = sog * efficiency * findPolar (twa, w, wavePolMat) / 100.0;
+   if ((waveCorrection = findPolar (twa, w, wavePolMat)) > 0) 
+      sog *= waveCorrection / 100.0; 
+   sog *= efficiency;
    *timeTo = *distance/sog;
    //if ((sog * dt) > distance) printf ("goal sog %lf dt %lf distance %lf\n", sog, dt, distance);
    if ((!motor) && (pDest.amure != pFrom.amure)) {                  // changement amure
@@ -498,7 +614,7 @@ static inline bool goal (int nIsoc, Isoc isoList, int len, double t, double dt, 
    double time, distance;
    bool destinationReached = false;
    bool res;
-   tDistance [nIsoc] = DBL_MAX; 
+   isoDesc [nIsoc].distance = DBL_MAX; 
    for (int k = 0; k < len; k++) {
       res = goalP (isoList [k], par.pDest, t, dt, &time, &distance);
       // printf ("k, time: %d %lf\n",  k, time);
@@ -510,8 +626,8 @@ static inline bool goal (int nIsoc, Isoc isoList, int len, double t, double dt, 
          if (res) par.pDest.father = isoList [k].id; // ATTENTION !!!!
          bestTime = time;
       }
-      if (distance < tDistance [nIsoc]) {
-         tDistance [nIsoc] = distance;
+      if (distance < isoDesc [nIsoc].distance) {
+         isoDesc [nIsoc].distance = distance;
       }
    }
    *lastStepDuration = bestTime;
@@ -519,16 +635,19 @@ static inline bool goal (int nIsoc, Isoc isoList, int len, double t, double dt, 
 }
 
 /*! return closest point to pDest in Isoc */ 
-static inline Pp closest (Isoc isoc, int n, Pp pDest) {
+static inline Pp closest (Isoc isoc, int n, Pp pDest, int *index) {
    Pp best;
    double d;
+   int i;
+   *index = -1;
    lastClosestDist = DBL_MAX;
-   for (int i = 0; i < n; i++) {
+   for (i = 0; i < n; i++) {
       d = orthoDist (pDest.lat, pDest.lon, isoc [i].lat, isoc [i].lon);
 	   //d = loxoDist (pDest, isoc [i]);
       if (d < lastClosestDist) {
          lastClosestDist = d;
          best = isoc [i];
+         *index = i;
       }
    }
    return best;
@@ -542,6 +661,7 @@ int routing (Pp pOr, Pp pDest, double t, double dt, double *lastStepDuration) {
    double timeToReach = 0;
    int lTempList = 0;
    double timeLastStep;
+   int index; // index of closest point to pDest in insochrone
    pOrTtoPDestCog = directCap (pOr, pDest);
    // pOrTtoPDestDist = loxoDist (pOr, pDest);
    pOrTtoPDestDist = orthoDist (pOr.lat, pOr.lon, pDest.lat, pDest.lon);
@@ -553,8 +673,8 @@ int routing (Pp pOr, Pp pDest, double t, double dt, double *lastStepDuration) {
    route.n = 0;
    route.destinationReached = false;
    for (int i = 0; i < MAX_N_ISOC; i++) {
-      sizeIsoc [i] = 0;
-      tDistance [i] = DBL_MAX;
+      isoDesc [i].size = 0;
+      isoDesc [i].distance = DBL_MAX;
    }
    tempList [0] = pOr; // liste avec un unique élément;
    
@@ -563,31 +683,31 @@ int routing (Pp pOr, Pp pDest, double t, double dt, double *lastStepDuration) {
       *lastStepDuration = timeToReach;
       return 1;
    }
-   sizeIsoc [0] = buildNextIsochrone (tempList, 1, pDest, t, dt, isocArray [0]);
-   firstInIsoc [0] = 0; 
-   lastClosest = closest (isocArray [0], sizeIsoc [0], pDest);
-   // printf ("%-20s%d, %d\n", "Isochrone no, len: ", 0, sizeIsoc [0]);
-   // printIsochrone (pOr, isocArray [0], sizeIsoc [0]); 
+   isoDesc [0].size = buildNextIsochrone (tempList, 1, pDest, t, dt, isocArray [0]);
+   isoDesc [0].first = 0; 
+   lastClosest = closest (isocArray [0], isoDesc[0].size, pDest, &index);
+   isoDesc [0].closest = index; 
+   
+   // printf ("%-20s%d, %d\n", "Isochrone no, len: ", 0, isoDesc [0].size);
    nIsoc = 1;
    while (t < (zone.timeStamp [zone.nTimeStamp-1]/* + par.tStep*/) && (nIsoc < par.maxIso)) {
       t += dt;
-      if (goal (nIsoc-1, isocArray [nIsoc -1], sizeIsoc [nIsoc - 1], t, dt, &timeLastStep)) {
-         sizeIsoc [nIsoc] = optimize (par.opt, tempList, lTempList, isocArray [nIsoc]);
-         firstInIsoc [nIsoc] = findFirst (nIsoc);
-         lastClosest = closest (isocArray [nIsoc], sizeIsoc [nIsoc], pDest); 
+      if (goal (nIsoc-1, isocArray [nIsoc -1], isoDesc[nIsoc - 1].size, t, dt, &timeLastStep)) {
+         isoDesc [nIsoc].size = optimize (par.opt, tempList, lTempList, isocArray [nIsoc]);
+         isoDesc [nIsoc].first = findFirst (nIsoc);
+         lastClosest = closest (isocArray [nIsoc], isoDesc[nIsoc].size, pDest, &index);
+         isoDesc [nIsoc].closest = index; 
          *lastStepDuration = timeLastStep;
          return nIsoc + 1;
       }
-      lTempList = buildNextIsochrone (isocArray [nIsoc -1], sizeIsoc [nIsoc -1], pDest, t, dt, tempList);
+      lTempList = buildNextIsochrone (isocArray [nIsoc -1], isoDesc [nIsoc -1].size, pDest, t, dt, tempList);
       if (lTempList == -1) return -1;
       // printf ("%-20s%d", "Biglist length: ", lTempList);
-      sizeIsoc [nIsoc] = optimize (par.opt, tempList, lTempList, isocArray [nIsoc]);
-      firstInIsoc [nIsoc] = findFirst (nIsoc);; 
-      lastClosest = closest (isocArray [nIsoc], sizeIsoc [nIsoc], pDest);
-      // printf ("%-20s%d\n", " ; Opt length: ", sizeIsoc [nIsoc]);
+      isoDesc [nIsoc].size = optimize (par.opt, tempList, lTempList, isocArray [nIsoc]);
+      isoDesc [nIsoc].first = findFirst (nIsoc);; 
+      lastClosest = closest (isocArray [nIsoc], isoDesc [nIsoc].size, pDest, &index);
+      isoDesc [nIsoc].closest = index; 
 
-      // printIsochrone (pOr, isocArray [nIsoc], sizeIsoc [nIsoc]); 
-      // printf ("%-20s%d, %d\n", "Isochrone no, len: ", nIsoc, sizeIsoc [nIsoc]);
       nIsoc += 1;
    }
    *lastStepDuration = 0.0;

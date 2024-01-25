@@ -12,9 +12,6 @@
 #define FROM_MAIL "RENE RIGAULT " FROM_ADDR
 #define TO_MAIL   "GFS"
 #define SMTP_SERVER  "smtp://smtp.orange.fr"
-//smtp_port = 25
-//smtp_username = "meteoinfoforrr@orange.fr"
-//smtp_password = "Mongouarou$001"
 
 static char payload_text [1024]; 
 
