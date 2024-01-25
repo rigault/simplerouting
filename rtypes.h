@@ -1,4 +1,8 @@
 #include <stdbool.h>
+#define WORKING_DIR           "/home/rr/routing/"
+#define PARAMETERS_FILE       WORKING_DIR"par/routing.par" // default parameter file
+#define TEMP_FILE_NAME        "routing.tmp"  
+#define PROG_LOGO             "routing.png"  
 #define MIN_SPEED_FOR_TARGET  5                 // knots. Difficult to explain. See engine.c, optimize()..
 #define MISSING               (-999999)         // for grib file missing values
 #define MS_TO_KN              (3600.0/1852.0)
@@ -8,12 +12,11 @@
 #define SIZE_T_IS_SEA         (3601 * 1801)
 #define MAX_N_WAY_POINT       10
 #define ROOT_GRIB_SERVER      "https://static1.mclcm.net/" // Meteoconsult
-#define TEMP_FILE_NAME        "grib.tmp"  
+#define PROG_WEB_SITE         "http://www.orange.com"  
 #define PROG_NAME             "routing"  
 #define PROG_VERSION          "0.1"  
 #define PROG_AUTHOR           "René Rigault"
-#define PROG_WEB_SITE         "http://www.orange.com"  
-#define PROG_LOGO             "routing.png"  
+#define DESCRIPTION           "Routing calculates best route from pOr (Origin) to pDest (Destination) taking into account grib files and boat polars"
 #define MILLION               1000000
 #define NIL                   (-100000)
 #define MAX_N_ISOC            512               // max number of isochrones in isocArray
@@ -22,9 +25,7 @@
 #define MAX_N_POL_MAT_LINES   128
 #define MAX_SIZE_LINE         256		         // size max of pLine in text files
 #define MAX_SIZE_DATE         32                // size max of a string with date inside
-#define RR_INFO                "\n2024\nrene.rigault@wanadoo.fr"
-#define MAX_SIZE_BUFFER        100000
-#define PARAMETERS_FILE       "par/routing.par" // default parameter file
+#define MAX_SIZE_BUFFER       100000
 #define MAX_N_TIME_STAMPS     512
 #define MAX_N_SHORT_NAME      64
 #define MAX_N_GRIB_LAT        1024
@@ -35,7 +36,7 @@
 #define MAX_N_SHP_FILES       4                 // max number of shape file
 #define MAX_N_POI             100               // max number of poi in poi file
 #define MAX_SIZE_POI_NAME     32                // max size of city name
-#define GPSD_TCP_PORT         "2947"            // TCP port gor gps demon
+#define GPSD_TCP_PORT         "2947"            // TCP port for gps demon
 #define MAX_N_SMTP_TO         5                 // max nummber of grib mail providers
 
 enum {WIND, CURRENT};                           // for grib information either WIND or CURRENT
@@ -66,8 +67,8 @@ typedef struct {
 
 typedef struct {
     Point *points;
-    int numPoints;
-    int nSHPType;
+    int   numPoints;
+    int   nSHPType;
 } Entity;
 
 /*! Wind point */
@@ -110,24 +111,34 @@ typedef struct {
 typedef struct {
    double lat;
    double lon;
-   int id;
-   int father;
-   int amure;
+   int    id;
+   int    father;
+   int    amure;
 } Pp;
+
+/*! isochrone meta data */ 
+typedef struct {
+   double distance;  // best distance from Isoc to pDest
+   int    closest;   // index in Iso of closest point to pDest
+   int    first;     // index of first point, useful for drawAllIsochrones
+   int    size;      // size of isochrone
+   double focalLat;  // focal point Lat
+   double focalLon;  // focal point Lon
+} IsoDesc;
 
 /* pol Mat description*/
 typedef struct {
    double t [MAX_N_POL_MAT_LINES][MAX_N_POL_MAT_COLS];
-   int nLine;
-   int nCol;
+   int    nLine;
+   int    nCol;
 } PolMat;
 
 /*! Point for Route description  */
 typedef struct {
    double lat;
    double lon;
-   int id;
-   int father;
+   int    id;
+   int    father;
    double cap;
    double d;
    double dOrtho;
@@ -135,12 +146,12 @@ typedef struct {
 
 /*! Route description  */
 typedef struct {
-   Pr t [MAX_N_ISOC + 1];
-   int n;
-   long kTime0;                              // relative index time of departure
+   Pr     t [MAX_N_ISOC + 1];
+   int    n;
+   long   kTime0;                           // relative index time of departure
    double duration;
    double totDist;
-   bool destinationReached;
+   bool   destinationReached;
 } Route;
 
 /*! Parameters */
@@ -160,6 +171,7 @@ typedef struct {
    int minPt;                                // min point per sector. See sectorOptimize
    double maxTheta;                          // angle for optimization by sector
    int nSectors;                             // number of sector for optimization by sector
+   char workingDir [MAX_SIZE_LINE];          // working directory
    char gribFileName [MAX_SIZE_FILE_NAME];   // name of grib file
    double gribLatStep;                       // grib lat step for mail request
    double gribLonStep;                       // grib lon step for mail request
@@ -193,18 +205,21 @@ typedef struct {
    int windDisp;                             // display wind nothing or barbule or arrow
    int currentDisp;                          // display current
    int waveDisp;                             // display wave height
+   int closestDisp;                          // display closest point to pDest in isochrones
+   int focalDisp;                            // display focal point 
    double penalty0;                          // penalty in hours when amure change front
    double penalty1;                          // penalty in hours when amure change back
    double motorSpeed;                        // motor speed if used
    double threshold;                         // threshold for motor use
    double efficiency;                        // efficiency of team 
    char editor [MAX_SIZE_NAME];              // name of text file editor
+   char mailPw [MAX_SIZE_NAME];              // password for smtp and imap
 } Par;
 
 /*! Isochrone */
 typedef Pp Isoc [MAX_SIZE_ISOC];             // isochrone is an array of points
 
-/*! for cities management */
+/*! for point of interest management */
 typedef struct {
    double lat;
    double lon;
@@ -214,11 +229,11 @@ typedef struct {
 
 /*! For GPS management */
 typedef struct {
-   int ret;
+   int    ret;
    double lat;
    double lon;
    double alt;
-   int status;
-   int nSat;
+   int    status;
+   int    nSat;
    struct timespec timestamp;
 } MyGpsData;

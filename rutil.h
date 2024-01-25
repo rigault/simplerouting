@@ -19,6 +19,7 @@ extern int readGribRet;                // to check if readGrib is terminated
 extern int readCurrentGribRet;         // to check if readCurrentGrib is terminated
 
 /*! functions defined in rutil.c */
+extern char   *buildRootName (const char *fileName, char *rootName);
 extern bool   isNumber (const char *name);
 extern long   getFileSize (const char *fileName);
 extern char   *latToStr (double lat, int type, char* str);
@@ -52,6 +53,7 @@ extern int    readPoi (const char *fileName);
 extern bool   writePoi (const char *fileName);
 extern int    findPoiByName (const char *name, double *lat, double *lon);
 extern char   *poiToStr (char *str);
-extern void   smtpGribRequestPython (int type, double lat1, double lon1, double lat2, double lon2);
+extern bool   smtpGribRequestPython (int type, double lat1, double lon1, double lat2, double lon2);
 extern bool   checkGribToStr (char *buffer, Zone zone, FlowP *gribData);
+extern void   dollarReplace (char* str);
 

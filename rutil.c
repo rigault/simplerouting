@@ -12,7 +12,9 @@
 #include <math.h>
 #include "eccodes.h"
 #include "rtypes.h"
+#include "shputil.h"
 
+extern Route route; // defined in engine.c
 const char *CSV_SEP = ";,\t";
 /*! dictionnary of meteo services */
 struct DictElmt {int id; char name [MAX_SIZE_NAME];};
@@ -32,7 +34,7 @@ Par par;
 Zone zone = {false, 0, 0, 0, 0, 0, 90.0, 0.0, 359.99, 0.0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, {0}, {0}, {0}};          // wind
 Zone currentZone = {false, 0, 0, 0, 0, 0, 90.0, 0.0, 359.99, 0.0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL,  {0}, {0}, {0}};   // current
 
-/* table describin if sea or earh */
+/* table describing if sea or earth */
 char *tIsSea = NULL; 
 
 /*! grib data description */
@@ -53,6 +55,16 @@ bool isNumber (const char *name) {
       name++;
    }
    return false; 
+}
+
+/*! build root name if not already a root name */
+char *buildRootName (const char *fileName, char *rootName) {
+   if (fileName [0] == '/') 
+      strcpy (rootName, fileName);
+   else if (par.workingDir [0] != '\0')
+      sprintf (rootName, "%s%s", par.workingDir, fileName);
+   else sprintf (rootName, "%s%s", WORKING_DIR, fileName);
+   return (rootName);
 }
 
 /*! get file size */
@@ -103,13 +115,14 @@ char *latToStr (double lat, int type, char* str) {
 char *lonToStr (double lon, int type, char* str) {
    double mn = 60 * lon - 60 * (int) lon;
    double sec = 3600 * lon - (3600 * (int) lon) - (60 * (int) mn);
-   char c = (lon > 0) ? 'E' : 'W';
+   char cc [10];
+   strcpy (cc, (lon > 0) ? "E  " : "W");
    switch (type) {
-   case BASIC: sprintf (str, "%.2lf°", lon);break;
-   case DD: sprintf (str, "%.2lf°%c", fabs (lon), c);break;
-   case DM: sprintf (str, "%03d°%02.2lf'%c", (int) fabs (lon), fabs(mn), c); break;
+   case BASIC: sprintf (str, "%.2lf°", lon); break;
+   case DD: sprintf (str, "%06.2lf°%s", fabs (lon), cc); break;
+   case DM: sprintf (str, "%03d°%05.2lf'%s", (int) fabs (lon), fabs(mn), cc); break;
    case DMS:
-      sprintf (str, "%03d°%02d'%02.0lf\"%c", (int) fabs (lon), (int) fabs(mn), fabs(sec), c);
+      sprintf (str, "%03d°%02d'%02.0lf\"%s", (int) fabs (lon), (int) fabs(mn), fabs(sec), cc);
       break;
    default:;
    }
@@ -117,7 +130,7 @@ char *lonToStr (double lon, int type, char* str) {
 }
 
 /*! send SMTP request wih right parameters to grib mail provider */
-void smtpGribRequestPython (int type, double lat1, double lon1, double lat2, double lon2) {
+bool smtpGribRequestPython (int type, double lat1, double lon1, double lat2, double lon2) {
    int i;
    char temp [MAX_SIZE_LINE];
    char *suffix = "WIND,WAVES"; 
@@ -130,12 +143,12 @@ void smtpGribRequestPython (int type, double lat1, double lon1, double lat2, dou
    case SAILDOCS_ICON:
    case SAILDOCS_CURR:
       printf ("smtp saildocs python with: %s %s\n", tWho [type], suffix);
-      sprintf (command, "%s %s grib \"send %s:%d%c,%d%c,%d%c,%d%c|%.1lf,%.1lf|0,%d,..%d|%s\"\n",\
+      sprintf (command, "%s %s grib \"send %s:%d%c,%d%c,%d%c,%d%c|%.1lf,%.1lf|0,%d,..%d|%s\" %s\n",\
          par.smtpScript, par.smtpTo [type], tWho [type],\
          (int) fabs (round(lat1)), (lat1 > 0) ? 'N':'S', (int) fabs (round(lat2)), (lat2 > 0) ? 'N':'S',\
 		   (int) fabs (round(lon1)), (lon1 > 0) ? 'E':'W', (int) fabs (round(lon2)), (lon2 > 0) ? 'E':'W',\
 		   par.gribLatStep, par.gribLonStep, par.gribTimeStep, par.gribTimeMax,\
-         (type == SAILDOCS_CURR) ? "CURRENT" : suffix);
+         (type == SAILDOCS_CURR) ? "CURRENT" : suffix, par.mailPw);
       break;
    case MAILASAIL:
       printf ("smtp mailasail python\n");
@@ -147,7 +160,7 @@ void smtpGribRequestPython (int type, double lat1, double lon1, double lat2, dou
          sprintf (temp, "%d,", i);
 	      strcat (command, temp);
       }
-      sprintf (temp, "%d GRD,WAVE\" grib", i);
+      sprintf (temp, "%d GRD,WAVE\" grib %s", i, par.mailPw);
       strcat (command, temp);   
       break;
    case GLOBALMARINET:
@@ -157,23 +170,27 @@ void smtpGribRequestPython (int type, double lat1, double lon1, double lat2, dou
       int size =  (int) fabs (lat2 - lat1) * 60;
       int sizeLon = (int)(fabs (lon2 - lon1) * cos (DEG_TO_RAD * lat)) * 60;
       if (sizeLon > size) size = sizeLon;
-      sprintf (command, "%s %s \"%d%c:%d%c:%d 7day\" \"\"",  
+      sprintf (command, "%s %s \"%d%c:%d%c:%d 7day\" \"\" %s",  
          par.smtpScript, par.smtpTo [type], \
          abs (lat), (lat > 0) ? 'N':'S', abs (lon), (lon > 0) ? 'E':'W',\
-         size);
+         size, par.mailPw);
       break;
    default:;
    }
-   printf ("command: %s\n", command);
-   if (system (command) != 0)
+   if (system (command) != 0) {
       fprintf (stderr, "Error in smtpGribRquest system call %s\n", command);
+      return false;
+   }
+   char *pt = strrchr (command, ' '); // do not print password
+   *pt = '\0';
+   printf ("command: %s\n", command);
+   return true;
 }
    
 /*! true wind direction */
 double extTwd (double u, double v) {
 	double val = 180 + RAD_TO_DEG * atan2 (u, v);
    return (val > 180) ? val - 360 : val;
-   //windDir = (180 + (180 / Math.PI) * (Math.atan2(u, v))) % 360;
 }
 
 /*! true wind speed. cf Pythagore */
@@ -288,7 +305,6 @@ int readIsSea (const char *fileName) {
    FILE *f;
    int i = 0;
    char c;
-   int v;
    int nSea = 0;
    if ((f = fopen (fileName, "r")) == NULL) {
       fprintf (stderr, "Error in readIsSea cannot open: %s\n", fileName);
@@ -299,8 +315,7 @@ int readIsSea (const char *fileName) {
 		return false;
 	}
 
-   while (((v = fgetc (f)) != -1) && (i < SIZE_T_IS_SEA)) {
-      c = (char) v;
+   while (((c = fgetc (f)) != -1) && (i < SIZE_T_IS_SEA)) {
       if (c == '1') nSea += 1;
       tIsSea [i] = c - '0';
       i += 1;
@@ -682,7 +697,8 @@ static bool readGribParameters (char *fileName, Zone *zone) {
    /* create new handle from the first message in the file*/
    h = codes_handle_new_from_file(0, f, PRODUCT_GRIB, &err);
    if (h == NULL) {
-       fprintf(stderr, "Error: unable to create handle from file %s\n",fileName);
+       fprintf (stderr, "Error: unable to create handle from file %s\n",fileName);
+       fprintf (stderr, "Error in readGribLists ret: %s\n",codes_get_error_message(err)); 
        return false;
    }
    fclose (f);
@@ -1060,7 +1076,24 @@ bool fileToStr (char* fileName, char *str) {
    return true;
 }
 
-/*! read parameter file and fill struct par */
+/*! replace $ by sequence */
+void dollarReplace (char* str) {
+   char res [MAX_SIZE_LINE];
+   size_t len = 0;
+   if (str == NULL) return;
+   for (size_t i = 0; str[i] != '\0'; ++i) {
+      if (str[i] == '$') {
+         res[len++] = '\\';
+         res[len++] = '$';
+      } else {
+         res[len++] = str[i];
+      }
+   }
+   res[len] = '\0';
+   strcpy (str, res);
+}
+
+/* read parameter file and build par struct */
 bool readParam (const char *fileName) {
    FILE *fp;
    char str [MAX_SIZE_LINE], str1 [MAX_SIZE_LINE];
@@ -1080,12 +1113,14 @@ bool readParam (const char *fileName) {
    par.efficiency = 1;
    par.kFactor = 20;
    par.minPt = 2;
+   route.n = 0;
 
    while (fgets (pLine, MAX_SIZE_BUFFER, fp) != NULL ) {
       // printf ("%s", pLine);
       while (isspace (*pLine)) pLine++;
       if ((!*pLine) || *pLine == '#') continue;
-      if (sscanf (pLine, "POR:%lf,%lf", &par.pOr.lat, &par.pOr.lon) > 0) {
+      if (sscanf (pLine, "WD:%s", par.workingDir) > 0);
+      else if (sscanf (pLine, "POR:%lf,%lf", &par.pOr.lat, &par.pOr.lon) > 0) {
          if (par.pOr.lon > 180) par.pOr.lon -= 360;
          par.pOr.id = -1;
          par.pOr.father = -1;
@@ -1097,17 +1132,24 @@ bool readParam (const char *fileName) {
       }
       else if (sscanf (pLine, "POR_NAME:%s", par.pOrName) > 0);
       else if (sscanf (pLine, "PDEST_NAME:%s", par.pDestName) > 0);
-      else if (sscanf (pLine, "CGRIB:%s", par.gribFileName) > 0);
       else if (sscanf (pLine, "GRIB_LAT_STEP:%lf", &par.gribLatStep) > 0);
       else if (sscanf (pLine, "GRIB_LON_STEP:%lf", &par.gribLonStep) > 0);
       else if (sscanf (pLine, "GRIB_TIME_STEP:%d", &par.gribTimeStep) > 0);
       else if (sscanf (pLine, "GRIB_TIME_MAX:%d", &par.gribTimeMax) > 0);
-      else if (sscanf (pLine, "CURRENT_GRIB:%s", par.currentGribFileName) > 0);
-      else if (sscanf (pLine, "WAVE_POL:%s", par.wavePolFileName) > 0);
-      else if (sscanf (pLine, "POLAR:%s", par.polarFileName) > 0);
-      else if (sscanf (pLine, "ISSEA:%s", par.isSeaFileName) > 0);
-      else if (sscanf (pLine, "POI:%s", par.poiFileName) > 0);
-      else if (sscanf (pLine, "CLI_HELP:%s", par.cliHelpFileName) > 0);
+      else if (sscanf (pLine, "CGRIB:%s", str) > 0)
+         buildRootName (str, par.gribFileName);
+      else if (sscanf (pLine, "CURRENT_GRIB:%s", str) > 0)
+         buildRootName (str, par.currentGribFileName);
+      else if (sscanf (pLine, "WAVE_POL:%s", str) > 0)
+         buildRootName (str, par.wavePolFileName);
+      else if (sscanf (pLine, "POLAR:%s", str) > 0)
+         buildRootName (str, par.polarFileName);
+      else if (sscanf (pLine, "ISSEA:%s", str) > 0)
+         buildRootName (str, par.isSeaFileName);
+      else if (sscanf (pLine, "POI:%s", str) > 0)
+         buildRootName (str, par.poiFileName);
+      else if (sscanf (pLine, "CLI_HELP:%s", str) > 0)
+         buildRootName (str, par.cliHelpFileName);
       else if (sscanf (pLine, "HELP:%s", par.helpFileName) > 0);
       else if (sscanf (pLine, "SMTP_SCRIPT:%s%s", par.smtpScript, str) > 0) {
          strcat (par.smtpScript, " ");
@@ -1130,7 +1172,8 @@ bool readParam (const char *fileName) {
          strcat (par.imapScript, " ");
          strcat (par.imapScript, str);
       }
-      else if (sscanf (pLine, "SHP:%s", par.shpFileName [par.nShpFiles]) > 0) {
+      else if (sscanf (pLine, "SHP:%s", str) > 0) {
+         buildRootName (str, par.shpFileName [par.nShpFiles]);
          par.nShpFiles += 1;
          if (par.nShpFiles >= MAX_N_SHP_FILES) 
             fprintf (stderr, "In readParam, number max of SHP files reached: %d\n", par.nShpFiles);
@@ -1149,8 +1192,10 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "CONST_WIND_TWD:%lf", &par.constWindTwd) > 0);
       else if (sscanf (pLine, "CONST_CURRENT_S:%lf", &par.constCurrentS) > 0);
       else if (sscanf (pLine, "CONST_CURRENT_D:%lf", &par.constCurrentD) > 0);
-      else if (sscanf (pLine, "DUMPI:%s", par.dumpIFileName) > 0);
-      else if (sscanf (pLine, "DUMPR:%s", par.dumpRFileName) > 0);
+      else if (sscanf (pLine, "DUMPI:%s", str) > 0)
+         buildRootName (str, par.dumpIFileName);
+      else if (sscanf (pLine, "DUMPR:%s", str) > 0)
+         buildRootName (str, par.dumpRFileName);
       else if (sscanf (pLine, "OPT:%d", &par.opt) > 0);
       else if (sscanf (pLine, "MAX_THETA:%lf", &par.maxTheta) > 0);
       else if (sscanf (pLine, "K_FACTOR:%d", &par.kFactor) > 0);
@@ -1165,10 +1210,15 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "CURRENT_DISP:%d", &par.currentDisp) > 0);
       else if (sscanf (pLine, "WAVE_DISP:%d", &par.waveDisp) > 0);
       else if (sscanf (pLine, "EDITOR:%s", par.editor) > 0);
+      else if (sscanf (pLine, "MAIL_PW:%s", par.mailPw) > 0);
       else printf ("Cannot interpret: %s\n", pLine);
    }
+   if (par.mailPw [0] != '\0')
+      dollarReplace (par.mailPw);
    if (par.maxIso > MAX_N_ISOC) par.maxIso = MAX_N_ISOC;
    if (par.constWindTws != 0) initConst (&zone);
+   if ((tIsSea == NULL) && (par.isSeaFileName [0] != '\0'))
+      readIsSea (par.isSeaFileName);
    if (strlen (par.poiFileName) > 0) {
       nPoi = readPoi (par.poiFileName);
       if (strlen (par.pOrName) > 0) {
@@ -1186,6 +1236,8 @@ bool readParam (const char *fileName) {
       par.pOrName [0] = '\0';
       par.pDestName [0] = '\0';
    }
+   for (int i= 0; i < par.nShpFiles; i++)
+      initSHP (par.shpFileName [i]);
    fclose (fp);
    return true;
 }
@@ -1199,14 +1251,16 @@ bool writeParam (const char *fileName, bool header) {
    }
    if (header) 
       fprintf (f, "Name             Value\n");
+   fprintf (f, "WD:              %s\n", par.workingDir);
    fprintf (f, "POR:             %.2lf,%.2lf\n", par.pOr.lat, par.pOr.lon);
    fprintf (f, "PDEST:           %.2lf,%.2lf\n", par.pDest.lat, par.pDest.lon);
    if (par.pOrName [0] != '\0')
       fprintf (f, "POR_NAME:        %s\n", par.pOrName);
    if (par.pDestName [0] != '\0')
-      fprintf (f, "POR_DEST:        %s\n", par.pDestName);
+      fprintf (f, "PDEST_NAME:        %s\n", par.pDestName);
    fprintf (f, "CGRIB:           %s\n", par.gribFileName);
-   fprintf (f, "CURRENT_GRIB:    %s\n", par.currentGribFileName);
+   if (par.currentGribFileName [0] != '\0')
+      fprintf (f, "CURRENT_GRIB:    %s\n", par.currentGribFileName);
    fprintf (f, "GRIB_LAT_STEP:   %.1lf\n", par.gribLatStep);
    fprintf (f, "GRIB_LON_STEP:   %.1lf\n", par.gribLonStep);
    fprintf (f, "GRIB_TIME_STEP:  %d\n", par.gribTimeStep);
