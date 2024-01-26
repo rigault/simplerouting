@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <time.h>
 #define WORKING_DIR           "/home/rr/routing/"
 #define PARAMETERS_FILE       WORKING_DIR"par/routing.par" // default parameter file
 #define TEMP_FILE_NAME        "routing.tmp"  

@@ -59,7 +59,7 @@ void *gps_thread_function(void *data) {
             // Verrouillez la structure MyGpsData avant la mise à jour
             pthread_mutex_lock(&gps_data_mutex);
 
-               // Mise à jour des données GPS
+            // Mise à jour des données GPS
             my_gps_data.lat = thread_data->gps_data.fix.latitude;
             my_gps_data.lon = thread_data->gps_data.fix.longitude;
             my_gps_data.alt = thread_data->gps_data.fix.altitude;
@@ -67,7 +67,7 @@ void *gps_thread_function(void *data) {
             my_gps_data.nSat = thread_data->gps_data.satellites_visible;
             my_gps_data.timestamp = thread_data->gps_data.fix.time;
             my_gps_data.ret = true;
-               // Déverrouillez la structure MyGpsData après la mise à jour
+            // Déverrouillez la structure MyGpsData après la mise à jour
             pthread_mutex_unlock(&gps_data_mutex);
          }
       }

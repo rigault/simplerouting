@@ -85,6 +85,7 @@ long theTime;
 bool updatedColors = false; 
 int polarType = POLAR;
 int segmentOrBezier = SEGMENT;
+GtkWidget *tab_display;
 
 // Structure pour stocker les coordonnées
 typedef struct {
@@ -1180,7 +1181,6 @@ static gboolean drawGribCallback (GtkWidget *widget, cairo_t *cr, gpointer data)
       cairo_fill(cr);
    }
    statusBarUpdate ();
-
    return FALSE;
 }
 
@@ -1570,20 +1570,17 @@ static void reportToStr (char* buffer) {
 static void initStart (MyDate *start) {
    long intDate = zone.dataDate [0];
    long intTime = zone.dataTime [0];
-   // double forecastTime = par.startTimeInHours;
-   double forecastTime = zone.timeStamp [route.kTime0];
+   double forecastTime = par.startTimeInHours;
+   //double forecastTime = zone.timeStamp [route.kTime0];
    time_t seconds = 0;
    struct tm *tm0 = localtime (&seconds);;
    tm0->tm_year = ((int ) intDate / 10000) - 1900;
    tm0->tm_mon = ((int) (intDate % 10000) / 100) - 1;
    tm0->tm_mday = (int) (intDate % 100);
    tm0->tm_hour = 0; tm0->tm_min = 0; tm0->tm_sec = 0;
-   time_t theTime = mktime (tm0);                      // converion struct tm en time_t
-   theTime += 3600 * (intTime/100 + forecastTime);     // calcul ajout en secondes
-   //struct tm *timeInfos = localtime (&theTime);        // conversion en struct tm
-   timeInfos = localtime (&theTime);        // conversion en struct tm
-   //sprintf (res, "%4d:%02d:%02d", timeInfos->tm_year + 1900, timeInfos->tm_mon + 1, timeInfos->tm_mday);
-   
+   time_t theTime = mktime (tm0);                        // converion struct tm en time_t
+   theTime += 3600 * (intTime/100 + forecastTime);       // calcul ajout en secondes
+   timeInfos = localtime (&theTime);                     // conversion en struct tm
    start->year = timeInfos->tm_year + 1900;
    start->mon = timeInfos->tm_mon;
    start->day=  timeInfos->tm_mday;
@@ -1592,7 +1589,7 @@ static void initStart (MyDate *start) {
    start->sec = 0;
 }
 
-/* calculate difference in hours beteen departure time and time 0 */
+/* calculate difference in hours between departure time and time 0 */
 static double getDepartureTimeInHour (MyDate *start) {
    time_t seconds = 0;
    struct tm *tmStart = localtime (&seconds);
@@ -1608,7 +1605,7 @@ static double getDepartureTimeInHour (MyDate *start) {
    return (startTime - theTime0)/3600.0;                  // calcul ajout en secondes
 } 
 
-/*! get start date and time for routing. Returns Yes if OK Response */
+/*! get start date and time for routing. Returns true if OK Response */
 static bool calendar (MyDate *start) {
    GtkWidget *dialog = gtk_dialog_new_with_buttons("Pick a Date", NULL, 
      GTK_DIALOG_MODAL, "OK", GTK_RESPONSE_OK, "Cancel", GTK_RESPONSE_CANCEL, NULL);
@@ -1638,13 +1635,10 @@ static bool calendar (MyDate *start) {
    gtk_box_pack_start(GTK_BOX(hbox), labelMinutes, FALSE, FALSE, 5);
    gtk_box_pack_start(GTK_BOX(hbox), spinMinutes, FALSE, FALSE, 5);
 
-   // Ajouter la boîte de disposition à la boîte de dialogue
    gtk_container_add(GTK_CONTAINER(content_area), hbox);
 
-   // Afficher tous les widgets
    gtk_widget_show_all(dialog);
 
-   // Exécuter la boîte de dialogue
    int result = gtk_dialog_run(GTK_DIALOG(dialog));
 
    // Récupérer la date sélectionnée après la fermeture de la boîte de dialogue
@@ -1685,7 +1679,6 @@ static void on_run_button_clicked (GtkWidget *widget, gpointer data) {
      infoMessage ("Destination point not in wind zone", GTK_MESSAGE_WARNING);
      return;
    }
-   buffer [0] = '\0';
    initStart (start);
    if (!calendar (start)) return;
    par.startTimeInHours = getDepartureTimeInHour (start); 
@@ -1702,7 +1695,6 @@ static void on_run_button_clicked (GtkWidget *widget, gpointer data) {
       infoMessage ("Too many points in isochrone", GTK_MESSAGE_ERROR);
       return;
    }
-
    // printf ("lastStepDuration: %lf\n", lastStepDuration);
    gettimeofday (&t1, NULL);
    ut1 = t1.tv_sec * MILLION + t1.tv_usec;
@@ -1787,7 +1779,7 @@ static void on_forward_button_clicked(GtkWidget *widget, gpointer data) {
 
 /*! display isochrone file */
 static void isocDump (GtkWidget *widget, gpointer data) {
-   char *buffer = '\0';
+   char *buffer = NULL;
    const int N_POINT_FACTOR = 1000;
    if (nIsoc == 0)
       infoMessage ("No isochrone", GTK_MESSAGE_INFO); 
@@ -1857,6 +1849,7 @@ static void poiDump (GtkWidget *widget, gpointer data) {
 static void poiEdit (GtkWidget *widget, gpointer data) {
    char line [MAX_SIZE_LINE] = "";
    sprintf (line, "%s %s\n", par.editor, par.poiFileName);
+   printf ("poiEdit: %s\n", line);
    if (system (line) != 0) {
       fprintf (stderr, "Error in edit Poi. System call: %s\n", line);
       return;
@@ -1865,7 +1858,7 @@ static void poiEdit (GtkWidget *widget, gpointer data) {
       nPoi = readPoi (par.poiFileName);
 }
 
-/*! show Points of Interest information */
+/*! save Points of Interest information in file */
 static void poiSave (GtkWidget *widget, gpointer data) {
    if (confirm (par.poiFileName, "Write"))
       writePoi (par.poiFileName);
@@ -1879,6 +1872,29 @@ static void gpsDump (GtkWidget *widget, gpointer data) {
    else infoMessage ("No GPS data avalaible", GTK_MESSAGE_WARNING);
 }
 
+static void web_home_button_clicked (GtkWidget *widget, gpointer data) {
+   WebKitWebView *webview = WEBKIT_WEB_VIEW(data);
+   webkit_web_view_load_uri(webview, par.helpFileName);
+}
+
+void web_back_button_clicked (GtkButton *button, gpointer data) {
+   WebKitWebView *webview = WEBKIT_WEB_VIEW (data);
+   webkit_web_view_go_back (webview);
+}
+
+static void web_forward_button_clicked (GtkWidget *widget, gpointer data) {
+   WebKitWebView *webview = WEBKIT_WEB_VIEW (data);
+   webkit_web_view_go_forward (webview);
+}
+
+static void web_cli_button_clicked (GtkWidget *widget, gpointer data) {
+   char str [MAX_SIZE_BUFFER] = "";
+   WebKitWebView *webview = WEBKIT_WEB_VIEW (data);
+   if (fileToStr (par.cliHelpFileName, str))
+      webkit_web_view_load_plain_text (webview, str);
+   else infoMessage ("cli text fle not found", GTK_MESSAGE_ERROR);
+}
+
 /*! launch help HTML file */
 static void help (GtkWidget *widget, gpointer data) {
    char title [MAX_SIZE_LINE];
@@ -1886,13 +1902,34 @@ static void help (GtkWidget *widget, gpointer data) {
    GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
    gtk_window_set_default_size(GTK_WINDOW(window), 800, 600);
    gtk_window_set_title(GTK_WINDOW(window), title);
-
-   GtkWidget *web_view = webkit_web_view_new();
-   gtk_container_add(GTK_CONTAINER(window), web_view);
+   
+   // Créer un conteneur de type boîte
+   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+   gtk_container_add(GTK_CONTAINER(window), box);
+   
+   GtkWidget *homeButton = gtk_button_new_from_icon_name ("go-home", GTK_ICON_SIZE_BUTTON);
+   GtkWidget *backButton = gtk_button_new_from_icon_name ("go-previous", GTK_ICON_SIZE_BUTTON);
+   GtkWidget *forwardButton = gtk_button_new_from_icon_name ("go-next", GTK_ICON_SIZE_BUTTON);
+   GtkWidget *cliButton = gtk_button_new_from_icon_name ("text-x-generic", GTK_ICON_SIZE_BUTTON);
+   
+   GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+   WebKitWebView *webView = WEBKIT_WEB_VIEW(webkit_web_view_new());
+   gtk_box_pack_start(GTK_BOX (hbox), homeButton, FALSE, FALSE, 0);
+   gtk_box_pack_start(GTK_BOX (hbox), backButton, FALSE, FALSE, 0);
+   gtk_box_pack_start(GTK_BOX (hbox), forwardButton, FALSE, FALSE, 0);
+   gtk_box_pack_start(GTK_BOX (hbox), cliButton, FALSE, FALSE, 0);
+   
+   gtk_box_pack_start(GTK_BOX (box), hbox, FALSE, FALSE, 0);
+   gtk_box_pack_start(GTK_BOX (box), GTK_WIDGET(webView), TRUE, TRUE, 0);
+   
+   g_signal_connect(G_OBJECT(homeButton), "clicked", G_CALLBACK(web_home_button_clicked), webView);
+   g_signal_connect(G_OBJECT(backButton), "clicked", G_CALLBACK(web_back_button_clicked), webView);
+   g_signal_connect(G_OBJECT(forwardButton), "clicked", G_CALLBACK(web_forward_button_clicked), webView);
+   g_signal_connect(G_OBJECT(cliButton), "clicked", G_CALLBACK(web_cli_button_clicked), webView);
 
    g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
 
-   webkit_web_view_load_uri(WEBKIT_WEB_VIEW(web_view), par.helpFileName);
+   webkit_web_view_load_uri(WEBKIT_WEB_VIEW(webView), par.helpFileName);
    gtk_widget_show_all(window);
    gtk_main();
 }
@@ -2418,6 +2455,83 @@ void on_entry_focus_out_event(GtkWidget *entry, GdkEvent *event, gpointer user_d
    route.n = 0;
 }
 
+void radio_button_Colors (GtkRadioButton *button, gpointer user_data) {
+   par.showColors = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "index"));
+   gtk_widget_queue_draw(drawing_area); // affiche le tout
+}
+
+GtkWidget *createRadioButtonColors (char *name, GtkWidget *hbox, GtkWidget *from, int i) {
+   GtkWidget *choice;
+   if (from == NULL) choice = gtk_radio_button_new_with_label(NULL, name );
+   else choice = gtk_radio_button_new_with_label_from_widget(GTK_RADIO_BUTTON(from), name);
+   g_object_set_data(G_OBJECT(choice), "index", GINT_TO_POINTER(i));
+   g_signal_connect(choice, "toggled", G_CALLBACK(radio_button_Colors), NULL);
+   gtk_grid_attach(GTK_GRID(tab_display), choice,           i+1, 1, 1, 1);
+   if (i == par.showColors)
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(choice), TRUE);
+   return choice;
+}
+
+// wind representation
+void radio_button_Wind_Disp (GtkRadioButton *button, gpointer user_data) {
+   par.windDisp = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "index"));
+   gtk_widget_queue_draw(drawing_area); // affiche le tout
+}
+
+GtkWidget *createRadioButtonWindDisp (char *name, GtkWidget *hbox, GtkWidget *from, int i) {
+   GtkWidget *choice;
+   if (from == NULL) choice = gtk_radio_button_new_with_label(NULL, name );
+   else choice = gtk_radio_button_new_with_label_from_widget(GTK_RADIO_BUTTON(from), name);
+   g_object_set_data(G_OBJECT(choice), "index", GINT_TO_POINTER(i));
+   g_signal_connect(choice, "toggled", G_CALLBACK(radio_button_Wind_Disp), NULL);
+   gtk_grid_attach(GTK_GRID(tab_display), choice,           i+1, 2, 1, 1);
+   if (i == par.windDisp)
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(choice), TRUE);
+   return choice;
+}
+
+void radio_button_Isoc (GtkRadioButton *button, gpointer user_data) {
+   par.style = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "index"));
+   gtk_widget_queue_draw(drawing_area); // affiche le tout
+ }
+
+GtkWidget *createRadioButtonIsoc (char *name, GtkWidget *hbox, GtkWidget *from, int i) {
+   GtkWidget *choice;
+   if (from == NULL) choice = gtk_radio_button_new_with_label(NULL, name );
+   else choice = gtk_radio_button_new_with_label_from_widget(GTK_RADIO_BUTTON(from), name);
+   g_object_set_data(G_OBJECT(choice), "index", GINT_TO_POINTER(i));
+   g_signal_connect(choice, "toggled", G_CALLBACK(radio_button_Isoc), NULL);
+   gtk_grid_attach(GTK_GRID(tab_display), choice,           i+1, 3, 1, 1);
+   if (i == par.style)
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(choice), TRUE);
+   return choice;
+}
+
+void radio_button_Dms (GtkRadioButton *button, gpointer user_data) {
+par.dispDms = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "index"));
+   gtk_widget_queue_draw(drawing_area); // affiche le tout
+   statusBarUpdate ();
+}
+
+GtkWidget *createRadioButtonDms (char *name, GtkWidget *hbox, GtkWidget *from, int i) {
+   GtkWidget *choice;
+   if (from == NULL) choice = gtk_radio_button_new_with_label(NULL, name );
+   else choice = gtk_radio_button_new_with_label_from_widget(GTK_RADIO_BUTTON(from), name);
+   g_object_set_data(G_OBJECT(choice), "index", GINT_TO_POINTER(i));
+      g_signal_connect(choice, "toggled", G_CALLBACK(radio_button_Dms), NULL);
+      gtk_grid_attach(GTK_GRID(tab_display), choice,           i+1, 4, 1, 1);
+      if (i == par.dispDms)
+         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(choice), TRUE);
+      return choice;
+   }
+
+// Fonction appelée lorsqu'une boîte à cocher est activée/désactivée
+void on_checkbox_toggled(GtkWidget *checkbox, gpointer user_data) {
+   gboolean *flag = (gboolean *)user_data;
+   *flag = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(checkbox));
+   gtk_widget_queue_draw(drawing_area);
+}
+  
 /*! change parameters and pOr and pDest coordinates */ 
 static void change (GtkWidget *widget, gpointer data) {
    char str0 [50], str1 [50];
@@ -2452,7 +2566,7 @@ static void change (GtkWidget *widget, gpointer data) {
    gtk_grid_set_column_spacing(GTK_GRID(tab_tec), 5);
 
    // Onglet "Display"
-   GtkWidget *tab_display = gtk_grid_new();
+   tab_display = gtk_grid_new();
    gtk_notebook_append_page(GTK_NOTEBOOK(notebook), tab_display, gtk_label_new("Display"));
    gtk_widget_set_halign(GTK_WIDGET(tab_display), GTK_ALIGN_START);
    gtk_widget_set_valign(GTK_WIDGET(tab_display), GTK_ALIGN_START);
@@ -2648,94 +2762,24 @@ static void change (GtkWidget *widget, gpointer data) {
    labelCreate (tab_display, "",              0, 0); // just for spoce on top
    // showColor
 
-   void radio_button_Colors (GtkRadioButton *button, gpointer user_data) {
-      par.showColors = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "index"));
-      gtk_widget_queue_draw(drawing_area); // affiche le tout
-   }
-
-   GtkWidget *createRadioButtonColors (char *name, GtkWidget *hbox, GtkWidget *from, int i) {
-      GtkWidget *choice;
-      if (from == NULL) choice = gtk_radio_button_new_with_label(NULL, name );
-      else choice = gtk_radio_button_new_with_label_from_widget(GTK_RADIO_BUTTON(from), name);
-      g_object_set_data(G_OBJECT(choice), "index", GINT_TO_POINTER(i));
-      g_signal_connect(choice, "toggled", G_CALLBACK(radio_button_Colors), NULL);
-      gtk_grid_attach(GTK_GRID(tab_display), choice,           i+1, 1, 1, 1);
-      if (i == par.showColors)
-         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(choice), TRUE);
-      return choice;
-   }
-
    hbox0 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
    labelCreate (tab_display, "Colors",                     0, 1);
    GtkWidget *choice0 = createRadioButtonColors ("None", hbox0, NULL, 0);
    GtkWidget *choice1 = createRadioButtonColors ("B.& W.", hbox0, choice0, 1);
    GtkWidget *choice2 = createRadioButtonColors ("Colored", hbox0, choice1, 2);
    
-   // wind representation
-   void radio_button_Wind_Disp (GtkRadioButton *button, gpointer user_data) {
-      par.windDisp = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "index"));
-      gtk_widget_queue_draw(drawing_area); // affiche le tout
-   }
-
-   GtkWidget *createRadioButtonWindDisp (char *name, GtkWidget *hbox, GtkWidget *from, int i) {
-      GtkWidget *choice;
-      if (from == NULL) choice = gtk_radio_button_new_with_label(NULL, name );
-      else choice = gtk_radio_button_new_with_label_from_widget(GTK_RADIO_BUTTON(from), name);
-      g_object_set_data(G_OBJECT(choice), "index", GINT_TO_POINTER(i));
-      g_signal_connect(choice, "toggled", G_CALLBACK(radio_button_Wind_Disp), NULL);
-      gtk_grid_attach(GTK_GRID(tab_display), choice,           i+1, 2, 1, 1);
-      if (i == par.windDisp)
-         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(choice), TRUE);
-      return choice;
-   }
-
    hbox0 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
    labelCreate (tab_display, "Wind",                       0, 2);
    choice0 = createRadioButtonWindDisp ("None", hbox0, NULL, 0);
    choice1 = createRadioButtonWindDisp ("Arrow", hbox0, choice0, 1);
    createRadioButtonWindDisp ("Barbule", hbox0, choice1, 2);
    
-   void radio_button_Isoc (GtkRadioButton *button, gpointer user_data) {
-      par.style = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "index"));
-      gtk_widget_queue_draw(drawing_area); // affiche le tout
-   }
-
-   GtkWidget *createRadioButtonIsoc (char *name, GtkWidget *hbox, GtkWidget *from, int i) {
-      GtkWidget *choice;
-      if (from == NULL) choice = gtk_radio_button_new_with_label(NULL, name );
-      else choice = gtk_radio_button_new_with_label_from_widget(GTK_RADIO_BUTTON(from), name);
-      g_object_set_data(G_OBJECT(choice), "index", GINT_TO_POINTER(i));
-      g_signal_connect(choice, "toggled", G_CALLBACK(radio_button_Isoc), NULL);
-      gtk_grid_attach(GTK_GRID(tab_display), choice,           i+1, 3, 1, 1);
-      if (i == par.style)
-         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(choice), TRUE);
-      return choice;
-   }
-   hbox0 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
    labelCreate (tab_display, "Isochrones",                 0, 3);
    choice0 = createRadioButtonIsoc ("None", hbox0, NULL, 0);
    choice1 = createRadioButtonIsoc ("Points", hbox0, choice0, 1);
    choice2 = createRadioButtonIsoc ("Segment", hbox0, choice1, 2);
    createRadioButtonIsoc ("Bézier", hbox0, choice2, 3);
    
-   void radio_button_Dms (GtkRadioButton *button, gpointer user_data) {
-      par.dispDms = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "index"));
-      gtk_widget_queue_draw(drawing_area); // affiche le tout
-      statusBarUpdate ();
-   }
-
-   GtkWidget *createRadioButtonDms (char *name, GtkWidget *hbox, GtkWidget *from, int i) {
-      GtkWidget *choice;
-      if (from == NULL) choice = gtk_radio_button_new_with_label(NULL, name );
-      else choice = gtk_radio_button_new_with_label_from_widget(GTK_RADIO_BUTTON(from), name);
-      g_object_set_data(G_OBJECT(choice), "index", GINT_TO_POINTER(i));
-      g_signal_connect(choice, "toggled", G_CALLBACK(radio_button_Dms), NULL);
-      gtk_grid_attach(GTK_GRID(tab_display), choice,           i+1, 4, 1, 1);
-      if (i == par.dispDms)
-         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(choice), TRUE);
-      return choice;
-   }
-
    hbox0 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
    labelCreate (tab_display, "DMS",                        0, 4);
    choice0 = createRadioButtonDms ("Basic", hbox0, NULL, 0);
@@ -2743,14 +2787,6 @@ static void change (GtkWidget *widget, gpointer data) {
    choice2 = createRadioButtonDms ("Deg Min", hbox0, choice1, 2);
    createRadioButtonDms ("Deg. Min. Sec.", hbox0, choice2, 3);
 
-   // Fonction appelée lorsqu'une boîte à cocher est activée/désactivée
-   void on_checkbox_toggled(GtkWidget *checkbox, gpointer user_data) {
-       gboolean *flag = (gboolean *)user_data;
-      *flag = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(checkbox));
-      gtk_widget_queue_draw(drawing_area);
-   }
-  
-   // Boîte à cocher pour "vagues"
    GtkWidget *checkboxWave = gtk_check_button_new_with_label("Waves");
    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(checkboxWave), par.waveDisp);
    g_signal_connect(G_OBJECT(checkboxWave), "toggled", G_CALLBACK(on_checkbox_toggled), &par.waveDisp);
@@ -3188,10 +3224,9 @@ int main (int argc, char *argv[]) {
 
    // Création de la fenêtre principale
    window = gtk_window_new (GTK_WINDOW_TOPLEVEL); // Main window : global variable
-   gtk_window_maximize (GTK_WINDOW (window)); // full screen
    gtk_window_set_title(GTK_WINDOW(window), PROG_NAME);
    gtk_window_set_default_size(GTK_WINDOW(window), 800, 400);
-
+   gtk_window_maximize (GTK_WINDOW (window)); // full screen
    GError *error = NULL;
    if (!gtk_window_set_icon_from_file(GTK_WINDOW(window), buildRootName (PROG_LOGO, str), &error)) {
       g_warning("In main () Impossible to load icon: %s", error->message);

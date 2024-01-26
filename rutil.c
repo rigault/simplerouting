@@ -57,6 +57,21 @@ bool isNumber (const char *name) {
    return false; 
 }
 
+/*! delete spaces before and after str */
+void strip (char *str) {
+    if (str == NULL || *str == '\0')
+        return;
+    while (isspace((unsigned char)(*str))) {
+        str++;
+    }
+    if (*str == '\0')
+        return;
+    char *end = str + strlen(str) - 1;
+    while (end > str && isspace((unsigned char)(*end)))
+        end--;
+    *(end + 1) = '\0';
+}
+
 /*! build root name if not already a root name */
 char *buildRootName (const char *fileName, char *rootName) {
    if (fileName [0] == '/') 
@@ -136,6 +151,10 @@ bool smtpGribRequestPython (int type, double lat1, double lon1, double lat2, dou
    char *suffix = "WIND,WAVES"; 
    if (lon1 > 180) lon1 -= 360;
    if (lon2 > 180) lon2 -= 360;
+   lat1 = floor (lat1);
+   lat2 = ceil (lat2);
+   lon1 = floor (lon1);
+   lon2 = ceil (lon2);
    char command [MAX_SIZE_BUFFER] = "";
    switch (type) {
    case SAILDOCS_GFS:
@@ -1209,8 +1228,11 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "WIND_DISP:%d", &par.windDisp) > 0);
       else if (sscanf (pLine, "CURRENT_DISP:%d", &par.currentDisp) > 0);
       else if (sscanf (pLine, "WAVE_DISP:%d", &par.waveDisp) > 0);
-      else if (sscanf (pLine, "EDITOR:%s", par.editor) > 0);
       else if (sscanf (pLine, "MAIL_PW:%s", par.mailPw) > 0);
+      else if (strstr (pLine, "EDITOR:")) {
+         strip (pLine);
+         strcpy (par.editor, strchr (pLine, ':') + 1);
+      }
       else printf ("Cannot interpret: %s\n", pLine);
    }
    if (par.mailPw [0] != '\0')
@@ -1238,6 +1260,7 @@ bool readParam (const char *fileName) {
    }
    for (int i= 0; i < par.nShpFiles; i++)
       initSHP (par.shpFileName [i]);
+   printf ("Editor: %s \n", par.editor); 
    fclose (fp);
    return true;
 }
