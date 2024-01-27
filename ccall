@@ -1,9 +1,9 @@
 #!/bin/bash
-gcc -Wall -Wextra -O3 -c curlutil.c -lcurl
-gcc -Wall -Wextra -O3 -c gpsutil.c -lgps
-gcc -Wall -Wextra -O3 -c shputil.c -lshp
+gcc -Wall -Wextra -O3 -c curlutil.c
+gcc -Wall -Wextra -O3 -c gpsutil.c
+gcc -Wall -Wextra -O3 -c shputil.c
 gcc -Wall -Wextra -O3 -c engine.c
-gcc -Wall -Wextra -O3 -c rutil.c -lm
+gcc -Wall -Wextra -O3 -c rutil.c
 gcc -Wall -Wextra -c option.c
 gcc -Wall -O3 -c -DGDK_DISABLE_DEPRECATED show.c $(pkg-config --cflags webkit2gtk-4.0) $(pkg-config --cflags gtk+-3.0)
 
