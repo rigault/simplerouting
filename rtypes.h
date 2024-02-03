@@ -1,5 +1,9 @@
 #include <stdbool.h>
 #include <time.h>
+#include <pthread.h>
+#define N_WIND_URL            4
+#define N_CURRENT_URL         4
+#define ROOT_GRIB_URL         "https://static1.mclcm.net/mc2020/int/cartes/marine/grib/" // Meteoconsult
 #define WORKING_DIR           "/home/rr/routing/"
 #define PARAMETERS_FILE       WORKING_DIR"par/routing.par" // default parameter file
 #define TEMP_FILE_NAME        "routing.tmp"  
@@ -12,7 +16,6 @@
 #define DEG_TO_RAD            (M_PI/180.0)
 #define SIZE_T_IS_SEA         (3601 * 1801)
 #define MAX_N_WAY_POINT       10
-#define ROOT_GRIB_SERVER      "https://static1.mclcm.net/" // Meteoconsult
 #define PROG_WEB_SITE         "http://www.orange.com"  
 #define PROG_NAME             "routing"  
 #define PROG_VERSION          "0.1"  
@@ -24,8 +27,8 @@
 #define MAX_SIZE_ISOC         100000            // max number of point in an isochrone
 #define MAX_N_POL_MAT_COLS    128
 #define MAX_N_POL_MAT_LINES   128
-#define MAX_SIZE_LINE         256		         // size max of pLine in text files
-#define MAX_SIZE_DATE         32                // size max of a string with date inside
+#define MAX_SIZE_LINE         256		         // max size of pLine in text files
+#define MAX_SIZE_DATE         32                // max size of a string with date inside
 #define MAX_SIZE_BUFFER       100000
 #define MAX_N_TIME_STAMPS     512
 #define MAX_N_SHORT_NAME      64
@@ -33,7 +36,8 @@
 #define MAX_N_GRIB_LON        2048
 #define MAX_SIZE_SHORT_NAME   10
 #define MAX_SIZE_NAME         64
-#define MAX_SIZE_FILE_NAME    128               // size max of pLine in text files
+#define MAX_SIZE_FILE_NAME    128               // max size of pLine in text files
+#define MAX_SIZE_DIR_NAME     192               // max size of directory name
 #define MAX_N_SHP_FILES       4                 // max number of shape file
 #define MAX_N_POI             100               // max number of poi in poi file
 #define MAX_SIZE_POI_NAME     32                // max size of city name
@@ -79,6 +83,7 @@ typedef struct {
    double u;                                 // east west wind or current in meter/s
    double v;                                 // north south component of wind or current in meter/s
    double w;                                 // waves height WW3 model
+   double g;                                 // wind speed gust
 } FlowP;                                     // ether wind or current
 
 /*! zone description */
@@ -110,16 +115,21 @@ typedef struct {
 
 /*! Point in isochrone */
 typedef struct {
-   double lat;
-   double lon;
    int    id;
    int    father;
    int    amure;
+   int    sector;
+   double lat;
+   double lon;
+   double dd;     // distance to pDest
+   double vmg;    // velocity made good
 } Pp;
 
 /*! isochrone meta data */ 
 typedef struct {
    double distance;  // best distance from Isoc to pDest
+   double bestVmg;   // best VMG (distance)
+   double worseVmg;  // worse VMG (distance)
    int    closest;   // index in Iso of closest point to pDest
    int    first;     // index of first point, useful for drawAllIsochrones
    int    size;      // size of isochrone
@@ -168,11 +178,12 @@ typedef struct {
    double constWave;                         // constant wave height if used
    double constCurrentS;                     // if not equal 0, contant current speed Knots
    double constCurrentD;                     // the direction of cinstant current if used
+   int jFactor;                              // factor for target point distance used in sectorOptimize
    int kFactor;                              // factor for target point distance used in sectorOptimize
    int minPt;                                // min point per sector. See sectorOptimize
    double maxTheta;                          // angle for optimization by sector
    int nSectors;                             // number of sector for optimization by sector
-   char workingDir [MAX_SIZE_LINE];          // working directory
+   char workingDir [MAX_SIZE_FILE_NAME];      // working directory
    char gribFileName [MAX_SIZE_FILE_NAME];   // name of grib file
    double gribLatStep;                       // grib lat step for mail request
    double gribLonStep;                       // grib lon step for mail request

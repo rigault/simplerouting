@@ -1,5 +1,6 @@
 /*! compilation gcc -Wall -c option.c */
 #include <stdbool.h>
+#include <string.h>
 #include <stdio.h>
 #include <sys/time.h>
 #include "rtypes.h"
@@ -9,7 +10,7 @@
 void optionManage (char option) {
 	FILE *f;
    char buffer [MAX_SIZE_BUFFER];
-   double u, v, w, twa, tws, time, lon, lat, lat2, lon2;
+   double u, v, g, w, twa, tws, time, lon, lat, lat2, lon2;
    char str [MAX_SIZE_LINE];
    Pp pt;
    switch (option) {
@@ -94,9 +95,16 @@ void optionManage (char option) {
       scanf ("%lf", &pt.lat);
       printf ("Lon = ");
       scanf ("%lf", &pt.lon);
-      findFlow (pt, time, &u, &v, &w, zone, gribData);
-      printf ("u: %.2f m/s v: %.2f m/s w: %2.f m\n", u, v, w);
+      findFlow (pt, time, &u, &v, &g, &w, zone, gribData);
+      printf ("u: %.2f m/s v: %.2f m/s g: %.2f m/s w: %2.f m\n", u, v, g, w);
       break;
+   case 'z': // conversion deg min sec
+      while (true) {
+         printf ("str: ");
+         fgets(buffer, sizeof(buffer), stdin);
+         printf ("len: %d\n", (int) strlen (buffer));
+         printf ("res: %.2lf\n", getCoord (buffer));
+      }
    break;
    default:
       printf ("Option unknown: -%c\n", option);
