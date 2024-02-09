@@ -1,3 +1,7 @@
+/*! Meteo service */
+extern struct DictElmt dicTab [];
+extern char *tWho []; // for saildocs
+
 /*! grib data description */
 extern FlowP *gribData;                // wind
 extern FlowP *currentGribData;         // current
@@ -35,6 +39,7 @@ extern const char *WIND_URL [];
 extern const char *CURRENT_URL [];
 
 /*! functions defined in rutil.c */
+extern void   strip (char *str0);
 extern bool   gpsToStr (char *buffer);
 extern void   *gps_thread_function(void *data);
 extern int    initGPS ();
@@ -57,6 +62,7 @@ extern double givry (double lat1, double lon1, double lat2, double lon2);
 extern bool   extIsInZone (Pp pt, Zone zone);
 extern time_t dateToTime_t (long date);
 extern double zoneTimeDiff (Zone zone1, Zone zone0);
+extern time_t diffNowGribTime0 (Zone zone);
 extern bool   readPolar (char *fileName, PolMat *mat);
 extern char   *polToStr (char * str, PolMat mat);
 extern void   *readGrib (void *data);

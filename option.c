@@ -98,6 +98,10 @@ void optionManage (char option) {
       findFlow (pt, time, &u, &v, &g, &w, zone, gribData);
       printf ("u: %.2f m/s v: %.2f m/s g: %.2f m/s w: %2.f m\n", u, v, g, w);
       break;
+   case 'y':
+      readGrib (NULL);
+      printf ("Time now minus Time0 Grib in hours %.2lf\n", diffNowGribTime0 (zone)/3600.0);
+      break;
    case 'z': // conversion deg min sec
       while (true) {
          printf ("str: ");
@@ -111,4 +115,3 @@ void optionManage (char option) {
       break;
    }
 }
-

@@ -24,7 +24,6 @@ Pp isocArray [MAX_N_ISOC][MAX_SIZE_ISOC]; // list of isochrones
 IsoDesc isoDesc [MAX_N_ISOC];             // Isochrone meta data
 int nIsoc = 0;                            // total number of isochrones 
 
-double pOrTtoPDestDist = 0;      // distance from par.pOr to par.pDest.
 double pOrTtoPDestCog = 0;       // cog from par.pOr to par.pDest.
 double tDist [MAX_SIZE_ISOC];    // distance to pDest for each sector under evaluation
 double lastDist [MAX_SIZE_ISOC]; // last distance to pDest for each sector already evaluated
@@ -217,7 +216,7 @@ static inline int NsectorOptimize (Isoc isoList, int isoLen, Isoc optIsoc, int n
    // nMaxOptIsoc = nSector (lastClosestDist);
    double thetaStep = 360.0 / nMaxOptIsoc;
    Pp ptTarget;
-   double dPtTarget = pOrTtoPDestDist - lastClosestDist + distTarget;
+   double dPtTarget = par.pOr.dd - lastClosestDist + distTarget;
    double dLat = dPtTarget * cos (DEG_TO_RAD * pOrTtoPDestCog);            // nautical miles in N S direction
    ptTarget.lat = lastClosest.lat + dLat / 60;
    double dLon = dPtTarget * sin (DEG_TO_RAD * pOrTtoPDestCog) / cos (DEG_TO_RAD * ptTarget.lat);  // nautical miles in E W direction
@@ -266,7 +265,7 @@ static inline int sectorOptimize (Isoc isoList, int isoLen, Isoc optIsoc, int nM
    // nMaxOptIsoc = nSector (lastClosestDist);
    double thetaStep = 360.0 / nMaxOptIsoc;
    Pp ptTarget;
-   double dPtTarget = pOrTtoPDestDist - lastClosestDist + distTarget;
+   double dPtTarget = par.pOr.dd - lastClosestDist + distTarget;
    double dLat = dPtTarget * cos (DEG_TO_RAD * pOrTtoPDestCog);            // nautical miles in N S direction
    ptTarget.lat = par.pOr.lat + dLat / 60;
    double dLon = dPtTarget * sin (DEG_TO_RAD * pOrTtoPDestCog) / cos (DEG_TO_RAD * ptTarget.lat);  // nautical miles in E W direction
@@ -324,9 +323,9 @@ static inline int optimize (int algo, Isoc isoList, int isoLen, Isoc optIsoc) {
   //printf ("distTarget: %.2lf\n", distTarget);
    switch (algo) {
       case 0: return Noptimize (isoList, isoLen, optIsoc);
-      case 1: return sectorOptimize (isoList, isoLen, optIsoc, par.nSectors, distTarget);
-      case 2: return NsectorOptimize (isoList, isoLen, optIsoc, par.nSectors, distTarget);
-      case 3: return forwardSectorOptimize (isoList, isoLen, optIsoc, par.nSectors, par.jFactor/100.0, distTarget);
+      case 1: return forwardSectorOptimize (isoList, isoLen, optIsoc, par.nSectors, par.jFactor/100.0, distTarget);
+      case 2: return sectorOptimize (isoList, isoLen, optIsoc, par.nSectors, distTarget);
+      case 3: return NsectorOptimize (isoList, isoLen, optIsoc, par.nSectors, distTarget);
       default:; 
    } 
    return 0;
@@ -334,9 +333,7 @@ static inline int optimize (int algo, Isoc isoList, int isoLen, Isoc optIsoc) {
 
 /*! build the new list describing the next isochrone, starting from isoList 
   returns length of the newlist built or -1 if error*/
-static int buildNextIsochrone (Isoc isoList, int isoLen, Pp pDest, double t, double dt, 
-      Isoc newList, double *bestVmg, double *worseVmg) {
-
+static int buildNextIsochrone (Isoc isoList, int isoLen, Pp pDest, double t, double dt, Isoc newList, double *bestVmg) {
    int lenNewL = 0;
    double u, v, gust, w, twa, sog, uCurr, vCurr, bidon;
    double vDirectCap;
@@ -350,7 +347,6 @@ static int buildNextIsochrone (Isoc isoList, int isoLen, Pp pDest, double t, dou
    double efficiency = par.efficiency;
    double waveCorrection = 0;
    *bestVmg = 0;
-   *worseVmg = DBL_MAX;
    
    for (int k = 0; k < isoLen; k++) {
       uCurr = 0; vCurr = 0; w = 0;
@@ -409,7 +405,6 @@ static int buildNextIsochrone (Isoc isoList, int isoLen, Pp pDest, double t, dou
          
          newPt.vmg = orthoDist (newPt.lat, newPt.lon, par.pOr.lat, par.pOr.lon) * cos (DEG_TO_RAD * alpha);
          if (newPt.vmg > *bestVmg) *bestVmg = newPt.vmg;
-         if (newPt.vmg < *worseVmg) *worseVmg = newPt.vmg;
 
          if (isSea (newPt.lon, newPt.lat) && isInZone (newPt, zone) && (newPt.dd < isoList [k].dd) &&
             (newPt.vmg > isoList [k].vmg) && (newPt.vmg > 0.5 * lastBestVmg)) { // vmg has to progress
@@ -436,17 +431,37 @@ static int findFather (int ptId, Isoc isoc, int lIsoc) {
    return -1;
 }
 
+/*! copy isoc Descriptors in a string 
+   true if enough space, false if truncated */
+bool isoDectToStr (char *str, size_t maxLength) {
+   char line [MAX_SIZE_LINE];
+   char strLat [MAX_SIZE_LINE];
+   char strLon [MAX_SIZE_LINE];
+   double dist;
+   sprintf (str, "No  Size First Closest Distance VMG      FocalLat  FocalLon\n");
+   for (int i = 0; i < nIsoc; i++) {
+      dist = isoDesc [i].distance;
+      if (dist > 100000) dist = -1;
+      sprintf (line, "%03d %03d  %03d   %03d     %07.2lf  %07.2lf  %s  %s\n", i, isoDesc[i].size, isoDesc[i].first, 
+         isoDesc[i].closest, dist, isoDesc[i].bestVmg, 
+         latToStr (isoDesc [i].focalLat, par.dispDms, strLat), lonToStr (isoDesc [i].focalLon, par.dispDms, strLon));
+      if ((strlen (str) + strlen (line)) > maxLength) return false;
+      strcat (str, line); 
+   }
+   return true;
+}
+
 /*! copy all isoc in a string */
 void allIsocToStr (char *str) {
    char line [MAX_SIZE_LINE];
    char strLat [MAX_SIZE_LINE];
    char strLon [MAX_SIZE_LINE];
    Pp pt;
-   str [0] = '\n'; // forget first line
+   sprintf (str, "No  Lat         Lon             Id Father  Amure\n");
    for (int i = 0; i < nIsoc; i++) {
       for (int k = 0; k < isoDesc [i].size; k++) {
          pt = isocArray [i][k];
-         sprintf (line, "%03d; %-12s; %-12s; %6d; %6d; %6d\n", i, latToStr (pt.lat, par.dispDms, strLat),\
+         sprintf (line, "%03d %-12s %-12s %6d %6d %6d\n", i, latToStr (pt.lat, par.dispDms, strLat),\
             lonToStr (pt.lon, par.dispDms, strLon), pt.id, pt.father, pt.amure);
          strcat (str, line);
       }
@@ -694,7 +709,7 @@ int routing (Pp pOr, Pp pDest, double t, double dt, double *lastStepDuration) {
    int lTempList = 0;
    double timeLastStep;
    int index; // index of closest point to pDest in insochrone
-   double bestVmg, worseVmg;
+   double bestVmg;
    par.pOr.id = -1;
    par.pOr.father = -1;
    par.pDest.id = 0;
@@ -702,9 +717,8 @@ int routing (Pp pOr, Pp pDest, double t, double dt, double *lastStepDuration) {
    pOr.dd = orthoDist (pOr.lat, pOr.lon, pDest.lat, pDest.lon);
    pOr.vmg = 0;
    pOrTtoPDestCog = directCap (pOr, pDest);
-   // pOrTtoPDestDist = loxoDist (pOr, pDest);
-   pOrTtoPDestDist = orthoDist (pOr.lat, pOr.lon, pDest.lat, pDest.lon);
-   lastClosestDist = pOrTtoPDestDist;
+   // par.pOr.dd = loxoDist (pOr, pDest);
+   lastClosestDist = pOr.dd;
    lastBestVmg = 0;
    tDeltaCurrent = zoneTimeDiff (currentZone, zone); // global variable
    nIsoc = 0;
@@ -715,7 +729,6 @@ int routing (Pp pOr, Pp pDest, double t, double dt, double *lastStepDuration) {
       isoDesc [i].size = 0;
       isoDesc [i].distance = DBL_MAX;
       isoDesc [i].bestVmg = 0;
-      isoDesc [i].worseVmg = DBL_MAX;
    }
    tempList [0] = pOr; // liste avec un unique élément;
    
@@ -724,10 +737,9 @@ int routing (Pp pOr, Pp pDest, double t, double dt, double *lastStepDuration) {
       *lastStepDuration = timeToReach;
       return 1;
    }
-   isoDesc [0].size = buildNextIsochrone (tempList, 1, pDest, t, dt, isocArray [0], &bestVmg, &worseVmg);
+   isoDesc [0].size = buildNextIsochrone (tempList, 1, pDest, t, dt, isocArray [0], &bestVmg);
    lastBestVmg = bestVmg;
    isoDesc [0].bestVmg = bestVmg;
-   isoDesc [0].worseVmg = worseVmg;
    isoDesc [0].first = 0; 
    lastClosest = closest (isocArray [0], isoDesc[0].size, pDest, &index);
    isoDesc [0].closest = index; 
@@ -744,11 +756,10 @@ int routing (Pp pOr, Pp pDest, double t, double dt, double *lastStepDuration) {
          *lastStepDuration = timeLastStep;
          return nIsoc + 1;
       }
-      lTempList = buildNextIsochrone (isocArray [nIsoc -1], isoDesc [nIsoc -1].size, pDest, t, dt, tempList, &bestVmg, & worseVmg);
+      lTempList = buildNextIsochrone (isocArray [nIsoc -1], isoDesc [nIsoc -1].size, pDest, t, dt, tempList, &bestVmg);
       if (lTempList == -1) return -1;
       lastBestVmg = bestVmg;
       isoDesc [nIsoc].bestVmg = bestVmg;
-      isoDesc [nIsoc].worseVmg = worseVmg;
       // printf ("%-20s%d", "Biglist length: ", lTempList);
       isoDesc [nIsoc].size = optimize (par.opt, tempList, lTempList, isocArray [nIsoc]);
       isoDesc [nIsoc].first = findFirst (nIsoc);; 

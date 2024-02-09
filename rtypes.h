@@ -9,7 +9,8 @@
 #define TEMP_FILE_NAME        "routing.tmp"  
 #define PROG_LOGO             "routing.png"  
 #define MIN_SPEED_FOR_TARGET  5                 // knots. Difficult to explain. See engine.c, optimize()..
-#define MISSING               (-999999)         // for grib file missing values
+#define MISSING               (-999999)      // for grib file missing values
+//#define MISSING               0                 // for grib file missing values
 #define MS_TO_KN              (3600.0/1852.0)
 #define KN_TO_MS              (1852.0/3600.0)
 #define RAD_TO_DEG            (180.0/M_PI)
@@ -53,6 +54,9 @@ enum {NONE, ARROW, BARBULE};                    // wind representation
 enum {SAILDOCS_GFS, SAILDOCS_ECMWF, SAILDOCS_ICON, SAILDOCS_CURR, MAILASAIL, GLOBALMARINET}; // grib mail service providers
 enum {NOTHING, POINT, SEGMENT, BEZIER};         // bezier or segment representation
 enum {UNVISIBLE, VISIBLE};                      // for POI point of interest
+
+/*! for meteo services */
+struct DictElmt {int id; char name [MAX_SIZE_NAME];};
 
 /*! My date */
 typedef struct {
@@ -129,7 +133,6 @@ typedef struct {
 typedef struct {
    double distance;  // best distance from Isoc to pDest
    double bestVmg;   // best VMG (distance)
-   double worseVmg;  // worse VMG (distance)
    int    closest;   // index in Iso of closest point to pDest
    int    first;     // index of first point, useful for drawAllIsochrones
    int    size;      // size of isochrone

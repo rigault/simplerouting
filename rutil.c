@@ -18,13 +18,12 @@
 #include "rtypes.h"
 #include "shapefil.h"
 
-extern Route route; // defined in engine.c
-const char *CSV_SEP = ";,\t";
 /*! dictionnary of meteo services */
-struct DictElmt {int id; char name [MAX_SIZE_NAME];};
 struct DictElmt dicTab [] = {{7, "Weather service US"}, {78, "DWD Germany"}, {85, "Meteo France"}, {98,"ECMWF European"}};
 char *tWho [] = {"gfs", "ECMWF", "ICON", "RTOFS"}; // for saildocs
 
+extern Route route; // defined in engine.c
+const char *CSV_SEP = ";,\t";
 /*! polar matrix description */
 PolMat polMat;
 
@@ -410,7 +409,7 @@ char *poiToStr (char *str) {
    char line [MAX_SIZE_LINE] = "";
    char strLat [MAX_SIZE_LINE] = "";
    char strLon [MAX_SIZE_LINE] = "";
-   strcpy (str, "\n");
+   sprintf (str, "Lat         Lon         Name\n");
    for (int i = 0; i < nPoi; i++) {
       if (tPoi [i].type == VISIBLE) {
          sprintf (line, "%-12s %-12s %s\n", latToStr (tPoi[i].lat, par.dispDms, strLat), \
@@ -508,7 +507,7 @@ bool extIsInZone (Pp pt, Zone zone) {
 /*! convert long date found in grib file in seconds time_t */
 time_t dateToTime_t (long date) {
    time_t seconds = 0;
-   struct tm *tm0 = localtime (&seconds);;
+   struct tm *tm0 = gmtime (&seconds);;
    tm0->tm_year = ((int ) date / 10000) - 1900;
    tm0->tm_mon = ((int) (date % 10000) / 100) - 1;
    tm0->tm_mday = (int) (date % 100);
@@ -524,6 +523,12 @@ double zoneTimeDiff (Zone zone1, Zone zone0) {
    time_t time0 = dateToTime_t (zone0.dataDate [0]) + 3600 * (zone0.dataTime [0] /100);   // add seconds
    return (time1 - time0) / 3600;
 } 
+
+/* returns number of second between beginning of grib to now */
+time_t diffNowGribTime0 (Zone zone) {
+   time_t now;
+   return time (&now) - (dateToTime_t (zone.dataDate [0]) + 3600 * (zone.dataTime [0] / 100));
+}
 
 /*! print Grib information */
 void printGrib (Zone zone, FlowP *gribData) {
@@ -546,7 +551,8 @@ void printGrib (Zone zone, FlowP *gribData) {
    }
 }
 
-/*! check Grib information */
+/*! check Grib inAformation 
+    return true if something written in buffer */
 bool checkGribToStr (char *buffer, Zone zone, FlowP *gribData) {
    //double t; 
    double u, v, lat, lon;
@@ -562,7 +568,7 @@ bool checkGribToStr (char *buffer, Zone zone, FlowP *gribData) {
    }
    if (count < 2) {
       strcpy (buffer, "No consistent info for shortname: 10u 10v ucurr vcurr");
-      return false;
+      return true;
    }
    for (size_t k = 0; k < zone.nTimeStamp; k++) {
       //t = zone.timeStamp [k];
@@ -591,7 +597,7 @@ bool checkGribToStr (char *buffer, Zone zone, FlowP *gribData) {
       }
    }
    if (n == 0) strcpy (str, "no value");
-   else if ((nSuspect >0) || (nLatSuspect > 0) || (nLonSuspect > 0)) {
+   else if ((nSuspect >0 ) || (nLatSuspect > 0) || (nLonSuspect > 0)) {
       sprintf (str, "n Values        : %10d\n", n);
       strcat (buffer, str);
       sprintf (str, "n suspect Values: %10d, ratio Val suspect: %.2lf %% \n", nSuspect, 100 * (double)nSuspect/(double) (n));
@@ -601,7 +607,7 @@ bool checkGribToStr (char *buffer, Zone zone, FlowP *gribData) {
       sprintf (str, "n suspect Lon   : %10d, ratio Lon suspect: %.2lf %% \n", nLonSuspect, 100 * (double)nLonSuspect/(double) (n));
       strcat (buffer, str);
    }
-   return true;
+   return (nSuspect > 0) || (nLatSuspect > 0) || (nLonSuspect > 0);
 }
 
 /*! find iTinf and iTsup in order t : zone.timeStamp [iTInf] <= t <= zone.timeStamp [iTSup] */
@@ -788,14 +794,14 @@ static bool readGribLists (char *fileName, Zone *zone) {
       fprintf (stderr, "Error in readGribLists index: %s\n",codes_get_error_message(ret)); 
       return false;
    }
-   printf ("In readGreablists 1\n");
+   //printf ("In readGreablists 1\n");
    /* Indexes a file */
    ret = codes_index_add_file (index, fileName);
    if (ret) {
        fprintf (stderr, "Error in readGribLists ret: %s\n",codes_get_error_message(ret)); 
        return false;
    }
-   printf ("In readGreablists 2\n");
+   //printf ("In readGreablists 2\n");
  
    /* get the number of distinct values of "step" in the index */
    CODES_CHECK (codes_index_get_size (index,"step", &zone->nTimeStamp),0);
@@ -1380,6 +1386,7 @@ bool readParam (const char *fileName) {
          pLine += 7;
          while (isspace (*pLine)) pLine ++;
          strcpy (par.editor, pLine);
+         strip (par.editor);
       }
       else printf ("Cannot interpret: %s\n", pLine);
    }
@@ -1439,7 +1446,7 @@ bool writeParam (const char *fileName, bool header) {
    fprintf (f, "PENALTY1:        %.2lf\n", par.penalty1);
    fprintf (f, "MOTOR_S:         %.2lf\n", par.motorSpeed);
    fprintf (f, "THRESHOLD:       %.2lf\n", par.threshold);
-   fprintf (f, "EFFICIENCY:       %.2lf\n", par.efficiency);
+   fprintf (f, "EFFICIENCY:      %.2lf\n", par.efficiency);
 
    if (par.constWave != 0)
       fprintf (f, "CONST_WAVE:      %.2lf\n", par.constWave);
@@ -1616,7 +1623,7 @@ bool curlGet (char *url, char* outputFile) {
    curl_easy_cleanup(curl);
    fclose(fp);
    if (http_code >= 400 || res != CURLE_OK) {
-      fprintf(stderr, "In curlget, Error HTTP response code: %ld\n", http_code);
+      fprintf (stderr, "In curlget, Error HTTP response code: %ld\n", http_code);
       return false;
    }
    return true;
