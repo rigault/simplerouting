@@ -46,6 +46,18 @@
 #define MIN_MOVE_FOR_SELECT   50 // minimum move to launch smtp grib request after selection
 #define MIN_POINT_FOR_BEZIER  10 // minimum number of point to select bezier representation
 #define MIN_NAME_SIZE         3  // mimimum poi name length to be considered
+#define CAIRO_SET_SOURCE_RGB_BLACK(cr)             cairo_set_source_rgb (cr,0,0,0)
+#define CAIRO_SET_SOURCE_RGB_WHITE(cr)             cairo_set_source_rgb (cr,1.0,1.0,1.0)
+#define CAIRO_SET_SOURCE_RGB_RED(cr)               cairo_set_source_rgb (cr,1.0,0,0)
+#define CAIRO_SET_SOURCE_RGB_GREEN(cr)             cairo_set_source_rgb (cr,0,1.0,0)
+#define CAIRO_SET_SOURCE_RGB_BLUE(cr)              cairo_set_source_rgb (cr,0,0,1.0)
+#define CAIRO_SET_SOURCE_RGB_ORANGE(cr)            cairo_set_source_rgb (cr,1.0,165.0/255,0.0)
+#define CAIRO_SET_SOURCE_RGB_YELLOW(cr)            cairo_set_source_rgb (cr, 1.0,1.0,0.8)
+#define CAIRO_SET_SOURCE_RGB_PINK(cr)              cairo_set_source_rgb (cr,1.0,0,1.0)
+#define CAIRO_SET_SOURCE_RGB_DARK_GRAY(cr)         cairo_set_source_rgb (cr,0.2,0.2,0.2)
+#define CAIRO_SET_SOURCE_RGB_GRAY(cr)              cairo_set_source_rgb (cr,0.5,0.5,0.5)
+#define CAIRO_SET_SOURCE_RGB_LIGHT_GRAY(cr)        cairo_set_source_rgb (cr,0.8,0.8,0.8)
+#define CAIRO_SET_SOURCE_RGB_ULTRA_LIGHT_GRAY(cr)  cairo_set_source_rgb (cr,0.9,0.9,0.9)
 
 GdkRGBA colors [] = {{1.0,0,0,1}, {0,1.0,0,1},  {0,0,1.0,1},{0.5,0.5,0,1},{0,0.5,0.5,1},{0.5,0,0.5,1},{0.2,0.2,0.2,1},{0.4,0.4,0.4,1},{0.8,0,0.2,1},{0.2,0,0.8,1}}; // Colors for Polar curve
 int nColors = 10;
@@ -63,8 +75,9 @@ GtkWidget *spinner_window;
 GtkListStore *filter_store;
 GtkWidget *filter_combo;
 guint context_id;
-GtkWidget *polar_drawing_area;      // polar
-int selectedPol = 0;               // select polar to draw. 0 = all
+GtkWidget *polar_drawing_area;   // polar
+int selectedPol = 0;             // select polar to draw. 0 = all
+double selectedTws = 0;          // selected TWS for polar draw
 GtkWidget *drawing_area;
 cairo_t *globalCr;
 guint gribMailTimeout;
@@ -130,11 +143,11 @@ typedef struct {
    WayPoint t [MAX_N_WAY_POINT];
 } WayRoute;
 
-WayRoute wayRoute; // = {0, 0.0, 0.0, {0}};
+WayRoute wayRoute;
 
 static void meteogram ();
 
-/* draw spinner when waiting for something */
+/*! draw spinner when waiting for something */
 static void spinner (const char *title) {
    spinner_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
    gtk_window_set_title(GTK_WINDOW(spinner_window), title);
@@ -460,7 +473,7 @@ static gboolean cb_draw_palette(GtkWidget *widget, cairo_t *cr, gpointer data) {
    }
    for (tws = 0; tws < 50; tws += 5.0) {
       int x = (int) (tws * (double) width / 50.0);
-      cairo_set_source_rgb (cr, 0, 0, 0);
+      CAIRO_SET_SOURCE_RGB_BLACK(cr);
       cairo_move_to (cr, x, height / 2);
       cairo_line_to (cr, x, height);
       cairo_stroke (cr);
@@ -521,7 +534,7 @@ static void orthoPoints (cairo_t *cr, double lat1, double lon1, double lat2, dou
    double x = getX (lon1, disp.xL, disp.xR);
    double y = getY (lat1, disp.yB, disp.yT);
    cairo_move_to (cr, x, y);
-   cairo_set_source_rgb (cr, 0, 1, 0);
+   CAIRO_SET_SOURCE_RGB_GREEN(cr);
    n = 10;
    
    for (int i = 0; i < n - 2; i ++) {
@@ -583,7 +596,7 @@ static void wayPointToStr (char * str) {
 static void drawLoxoRoute (cairo_t *cr) {
    double x = getX (par.pOr.lon, disp.xL, disp.xR);
    double y = getY (par.pOr.lat, disp.yB, disp.yT);
-   cairo_set_source_rgb (cr, 0.8, 0.8, 0.8);
+   CAIRO_SET_SOURCE_RGB_LIGHT_GRAY(cr);
    cairo_move_to (cr, x, y);
    for (int i = 0; i <  wayRoute.n; i++) {
       x = getX (wayRoute.t [i].lon, disp.xL, disp.xR);
@@ -661,7 +674,7 @@ static gboolean drawAllIsochrones0  (cairo_t *cr) {
 static gboolean drawClosest  (cairo_t *cr) {
    double x, y;
    Pp pt;
-   cairo_set_source_rgb (cr, 1.0, 0, 0);
+   CAIRO_SET_SOURCE_RGB_RED(cr);
    for (int i = 0; i < nIsoc; i++) {
       pt = isocArray [i][isoDesc [i].closest];
       //printf ("lat: %.2lf, lon: %.2lf\n", pt.lat, pt.lon); 
@@ -676,7 +689,7 @@ static gboolean drawClosest  (cairo_t *cr) {
 /*! draw focal points */
 static gboolean drawFocal  (cairo_t *cr) {
    double x, y, lat, lon;
-   cairo_set_source_rgb (cr, 0, 1.0, 0);
+   CAIRO_SET_SOURCE_RGB_GREEN(cr);
    for (int i = 0; i < nIsoc; i++) {
       lat = isoDesc [i].focalLat;
       lon = isoDesc [i].focalLon;
@@ -701,7 +714,7 @@ static gboolean drawAllIsochrones  (cairo_t *cr, int style) {
    // printf ("DrawAllIsochrones :%d\n", style);
    if (style == NOTHING) return true;
    if (style == POINT) return drawAllIsochrones0 (cr);
-   cairo_set_source_rgb (cr, 0, 0, 1.0); // blue
+   CAIRO_SET_SOURCE_RGB_BLUE(cr);
    cairo_set_line_width(cr, 1.0);
    for (int i = 0; i < nIsoc; i++) {
       // GdkRGBA color = colors [i % nColors];
@@ -716,10 +729,6 @@ static gboolean drawAllIsochrones  (cairo_t *cr, int style) {
       pt = newIsoc [0];
 	   x = getX (pt.lon, disp.xL, disp.xR);
 	   y = getY (pt.lat, disp.yB, disp.yT);
-      /*if (i == nIsoc - 1)
-         cairo_set_source_rgb (cr, 1.0, 0, 0);
-      else 
-         cairo_set_source_rgb (cr, 0, 0, 1.0);*/
       cairo_move_to (cr, x, y);
 	   if ((isoDesc [i].size < MIN_POINT_FOR_BEZIER) || style == SEGMENT) { 	// segment if number of points < 4 or style == 2
          for (int k = 1; k < isoDesc [i].size; k++) {
@@ -783,7 +792,7 @@ static void drawRoute (cairo_t *cr) {
    double x = getX (par.pOr.lon, disp.xL, disp.xR);
    double y = getY (par.pOr.lat, disp.yB, disp.yT);
    cairo_move_to (cr, x, y);
-   cairo_set_source_rgb (cr, 1, 0, 1);
+   CAIRO_SET_SOURCE_RGB_PINK(cr);
 
    for (int i = 1; i < route.n; i++) {
       x = getX (route.t[i].lon, disp.xL, disp.xR);
@@ -825,7 +834,7 @@ static gboolean draw_shp_map (GtkWidget *widget, cairo_t *cr, gpointer data) {
       switch (entities [i].nSHPType) {
       case SHPT_POLYGON : // case SHPT_POLYGONZ : case SHPT_ARC : case SHPT_ARCZ :
          // Traitement pour les lignes (arcs)
-         cairo_set_source_rgb (cr, 0.5, 0.5, 0.5); // Lignes en gris
+         CAIRO_SET_SOURCE_RGB_GRAY(cr); //lignes
          cairo_move_to(cr, x0, y0);
 
          for (int j = 1; j < entities[i].numPoints; j++) {
@@ -861,7 +870,7 @@ static void showWaves (cairo_t *cr, Pp pt, double w) {
    double x = getX (pt.lon, disp.xL, disp.xR);
    double y = getY (pt.lat, disp.yB, disp.yT);
    if ((w <= 0) || (w > 100)) return;
-   cairo_set_source_rgb (cr, 0.5, 0.5, 0.5); // gray
+   CAIRO_SET_SOURCE_RGB_GRAY(cr);
    cairo_select_font_face (cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
    cairo_set_font_size (cr, 6);
    cairo_move_to (cr, x, y);
@@ -876,8 +885,8 @@ static void arrow (cairo_t *cr, Pp pt, double head_x, double head_y, double u, d
    double tail_x = head_x - 30 * u/tws;
    double tail_y = head_y + 30 * v/tws;
 
-   if (typeFlow == WIND) cairo_set_source_rgb (cr, 0, 0, 0);   // black
-   else cairo_set_source_rgb (cr, 1.0, 165.0/255.0, 0);        // orange
+   if (typeFlow == WIND) CAIRO_SET_SOURCE_RGB_BLACK (cr);
+   else CAIRO_SET_SOURCE_RGB_ORANGE (cr); 
    cairo_set_line_width (cr, 1.0);
    cairo_set_font_size (cr, 6);
 
@@ -915,8 +924,8 @@ static void barbule (cairo_t *cr, Pp pt, double u, double v, double tws, int typ
    // Calculer les coordonnées de la queue
    double tail_x = head_x - 30 * u/tws;
    double tail_y = head_y + 30 * v/tws;
-   if (typeFlow == WIND) cairo_set_source_rgb (cr, 0, 0, 0);   // black
-   else cairo_set_source_rgb (cr, 1.0, 165.0/255.0, 0);        // orange
+   if (typeFlow == WIND) CAIRO_SET_SOURCE_RGB_BLACK(cr);
+   else CAIRO_SET_SOURCE_RGB_ORANGE(cr);
    cairo_set_line_width (cr, 1.0);
    cairo_set_font_size (cr, 6);
 
@@ -1046,7 +1055,7 @@ static gboolean drawGribCallback (GtkWidget *widget, cairo_t *cr, gpointer data)
    disp.yB = height; // bottom
    theTime = zone.timeStamp [kTime];
 
-   cairo_set_source_rgb(cr, 1, 1, 1); // Couleur blanche
+   CAIRO_SET_SOURCE_RGB_WHITE(cr);
    cairo_paint(cr);                   // clear all
    if (par.showColors != 0) {
       if (par.constWindTws != 0) {
@@ -1060,7 +1069,7 @@ static gboolean drawGribCallback (GtkWidget *widget, cairo_t *cr, gpointer data)
    cairo_stroke(cr);
 
    draw_shp_map (widget, cr, data);
-   cairo_set_source_rgb (cr, 0, 0, 0);
+   CAIRO_SET_SOURCE_RGB_BLACK(cr);
 
    // dessiner les barbules ou fleches de vent
    pt.lat = dispZone.latMin;
@@ -1147,7 +1156,7 @@ static void polarTarget (cairo_t *cr, int type, double width, double height, dou
    double centerX = width / 2;
    double centerY = height / 2;
    const int MIN_R_STEP_SHOW = 12;
-   cairo_set_source_rgb (cr, 0.9, 0.9, 0.9);
+   CAIRO_SET_SOURCE_RGB_ULTRA_LIGHT_GRAY(cr);
   
    for (int i = 1; i <= nStep; i++)
       cairo_arc (cr, centerX, centerY, i * rStep, -G_PI/2, G_PI/2);  //trace cercle
@@ -1158,7 +1167,7 @@ static void polarTarget (cairo_t *cr, int type, double width, double height, dou
          rMax * sin (DEG_TO_RAD * angle));
    }
    cairo_stroke(cr);
-   cairo_set_source_rgb (cr, 0.2, 0.2, 0.2);
+   CAIRO_SET_SOURCE_RGB_DARK_GRAY(cr);
 
    // libelles vitesses
    for (int i = 1; i <= nStep; i++) {
@@ -1196,7 +1205,7 @@ static void polarLegend (cairo_t *cr, int type) {
    GdkRGBA color;
    PolMat *ptMat = (type == WAVE_POLAR) ? &wavePolMat : &polMat; 
    cairo_set_line_width (cr, 1);
-   cairo_set_source_rgb (cr, 0.5, 0.5, 0.5);
+   CAIRO_SET_SOURCE_RGB_GRAY(cr);
    cairo_rectangle (cr, xLeft, y, 120, ptMat->nCol * hSpace);
    cairo_stroke(cr);
    cairo_set_line_width (cr, 1);
@@ -1213,7 +1222,17 @@ static void polarLegend (cairo_t *cr, int type) {
 }
 
 /*! return x and y in polar */
-static void getPolarXY (int type, int l, int c, double width, double height, double radiusFactor, double *x, double *y) {
+static void getPolarXYbyValue (int type, int l, double w, double width, double height, double radiusFactor, double *x, double *y) {
+   PolMat *ptMat = (type == WAVE_POLAR) ? &wavePolMat : &polMat; 
+   double angle = (90 - ptMat->t [l][0]) * DEG_TO_RAD;  // Convertir l'angle en radians
+   double val = extFindPolar (ptMat->t [l][0], w, *ptMat);
+   double radius = val * radiusFactor;
+   *x = width / 2 + radius * cos(angle);
+   *y = height / 2 - radius * sin(angle);
+}
+
+/*! return x and y in polar */
+static void getPolarXYbyCol (int type, int l, int c, double width, double height, double radiusFactor, double *x, double *y) {
    PolMat *ptMat = (type == WAVE_POLAR) ? &wavePolMat : &polMat; 
    double angle = (90 - ptMat->t [l][0]) * DEG_TO_RAD;  // Convertir l'angle en radians
    double radius = ptMat->t [l][c] * radiusFactor;
@@ -1222,52 +1241,85 @@ static void getPolarXY (int type, int l, int c, double width, double height, dou
 }
 
 /*! Draw polar from polar matrix */
-static void on_draw_polar_event (GtkWidget *widget, cairo_t *cr, gpointer user_data) {
+static void drawPolarBySelectedTws (cairo_t *cr, int polarType, PolMat ptMat,
+   double selectedTws, double width, double height, double radiusFactor) {
+   
    double x, y, x1, x2, y1, y2;
-   cairo_set_line_width(cr, 2);
-   // Obtenir la largeur et la hauteur de la zone de dessin
+   cairo_set_line_width (cr, 5);
+   cairo_set_source_rgba (cr, 1.0, 0, 0, 1.0);
+   getPolarXYbyValue (polarType, 1, selectedTws, width, height, radiusFactor, &x, &y);
+   cairo_move_to (cr, x, y);
+
+   // segments
+   if (segmentOrBezier == SEGMENT) {
+      for (int l = 2; l < ptMat.nLine; l += 1) {
+         getPolarXYbyValue (polarType, l, selectedTws, width, height, radiusFactor, &x, &y);
+         cairo_line_to(cr, x, y);
+      }
+   }
+   // Tracer la courbe de Bézier si nb de points suffisant
+   else {
+      for (int l = 2; l < ptMat.nLine - 2; l += 3) {
+         getPolarXYbyValue (polarType, l, selectedTws, width, height, radiusFactor, &x, &y);
+         getPolarXYbyValue (polarType, l+1, selectedTws, width, height, radiusFactor, &x1, &y1);
+         getPolarXYbyValue (polarType, l+2, selectedTws, width, height, radiusFactor, &x2, &y2);
+         cairo_curve_to(cr, x, y, x1, y1, x2, y2);
+      }
+      getPolarXYbyValue (polarType, ptMat.nLine -1, selectedTws, width, height, radiusFactor, &x, &y);
+      cairo_line_to(cr, x, y);
+   }
+   cairo_stroke(cr);
+}
+
+/*! Draw polar from polar matrix */
+static void drawPolarAll (cairo_t *cr, int polarType, PolMat ptMat, 
+   double width, double height, double radiusFactor) {
+
+   double x, y, x1, x2, y1, y2;
+   cairo_set_line_width (cr, 1);
+   int minCol = (selectedPol == 0) ? 1 : selectedPol;
+   int maxCol = (selectedPol == 0) ? ptMat.nCol : selectedPol + 1;
+
+   for (int c = minCol; c < maxCol; c++) {
+      GdkRGBA color = colors [c % nColors];
+      cairo_set_source_rgba (cr, color.red, color.green, color.blue, color.alpha);
+      getPolarXYbyCol (polarType, 1, c, width, height, radiusFactor, &x, &y);
+      cairo_move_to (cr, x, y);
+
+      // segments
+      if (segmentOrBezier == SEGMENT) {
+         for (int l = 2; l < ptMat.nLine; l += 1) {
+            getPolarXYbyCol (polarType, l, c, width, height, radiusFactor, &x, &y);
+            cairo_line_to(cr, x, y);
+         }
+      }
+      // Tracer la courbe de Bézier si nb de points suffisant
+      else {
+         for (int l = 2; l < ptMat.nLine - 2; l += 3) {
+            getPolarXYbyCol (polarType, l, c, width, height, radiusFactor, &x, &y);
+            getPolarXYbyCol (polarType, l+1, c, width, height, radiusFactor, &x1, &y1);
+            getPolarXYbyCol (polarType, l+2, c, width, height, radiusFactor, &x2, &y2);
+            cairo_curve_to(cr, x, y, x1, y1, x2, y2);
+         }
+         getPolarXYbyCol (polarType, ptMat.nLine -1, c, width, height, radiusFactor, &x, &y);
+         cairo_line_to(cr, x, y);
+      }
+      cairo_stroke(cr);
+   }
+}
+
+/*! Draw polar from polar matrix */
+static void on_draw_polar_event (GtkWidget *widget, cairo_t *cr, gpointer user_data) {
    int width, height;
    PolMat *ptMat = (polarType == WAVE_POLAR) ? &wavePolMat : &polMat; 
    gtk_window_get_size (GTK_WINDOW(gtk_widget_get_toplevel(widget)), &width, &height);
    //double radiusFactor = (polarType == WAVE_POLAR) ? width / 40 : width / (maxValInPol (*ptMat) * 5); // Ajustez la taille de la courbe
    double radiusFactor;
    radiusFactor = width / (maxValInPol (*ptMat) * 6); // Ajustez la taille de la courbe
-   // printf ("RAD : %.2lf\n", radiusFactor);
-   int minCol = (selectedPol == 0) ? 1 : selectedPol;
-   int maxCol = (selectedPol == 0) ? ptMat->nCol : selectedPol + 1;
-
    polarTarget (cr, polarType, width, height, radiusFactor);
    polarLegend (cr, polarType);
-   cairo_set_line_width (cr, 1);
-
-   for (int c = minCol; c < maxCol; c++) {
-      GdkRGBA color = colors [c % nColors];
-      cairo_set_source_rgba (cr, color.red, color.green, color.blue, color.alpha);
-      getPolarXY (polarType, 1, c, width, height, radiusFactor, &x, &y);
-      cairo_move_to (cr, x, y);
-
-      // segments
-      if (segmentOrBezier == SEGMENT) {
-         for (int l = 2; l < ptMat->nLine; l += 1) {
-            getPolarXY (polarType, l, c, width, height, radiusFactor, &x, &y);
-            cairo_line_to(cr, x, y);
-         }
-         cairo_stroke(cr);
-      }
-      // Tracer la courbe de Bézier si nb de points suffisant
-      else {
-         for (int l = 2; l < ptMat->nLine - 2; l += 3) {
-            getPolarXY (polarType, l, c, width, height, radiusFactor, &x, &y);
-            getPolarXY (polarType, l+1, c, width, height, radiusFactor, &x1, &y1);
-            getPolarXY (polarType, l+2, c, width, height, radiusFactor, &x2, &y2);
-            cairo_curve_to(cr, x, y, x1, y1, x2, y2);
-         }
-         getPolarXY (polarType, ptMat->nLine -1, c, width, height, radiusFactor, &x, &y);
-         cairo_line_to(cr, x, y);
-         
-      }
-      cairo_stroke(cr);
-   }
+   drawPolarAll (cr, polarType, *ptMat, width, height, radiusFactor);
+   drawPolarBySelectedTws (cr, polarType, *ptMat, selectedTws, width, height, radiusFactor);
    if (polar_drawing_area != NULL)
       gtk_widget_queue_draw (polar_drawing_area);
 }
@@ -1393,6 +1445,13 @@ static void segmentOrBezierButtonToggled(GtkToggleButton *button, gpointer user_
       gtk_widget_queue_draw (polar_drawing_area);
 }
 
+/* Callback for polar to change scale calue */
+void on_scale_value_changed (GtkScale *scale, gpointer user_data) {
+   selectedTws = gtk_range_get_value(GTK_RANGE(scale));
+   if (polar_drawing_area != NULL)
+      gtk_widget_queue_draw (polar_drawing_area);
+}
+
 /*! Draw polar from polar file */
 static void polarDraw (int type) {
    char line [MAX_SIZE_LINE] = "Polar: "; 
@@ -1439,6 +1498,13 @@ static void polarDraw (int type) {
    g_signal_connect (bezierRadio, "toggled", G_CALLBACK (segmentOrBezierButtonToggled), NULL);
    segmentOrBezier = (ptMat->nLine < MIN_POINT_FOR_BEZIER) ? SEGMENT : BEZIER;
    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON ((segmentOrBezier == SEGMENT) ? segmentRadio : bezierRadio), TRUE);
+
+   // Créer le widget GtkScale
+   int maxScale = ptMat->t[0][ptMat->nCol-1]; // max value of wind or waves
+   GtkWidget *scale = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL, 0, maxScale, 1);
+   gtk_scale_set_value_pos(GTK_SCALE(scale), GTK_POS_TOP);
+   gtk_widget_set_size_request (scale, 300, -1);  // Ajuster la largeur du GtkScale
+   g_signal_connect(scale, "value-changed", G_CALLBACK(on_scale_value_changed), NULL);
   
    hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
    gtk_box_pack_start(GTK_BOX (hbox), filter_combo, FALSE, FALSE, 0);
@@ -1446,6 +1512,7 @@ static void polarDraw (int type) {
    gtk_box_pack_start(GTK_BOX (hbox), bezierRadio, FALSE, FALSE, 0);
    gtk_box_pack_start(GTK_BOX (hbox), dumpButton, FALSE, FALSE, 0);
    gtk_box_pack_start(GTK_BOX (hbox), editButton, FALSE, FALSE, 0);
+   gtk_box_pack_start(GTK_BOX (hbox), scale, FALSE, FALSE, 0);
    gtk_box_pack_start(GTK_BOX (box), hbox, FALSE, FALSE, 0);
    gtk_box_pack_start(GTK_BOX (box), polar_drawing_area, TRUE, TRUE, 0);
 
@@ -3325,7 +3392,6 @@ static void on_meteogram_event (GtkWidget *widget, cairo_t *cr, gpointer user_da
    if (pt.lon > 180) pt.lon -= 360;
    gtk_window_get_size (GTK_WINDOW(gtk_widget_get_toplevel(widget)), &width, &height);
 
-   cairo_set_source_rgb (cr, 1.0, 0, 0);
    if (zone.nTimeStamp < 2) return;
    cairo_set_line_width (cr, 1);
    const int X_LEFT = 30;
@@ -3336,16 +3402,16 @@ static void on_meteogram_event (GtkWidget *widget, cairo_t *cr, gpointer user_da
    const int XK = (X_RIGHT - X_LEFT) / tMax;  
    const int DELTA = 5;
 
-   // graphical difference between up to now abd after now 
+   // graphical difference between up to now and after now 
    tDeltaNow = diffNowGribTime0 (zone) / 3600.0;
-   cairo_set_source_rgb (cr, 1.0, 1.0, 153/255.0); // jaune clair
+   CAIRO_SET_SOURCE_RGB_YELLOW(cr);
    if (tDeltaNow > 0) {
       x = X_LEFT + XK * tDeltaNow;
       x = MIN (x, X_RIGHT);
       cairo_rectangle (cr, X_LEFT, Y_TOP, x - X_LEFT, Y_BOTTOM - Y_TOP); // past is gray
       cairo_fill (cr);
       if (x < X_RIGHT -10) {
-         cairo_set_source_rgb (cr, 0.0, 0.0, 0.0); // line for now
+         CAIRO_SET_SOURCE_RGB_BLACK(cr); // line for now
          cairo_move_to (cr, x, Y_BOTTOM);
          cairo_line_to (cr, x, Y_TOP);
          cairo_stroke (cr);
@@ -3353,7 +3419,7 @@ static void on_meteogram_event (GtkWidget *widget, cairo_t *cr, gpointer user_da
    } 
    
    // Dessiner la ligne horizontale
-   cairo_set_source_rgb (cr, 0.0, 0.0, 0.0);
+   CAIRO_SET_SOURCE_RGB_BLACK(cr);
    cairo_move_to (cr, X_LEFT,  Y_BOTTOM );
    cairo_line_to (cr, X_RIGHT, Y_BOTTOM);
    cairo_line_to (cr, X_RIGHT - DELTA, Y_BOTTOM + DELTA); // for arrow
@@ -3405,8 +3471,7 @@ static void on_meteogram_event (GtkWidget *widget, cairo_t *cr, gpointer user_da
    maxG *= MS_TO_KN; 
    maxMax = ceil (MAX (maxG, MAX (maxTws, MAX (maxWave, (MAX (maxCurrTws, 10)))))); 
    const int YK = (Y_BOTTOM - Y_TOP) / maxMax;
-   cairo_set_font_size (cr, 10);
-   cairo_set_source_rgb (cr, 0.0, 0.0, 0.0);
+   CAIRO_SET_SOURCE_RGB_BLACK(cr);
 
    // Dessiner les libelles des vitesses
    double step = round (maxMax / 10);
@@ -3417,7 +3482,7 @@ static void on_meteogram_event (GtkWidget *widget, cairo_t *cr, gpointer user_da
    }
    cairo_stroke(cr);
   
-   cairo_set_source_rgb (cr, 0, 0, 1.0);
+   CAIRO_SET_SOURCE_RGB_BLUE(cr);
    // draw tws 
    for (int i = 0; i < tMax; i += 1) {
       findFlow (pt, i, &u, &v, &g, &w, zone, gribData);
@@ -3431,7 +3496,7 @@ static void on_meteogram_event (GtkWidget *widget, cairo_t *cr, gpointer user_da
    
    // draw gust
    if (maxG > 0) { 
-      cairo_set_source_rgb (cr, 1.0, 0, 0);
+      CAIRO_SET_SOURCE_RGB_RED(cr);
       for (int i = 0; i < tMax; i += 1) {
          findFlow (pt, i, &u, &v, &g, &w, zone, gribData);
          x = X_LEFT + XK * i;
@@ -3444,7 +3509,7 @@ static void on_meteogram_event (GtkWidget *widget, cairo_t *cr, gpointer user_da
 
    // draw waves
    if (maxWave > 0) { 
-      cairo_set_source_rgb (cr, 0, 1.0, 0);
+      CAIRO_SET_SOURCE_RGB_GREEN(cr);
       for (int i = 0; i < tMax; i += 1) {
          findFlow (pt, i, &u, &v, &g, &w, zone, gribData);
          x = X_LEFT + XK * i;
@@ -3456,7 +3521,7 @@ static void on_meteogram_event (GtkWidget *widget, cairo_t *cr, gpointer user_da
    }
    // draw uTws (current) 
    if (maxCurrTws > 0) {
-      cairo_set_source_rgb (cr, 1.0, 165.0/255.0, 0);        // orange
+      CAIRO_SET_SOURCE_RGB_ORANGE(cr);
       for (int i = 0; i < tMax; i += 1) {
 	      findFlow (pt, i - tDeltaCurrent, &uCurr, &vCurr, &bidon, &bidon, currentZone, currentGribData);
          currTws = extTws (uCurr, vCurr);
@@ -3482,7 +3547,7 @@ static void meteogram () {
    Pp pt;
    pt.lat = yToLat (whereIsMouse.y, disp.yB, disp.yT);
    pt.lon = xToLon (whereIsMouse.x, disp.xL, disp.xR);
-   sprintf (line, "Meteogram Wind Gust Wave Currentfor %s %s beginning %s during %ld hours", latToStr (pt.lat, par.dispDms, strLat), 
+   sprintf (line, "Meteogram (Wind, Gust, Wave, Current) for %s %s beginning %s during %ld hours", latToStr (pt.lat, par.dispDms, strLat), 
       lonToStr (pt.lon, par.dispDms, strLon),
       newDate (zone.dataDate [0], (zone.dataTime [0]/100)+ zone.timeStamp [kTime], pDate),
       zone.timeStamp [zone.nTimeStamp -1]);
