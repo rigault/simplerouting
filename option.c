@@ -8,10 +8,11 @@
 #include "engine.h"
 
 void optionManage (char option) {
-	FILE *f;
-   char buffer [MAX_SIZE_BUFFER];
+	FILE *f = NULL;
+   char buffer [MAX_SIZE_BUFFER] = "";
    double u, v, g, w, twa, tws, time, lon, lat, lat2, lon2;
-   char str [MAX_SIZE_LINE];
+   char str [MAX_SIZE_LINE] = "";
+   int k = 0;
    Pp pt;
    switch (option) {
    case 'c': // cap
@@ -29,12 +30,12 @@ void optionManage (char option) {
       printf ("grib read: %s\n", par.gribFileName);
       readGrib (NULL);
       printf ("grib print...\n");
-      printGrib (zone, gribData);
-      gribToStr (buffer, zone);
+      // printGrib (zone, gribData);
+      //gribToStr (buffer, zone);
       printf ("%s\n", buffer);
-      printf ("\n\n Following lines are suspects info...\n");
-      checkGribToStr (buffer, zone, gribData);
-      printf ("%s\n", buffer);
+      //printf ("\n\n Following lines are suspects info...\n");
+      //checkGribToStr (buffer, zone, gribData);
+      //printf ("%s\n", buffer);
       break;
    case 'h': // help
 	   if ((f = fopen (par.cliHelpFileName, "r")) == NULL) {
@@ -102,12 +103,12 @@ void optionManage (char option) {
       readGrib (NULL);
       printf ("Time now minus Time0 Grib in hours %.2lf\n", diffNowGribTime0 (zone)/3600.0);
       break;
-   case 'z': // conversion deg min sec
+   case 'z': //
       while (true) {
-         printf ("str: ");
-         fgets(buffer, sizeof(buffer), stdin);
-         printf ("len: %d\n", (int) strlen (buffer));
-         printf ("res: %.2lf\n", getCoord (buffer));
+         buffer [0] = '\0';
+         printf ("val: ");
+         scanf ("%d", &k);
+         printf ("%s\n", formatThousandSep (buffer, k));
       }
    break;
    default:

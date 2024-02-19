@@ -109,7 +109,6 @@ bool extIsSea (double lon, double lat) {
    return isSea (lon, lat);
 }
 
-/*! read city or specific info file. Return the number of point of interests */
 /*! return pythagore distance */
 static inline double dist (double x, double y) {
    return sqrt (x*x + y*y);
@@ -127,7 +126,7 @@ static inline double directCap (Pp pFrom, Pp pDest) {
       cos (DEG_TO_RAD * (pFrom.lat+pDest.lat)/2), pDest.lat - pFrom.lat);
 }
 
-/*! find first point in isochrone useful for drawAllIsochrones */ 
+/*! find first point in isochrone. Useful for drawAllIsochrones */ 
 static inline int findFirst (int nIsoc) {
    int best = 0;
    int next;
@@ -144,7 +143,6 @@ static inline int findFirst (int nIsoc) {
    }
    return best;
 }
-
 
 /*! reduce the size of Isolist */
 static inline int forwardSectorOptimize (Isoc isoList, int isoLen, Isoc optIsoc, int nMaxOptIsoc, double jFactor, double distTarget) {
@@ -276,9 +274,9 @@ static inline int sectorOptimize (Isoc isoList, int isoLen, Isoc optIsoc, int nM
    //ptTarget = par.pDest; 
    double beta = directCap (par.pOr, par.pDest);
    for (int i = 0; i < nMaxOptIsoc; i++) { 
-	  tDist [i] = DBL_MAX;
-     nPt [i] = 0;
-     optIsoc [i].lat = DBL_MAX;
+	   tDist [i] = DBL_MAX;
+      nPt [i] = 0;
+      optIsoc [i].lat = DBL_MAX;
    }
 
    for (int i = 0; i < isoLen; i++) {
@@ -400,21 +398,22 @@ static int buildNextIsochrone (Isoc isoList, int isoLen, Pp pDest, double t, dou
          newPt.lon = isoList [k].lon + dLon/60;
          newPt.id = pId;
          newPt.father = isoList [k].id;
-         newPt.dd = orthoDist (newPt.lat, newPt.lon, pDest.lat, pDest.lon);
-         double alpha = directCap (par.pOr, newPt) - pOrTtoPDestCog;
+         if (isSea (newPt.lon, newPt.lat)) {
+            newPt.dd = orthoDist (newPt.lat, newPt.lon, pDest.lat, pDest.lon);
+            double alpha = directCap (par.pOr, newPt) - pOrTtoPDestCog;
          
-         newPt.vmg = orthoDist (newPt.lat, newPt.lon, par.pOr.lat, par.pOr.lon) * cos (DEG_TO_RAD * alpha);
-         if (newPt.vmg > *bestVmg) *bestVmg = newPt.vmg;
+            newPt.vmg = orthoDist (newPt.lat, newPt.lon, par.pOr.lat, par.pOr.lon) * cos (DEG_TO_RAD * alpha);
+            if (newPt.vmg > *bestVmg) *bestVmg = newPt.vmg;
 
-         if (isSea (newPt.lon, newPt.lat) && isInZone (newPt, zone) && (newPt.dd < isoList [k].dd) &&
-            (newPt.vmg > isoList [k].vmg) && (newPt.vmg > 0.5 * lastBestVmg)) { // vmg has to progress
-            if (lenNewL < MAX_SIZE_ISOC)
-               newList [lenNewL++] = newPt;                      // new point added to the isochrone
-            else {
-               fprintf (stderr, "Routing Error in buildNextIsochrone, limit of MAX_SIZE_ISOC: %d\n", MAX_SIZE_ISOC);
-               return -1;
+            if ((newPt.dd < isoList [k].dd) && (newPt.vmg > isoList [k].vmg) && (newPt.vmg > 0.5 * lastBestVmg)) { // vmg has to progress
+               if (lenNewL < MAX_SIZE_ISOC)
+                  newList [lenNewL++] = newPt;                      // new point added to the isochrone
+               else {
+                  fprintf (stderr, "Routing Error in buildNextIsochrone, limit of MAX_SIZE_ISOC: %d\n", MAX_SIZE_ISOC);
+                  return -1;
+               }
+               pId += 1;
             }
-            pId += 1;
          }
       }
    }
@@ -437,16 +436,17 @@ bool isoDectToStr (char *str, size_t maxLength) {
    char line [MAX_SIZE_LINE];
    char strLat [MAX_SIZE_LINE];
    char strLon [MAX_SIZE_LINE];
+   const int DIST_MAX = 100000;
    double dist;
    sprintf (str, "No  Size First Closest Distance VMG      FocalLat  FocalLon\n");
    for (int i = 0; i < nIsoc; i++) {
       dist = isoDesc [i].distance;
-      if (dist > 100000) dist = -1;
-      sprintf (line, "%03d %03d  %03d   %03d     %07.2lf  %07.2lf  %s  %s\n", i, isoDesc[i].size, isoDesc[i].first, 
+      if (dist > DIST_MAX) dist = -1;
+      snprintf (line, MAX_SIZE_LINE, "%03d %03d  %03d   %03d     %07.2lf  %07.2lf  %s  %s\n", i, isoDesc[i].size, isoDesc[i].first, 
          isoDesc[i].closest, dist, isoDesc[i].bestVmg, 
          latToStr (isoDesc [i].focalLat, par.dispDms, strLat), lonToStr (isoDesc [i].focalLon, par.dispDms, strLon));
       if ((strlen (str) + strlen (line)) > maxLength) return false;
-      strcat (str, line); 
+      strncat (str, line, MAX_SIZE_LINE); 
    }
    return true;
 }
@@ -461,9 +461,9 @@ void allIsocToStr (char *str) {
    for (int i = 0; i < nIsoc; i++) {
       for (int k = 0; k < isoDesc [i].size; k++) {
          pt = isocArray [i][k];
-         sprintf (line, "%03d %-12s %-12s %6d %6d %6d\n", i, latToStr (pt.lat, par.dispDms, strLat),\
+         snprintf (line, MAX_SIZE_LINE, "%03d %-12s %-12s %6d %6d %6d\n", i, latToStr (pt.lat, par.dispDms, strLat),\
             lonToStr (pt.lon, par.dispDms, strLon), pt.id, pt.father, pt.amure);
-         strcat (str, line);
+         strncat (str, line, MAX_SIZE_LINE);
       }
    }
 }
@@ -490,7 +490,7 @@ bool dumpAllIsoc (char *fileName) {
 
 /*! write in CSV file routes */
 bool dumpRoute (char *fileName, Pp dest) {
-   FILE *f;
+   FILE *f = NULL;
    int i = nIsoc;
    int iFather;
    int dep = (dest.id == 0) ? nIsoc : nIsoc - 1;
@@ -569,32 +569,32 @@ void routeToStr (Route route, char *str) {
    char strLat [MAX_SIZE_LINE];
    char strLon [MAX_SIZE_LINE];
    sprintf (str, " No       Lat        Lon             Id Father     Cap     Dist      Ortho\n");
-   sprintf (line, " pOr:     %-12s%-12s %6d %6d %7.2f° %7.2f    %7.2f\n", \
+   snprintf (line, MAX_SIZE_LINE, " pOr:     %-12s%-12s %6d %6d %7.2f° %7.2f    %7.2f\n", \
       latToStr (route.t[0].lat, par.dispDms, strLat), lonToStr (route.t[0].lon, par.dispDms, strLon), \
       route.t[0].id, route.t[0].father, route.t[0].cap, route.t[0].d, route.t[0].dOrtho);
    
-   strcat (str, line);
+   strncat (str, line, MAX_SIZE_LINE);
    for (int i = 1; i < route.n-1; i++) {
       if ((fabs(route.t[i].lat) > 360.0) || (fabs (route.t[i].lat) > 90.0))
-         sprintf (line, " Isoc %2d: Erreur sur latitude ou longitude\n", i-1);   
+         snprintf (line, MAX_SIZE_LINE, " Isoc %2d: Erreur sur latitude ou longitude\n", i-1);   
       else
-         sprintf (line, " Isoc %2d: %-12s%-12s %6d %6d %7.2f° %7.2f    %7.2f\n", \
+         snprintf (line, MAX_SIZE_LINE, " Isoc %2d: %-12s%-12s %6d %6d %7.2f° %7.2f    %7.2f\n", \
             i-1, latToStr (route.t[i].lat, par.dispDms, strLat), lonToStr (route.t[i].lon, par.dispDms, strLon), \
             route.t[i].id, route.t[i].father, \
             route.t[i].cap, route.t[i].d, route.t[i].dOrtho); 
-      strcat (str, line);
+      strncat (str, line, MAX_SIZE_LINE);
    }
    if (route.destinationReached)
-      sprintf (line, " Dest:    %-12s%-12s %6d %6d \n", latToStr (route.t[route.n-1].lat, par.dispDms, strLat),\
+      snprintf (line, MAX_SIZE_LINE, " Dest:    %-12s%-12s %6d %6d \n", latToStr (route.t[route.n-1].lat, par.dispDms, strLat),\
          lonToStr (route.t[route.n-1].lon, par.dispDms, strLon),\
          route.t[route.n-1].id, route.t[route.n-1].father);
    else 
-      sprintf (line, " Isoc %2d: %-12s%-12s %6d %6d \n", nIsoc -1, latToStr (route.t[route.n-1].lat, par.dispDms, strLat),\
+      snprintf (line, MAX_SIZE_LINE, " Isoc %2d: %-12s%-12s %6d %6d \n", nIsoc -1, latToStr (route.t[route.n-1].lat, par.dispDms, strLat),\
          lonToStr (route.t[route.n-1].lon, par.dispDms, strLon),\
          route.t[route.n-1].id, route.t[route.n-1].father);
-   strcat (str, line);
-   sprintf (line, " Total distance: %.2f NM", route.totDist);
-   strcat (str, line);
+   strncat (str, line, MAX_SIZE_LINE);
+   snprintf (line, MAX_SIZE_LINE, " Total distance: %.2f NM", route.totDist);
+   strncat (str, line, MAX_SIZE_LINE);
 }
 
 /*! return true if pDest can be reached from pFrom in less time than dt
@@ -662,18 +662,20 @@ static inline bool goal (int nIsoc, Isoc isoList, int len, double t, double dt, 
    bool res;
    isoDesc [nIsoc].distance = DBL_MAX; 
    for (int k = 0; k < len; k++) {
-      res = goalP (isoList [k], par.pDest, t, dt, &time, &distance);
-      // printf ("k, time: %d %lf\n",  k, time);
-      if (res) {
-         destinationReached = true;
-         par.pDest.father = isoList [k].id; // ATTENTION !!!!
-      }
-      if (time < bestTime) {
-         if (res) par.pDest.father = isoList [k].id; // ATTENTION !!!!
-         bestTime = time;
-      }
-      if (distance < isoDesc [nIsoc].distance) {
-         isoDesc [nIsoc].distance = distance;
+      if (isSea (isoList [k].lon, isoList [k].lon)) {
+         res = goalP (isoList [k], par.pDest, t, dt, &time, &distance);
+         // printf ("k, time: %d %lf\n",  k, time);
+         if (res) {
+            destinationReached = true;
+            par.pDest.father = isoList [k].id; // ATTENTION !!!!
+         }
+         if (time < bestTime) {
+            if (res) par.pDest.father = isoList [k].id; // ATTENTION !!!!
+            bestTime = time;
+         }
+         if (distance < isoDesc [nIsoc].distance) {
+            isoDesc [nIsoc].distance = distance;
+         }
       }
    }
    *lastStepDuration = bestTime;

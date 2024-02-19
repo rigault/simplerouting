@@ -1,6 +1,9 @@
+/*! forbid zones */
+extern Polygon forbidZones [MAX_N_FORBID_ZONE];
+
 /*! Meteo service */
 extern struct DictElmt dicTab [];
-extern char *tWho []; // for saildocs
+extern struct DictProvider providerTab [];
 
 /*! grib data description */
 extern FlowP *gribData;                // wind
@@ -39,6 +42,8 @@ extern const char *WIND_URL [];
 extern const char *CURRENT_URL [];
 
 /*! functions defined in rutil.c */
+extern double lonCanonize (double lon);
+extern char   *formatThousandSep (char *buffer, int value);
 extern void   strip (char *str0);
 extern bool   gpsToStr (char *buffer);
 extern void   *gps_thread_function(void *data);
@@ -64,7 +69,7 @@ extern time_t dateToTime_t (long date);
 extern double zoneTimeDiff (Zone zone1, Zone zone0);
 extern time_t diffNowGribTime0 (Zone zone);
 extern bool   readPolar (char *fileName, PolMat *mat);
-extern char   *polToStr (char * str, PolMat mat);
+extern char   *polToStr (char*str, PolMat mat);
 extern void   *readGrib (void *data);
 extern void   *readCurrentGrib (void *data);
 extern double findTwsByIt (Pp p, int iT0);
@@ -82,8 +87,14 @@ extern int    readPoi (const char *fileName);
 extern bool   writePoi (const char *fileName);
 extern int    findPoiByName (const char *name, double *lat, double *lon);
 extern char   *poiToStr (char *str);
-extern bool   smtpGribRequestPython (int type, double lat1, double lon1, double lat2, double lon2);
+extern bool   smtpGribRequestPython (int type, double lat1, double lon1, double lat2, double lon2, char *command);
 extern bool   checkGribToStr (char *buffer, Zone zone, FlowP *gribData);
+extern char   *strchrReplace (char *source, char cIn, char cOut, char *dest);
 extern void   dollarReplace (char* str);
 extern char   *buildMeteoUrl (int type, int i, char *url);
 extern bool   curlGet (char *url, char *outputFile); 
+extern bool   isInPolygon (Point p, Polygon po);
+extern bool   isInForbidArea (Pp p);
+extern void   updateIsSeaWithForbiddenAreas ();
+
+

@@ -1,8 +1,8 @@
 #include <stdbool.h>
 #include <time.h>
 #include <pthread.h>
-#define N_WIND_URL            4
-#define N_CURRENT_URL         4
+#define N_WIND_URL            6
+#define N_CURRENT_URL         6
 #define ROOT_GRIB_URL         "https://static1.mclcm.net/mc2020/int/cartes/marine/grib/" // Meteoconsult
 #define WORKING_DIR           "/home/rr/routing/"
 #define PARAMETERS_FILE       WORKING_DIR"par/routing.par" // default parameter file
@@ -21,7 +21,8 @@
 #define PROG_NAME             "routing"  
 #define PROG_VERSION          "0.1"  
 #define PROG_AUTHOR           "René Rigault"
-#define DESCRIPTION           "Routing calculates best route from pOr (Origin) to pDest (Destination) taking into account grib files and boat polars"
+#define DESCRIPTION           "Routing calculates best route from pOr (Origin) to pDest (Destination) \
+   taking into account grib files and boat polars"
 #define MILLION               1000000
 #define NIL                   (-100000)
 #define MAX_N_ISOC            512               // max number of isochrones in isocArray
@@ -35,7 +36,7 @@
 #define MAX_N_SHORT_NAME      64
 #define MAX_N_GRIB_LAT        1024
 #define MAX_N_GRIB_LON        2048
-#define MAX_SIZE_SHORT_NAME   10
+#define MAX_SIZE_SHORT_NAME   16
 #define MAX_SIZE_NAME         64
 #define MAX_SIZE_FILE_NAME    128               // max size of pLine in text files
 #define MAX_SIZE_DIR_NAME     192               // max size of directory name
@@ -43,7 +44,9 @@
 #define MAX_N_POI             100               // max number of poi in poi file
 #define MAX_SIZE_POI_NAME     32                // max size of city name
 #define GPSD_TCP_PORT         "2947"            // TCP port for gps demon
-#define MAX_N_SMTP_TO         5                 // max nummber of grib mail providers
+#define MAX_SIZE_FORBID_ZONE  100               // max size per forbidden zone
+#define MAX_N_FORBID_ZONE     10                // max nummber of forbidden zones
+#define N_PROVIDERS           6                 // for DictProvider dictTab size
 
 enum {WIND, CURRENT};                           // for grib information either WIND or CURRENT
 enum {POLAR, WAVE_POLAR};                       // for polar information either POLAR or WAVE
@@ -51,12 +54,25 @@ enum {BASIC, DD, DM, DMS};                      // degre, degre decimal, degre m
 enum {TRIBORD, BABORD};                         // amure
 enum {NO_COLOR, B_W, COLOR};                    // wind representation 
 enum {NONE, ARROW, BARBULE};                    // wind representation 
-enum {SAILDOCS_GFS, SAILDOCS_ECMWF, SAILDOCS_ICON, SAILDOCS_CURR, MAILASAIL, GLOBALMARINET}; // grib mail service providers
 enum {NOTHING, POINT, SEGMENT, BEZIER};         // bezier or segment representation
 enum {UNVISIBLE, VISIBLE};                      // for POI point of interest
 
 /*! for meteo services */
+enum {SAILDOCS_GFS, SAILDOCS_ECMWF, SAILDOCS_ICON, SAILDOCS_CURR, MAILASAIL, GLOBALMARINET}; // grib mail service providers
 struct DictElmt {int id; char name [MAX_SIZE_NAME];};
+struct DictProvider {char address [MAX_SIZE_LINE]; char libelle [MAX_SIZE_LINE]; char service [MAX_SIZE_NAME];};
+
+/*! Structure to point for SHP and forbid zones */
+typedef struct {
+   double lat;
+   double lon;
+} Point;
+
+/*! Structure for polygon */
+typedef struct {
+    int n;
+    Point *points;
+} Polygon;
 
 /*! My date */
 typedef struct {
@@ -69,11 +85,6 @@ typedef struct {
 } MyDate;
 
 /*! For geo map shputil */
-typedef struct {
-   double lat;
-   double lon;
-} Point;
-
 typedef struct {
     Point *points;
     int   numPoints;
@@ -188,8 +199,7 @@ typedef struct {
    int nSectors;                             // number of sector for optimization by sector
    char workingDir [MAX_SIZE_FILE_NAME];      // working directory
    char gribFileName [MAX_SIZE_FILE_NAME];   // name of grib file
-   double gribLatStep;                       // grib lat step for mail request
-   double gribLonStep;                       // grib lon step for mail request
+   double gribResolution;                    // grib lat step for mail request
    int gribTimeStep;                         // grib time step for mail request
    int gribTimeMax;                          // grib time max fir mail request
    char currentGribFileName [MAX_SIZE_FILE_NAME];   // name of current grib file
@@ -211,9 +221,6 @@ typedef struct {
    int style;                                // style of isochrones
    int showColors;                           // colors for wind speed
    char smtpScript [MAX_SIZE_LINE];          // script used to send request for grib files
-   char smtpTo[MAX_N_SMTP_TO][MAX_SIZE_LINE];// addresses od SMTP grib providers
-   char smtpName[MAX_N_SMTP_TO][MAX_SIZE_LINE];// names  of SMTP grib providers
-   int nSmtp;                                // number of SMTP grib providers
    char imapToSeen [MAX_SIZE_LINE];          // script used to flag all messages to seen
    char imapScript [MAX_SIZE_LINE];          // script used to receive grib files
    int dispDms;                              // display degre, degre minutes, degre minutes sec
@@ -229,6 +236,9 @@ typedef struct {
    double efficiency;                        // efficiency of team 
    char editor [MAX_SIZE_NAME];              // name of text file editor
    char mailPw [MAX_SIZE_NAME];              // password for smtp and imap
+   double dispLonLatRatio;                   // for display ratio between deltaLon and deltaLat
+   int nForbidZone;                          // number of forbidden zones
+   char forbidZone [MAX_N_FORBID_ZONE][MAX_SIZE_LINE]; // array of forbid zones
 } Par;
 
 /*! Isochrone */
