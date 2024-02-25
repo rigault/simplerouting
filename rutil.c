@@ -372,7 +372,7 @@ bool smtpGribRequestPython (int type, double lat1, double lon1, double lat2, dou
    lon1 = lonCanonize (lon1);
    lon2 = lonCanonize (lon2);
    if ((lon1 > 0) && (lon2 < 0)) {// zone crossing antimeridien
-      printf ("Tentative to cross antemeridian !\n");
+      fprintf (stderr, "Tentative to cross antemeridian !\n");
       lon2 = 179.0;
    }
    
@@ -498,7 +498,7 @@ int readPoi (const char *fileName) {
    return i;
 }
 
-/*! write in a file poi data structure */
+/*! write in a file poi data structure except ports */
 bool writePoi (const char *fileName) {
    FILE *f = NULL;
    if ((f = fopen (fileName, "w")) == NULL) {
@@ -506,7 +506,8 @@ bool writePoi (const char *fileName) {
       return false;
    }
    for (int i = 0; i < nPoi; i++) {
-      fprintf (f, "%.2lf; %.2lf; %d; %d; %s\n", tPoi [i].lat, tPoi [i].lon, tPoi [i].type, tPoi [i].level, tPoi [i].name);
+      if (tPoi[i].type != PORT && tPoi [i].type != UNVISIBLE)
+         fprintf (f, "%.2lf; %.2lf; %d; %d; %s\n", tPoi [i].lat, tPoi [i].lon, tPoi [i].type, tPoi [i].level, tPoi [i].name);
    }
    fclose (f);
    return true;
@@ -1088,7 +1089,7 @@ void *readGrib () {
       fprintf (stderr, "readGrib Error, calloc gribData\n");
       return NULL;
    }
-   printf ("In readGrib: %lu allocated\n", sizeof(FlowP) * zone.nTimeStamp * zone.nbLat * zone.nbLon);
+   printf ("In readGrib    : %lu allocated\n", sizeof(FlowP) * zone.nTimeStamp * zone.nbLat * zone.nbLon);
    
    // Message handle. Required in all the ecCodes calls acting on a message.
    codes_handle* h = NULL;
@@ -1487,7 +1488,7 @@ bool readParam (const char *fileName) {
    char *pLine = &buffer [0];
    int poiIndex = -1;
    if ((f = fopen (fileName, "r")) == NULL) {
-      fprintf (stderr, "Routing Error in readParam cannot open: %s\n", fileName);
+      fprintf (stderr, "In readParam Error cannot open: %s\n", fileName);
       return false;
    }
    memset (&par, 0, sizeof (Par));
@@ -1626,15 +1627,12 @@ bool readParam (const char *fileName) {
          forbidZoneAdd (pLine, par.nForbidZone);
          par.nForbidZone += 1;
       }
-      else printf ("Cannot interpret: %s\n", pLine);
+      else fprintf(stderr, "Cannot interpret: %s\n", pLine);
    }
    if (par.mailPw [0] != '\0')
       dollarReplace (par.mailPw);
    if (par.maxIso > MAX_N_ISOC) par.maxIso = MAX_N_ISOC;
    if (par.constWindTws != 0) initConst (&zone);
-   printf ("Editor     : %s\n", par.editor); 
-   printf ("Spreadsheet: %s\n", par.spreadsheet); 
-   printf ("Working dir: %s\n", par.workingDir); 
    fclose (f);
    return true;
 }

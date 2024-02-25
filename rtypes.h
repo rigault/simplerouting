@@ -49,8 +49,9 @@
 #define N_PROVIDERS           6                 // for DictProvider dictTab size
 #define MAX_INDEX_ENTITY      32                // for shp. Index.
 
-enum {WIND, CURRENT};                           // for grib information either WIND or CURRENT
-enum {POLAR, WAVE_POLAR};                       // for polar information either POLAR or WAVE
+enum {WIND, CURRENT};                           // for grib information, either WIND or CURRENT
+enum {POLAR, WAVE_POLAR};                       // for polar information, either POLAR or WAVE
+enum {POI_SEL, PORT_SEL};                       // for editor or spreadsheet, call either POI or PORT
 enum {BASIC, DD, DM, DMS};                      // degre, degre decimal, degre minutes, degre minutes seconds
 enum {TRIBORD, BABORD};                         // amure
 enum {NO_COLOR, B_W, COLOR};                    // wind representation 
