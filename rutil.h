@@ -26,7 +26,6 @@ extern int readGribRet;                // to check if readGrib is terminated
 extern int readCurrentGribRet;         // to check if readCurrentGrib is terminated
 
 //for shp files
-extern int    nEntities;
 extern int    nTotEntities;
 extern Entity *entities;
 
@@ -42,9 +41,9 @@ extern const char *WIND_URL [];
 extern const char *CURRENT_URL [];
 
 /*! functions defined in rutil.c */
+extern bool   mostRecentFile (const char *directory, const char *pattern, char *name);
 extern double lonCanonize (double lon);
 extern char   *formatThousandSep (char *buffer, int value);
-extern void   strip (char *str0);
 extern bool   gpsToStr (char *buffer);
 extern void   *gps_thread_function(void *data);
 extern int    initGPS ();
@@ -53,19 +52,20 @@ extern bool   initSHP (char* nameFile);
 extern void   freeSHP ();
 extern char   *buildRootName (const char *fileName, char *rootName);
 extern bool   isNumber (const char *name);
+extern void   strClean (char *str);
 extern double getCoord (const char *str);
 extern long   getFileSize (const char *fileName);
 extern char   *latToStr (double lat, int type, char* str);
 extern char   *lonToStr (double lon, int type, char* str);
 extern double extTwd (double u, double v);
 extern double extTws (double u, double v);
-extern void   initConst ();
+extern void   initConst (Zone *zone);
 extern double loxCap (double lat1, double lon1, double lat2, double lon2);
 extern double loxDist (double lat1, double lon1, double lat2, double lon2);
 extern double orthoDist (double lat1, double lon1, double lat2, double lon2);
 extern double givry (double lat1, double lon1, double lat2, double lon2);
-extern bool   extIsInZone (Pp pt, Zone zone);
 extern time_t dateToTime_t (long date);
+extern bool   extIsInZone (Pp pt, Zone zone);
 extern double zoneTimeDiff (Zone zone1, Zone zone0);
 extern time_t diffNowGribTime0 (Zone zone);
 extern bool   readPolar (char *fileName, PolMat *mat);

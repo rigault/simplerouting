@@ -8,9 +8,9 @@
 #define PARAMETERS_FILE       WORKING_DIR"par/routing.par" // default parameter file
 #define TEMP_FILE_NAME        "routing.tmp"  
 #define PROG_LOGO             "routing.png"  
-#define MIN_SPEED_FOR_TARGET  5                 // knots. Difficult to explain. See engine.c, optimize()..
-#define MISSING               (-999999)      // for grib file missing values
-//#define MISSING               0                 // for grib file missing values
+#define MIN_SPEED_FOR_TARGET  5                // knots. Difficult to explain. See engine.c, optimize()..
+#define MISSING               (-999999)        // for grib file missing values
+//#define MISSING               0              // for grib file missing values
 #define MS_TO_KN              (3600.0/1852.0)
 #define KN_TO_MS              (1852.0/3600.0)
 #define RAD_TO_DEG            (180.0/M_PI)
@@ -41,12 +41,13 @@
 #define MAX_SIZE_FILE_NAME    128               // max size of pLine in text files
 #define MAX_SIZE_DIR_NAME     192               // max size of directory name
 #define MAX_N_SHP_FILES       4                 // max number of shape file
-#define MAX_N_POI             100               // max number of poi in poi file
+#define MAX_N_POI             15000             // max number of poi in poi file
 #define MAX_SIZE_POI_NAME     32                // max size of city name
 #define GPSD_TCP_PORT         "2947"            // TCP port for gps demon
 #define MAX_SIZE_FORBID_ZONE  100               // max size per forbidden zone
 #define MAX_N_FORBID_ZONE     10                // max nummber of forbidden zones
 #define N_PROVIDERS           6                 // for DictProvider dictTab size
+#define MAX_INDEX_ENTITY      32                // for shp. Index.
 
 enum {WIND, CURRENT};                           // for grib information either WIND or CURRENT
 enum {POLAR, WAVE_POLAR};                       // for polar information either POLAR or WAVE
@@ -55,7 +56,7 @@ enum {TRIBORD, BABORD};                         // amure
 enum {NO_COLOR, B_W, COLOR};                    // wind representation 
 enum {NONE, ARROW, BARBULE};                    // wind representation 
 enum {NOTHING, POINT, SEGMENT, BEZIER};         // bezier or segment representation
-enum {UNVISIBLE, VISIBLE};                      // for POI point of interest
+enum {UNVISIBLE, NORMAL, CAT, PORT, NEW};       // for POI point of interest
 
 /*! for meteo services */
 enum {SAILDOCS_GFS, SAILDOCS_ECMWF, SAILDOCS_ICON, SAILDOCS_CURR, MAILASAIL, GLOBALMARINET}; // grib mail service providers
@@ -86,9 +87,14 @@ typedef struct {
 
 /*! For geo map shputil */
 typedef struct {
-    Point *points;
-    int   numPoints;
-    int   nSHPType;
+   Point  *points;
+   double latMin;
+   double latMax;
+   double lonMin;
+   double lonMax;
+   int    numPoints;
+   int    nSHPType;
+   int    index [MAX_INDEX_ENTITY];
 } Entity;
 
 /*! Wind point */
@@ -151,7 +157,7 @@ typedef struct {
    double focalLon;  // focal point Lon
 } IsoDesc;
 
-/* pol Mat description*/
+/*! pol Mat description*/
 typedef struct {
    double t [MAX_N_POL_MAT_LINES][MAX_N_POL_MAT_COLS];
    int    nLine;
@@ -181,6 +187,7 @@ typedef struct {
 
 /*! Parameters */
 typedef struct {
+   int maxPoiVisible;                        // poi visible if <= maxPoiVisible
    int opt;                                  // 0 if no optimization, else number of opt algorithm
    double tStep;                             // hours
    int cogStep;                              // step of cog in degrees
@@ -197,7 +204,7 @@ typedef struct {
    int minPt;                                // min point per sector. See sectorOptimize
    double maxTheta;                          // angle for optimization by sector
    int nSectors;                             // number of sector for optimization by sector
-   char workingDir [MAX_SIZE_FILE_NAME];      // working directory
+   char workingDir [MAX_SIZE_FILE_NAME];     // working directory
    char gribFileName [MAX_SIZE_FILE_NAME];   // name of grib file
    double gribResolution;                    // grib lat step for mail request
    int gribTimeStep;                         // grib time step for mail request
@@ -212,6 +219,7 @@ typedef struct {
    char isSeaFileName [MAX_SIZE_FILE_NAME];  // name of file defining sea on earth
    char cliHelpFileName [MAX_SIZE_FILE_NAME];// text help for cli mode
    char poiFileName [MAX_SIZE_FILE_NAME];    // list of point of interest
+   char portFileName [MAX_SIZE_FILE_NAME];   // list of ports
    int nShpFiles;                            // number of Shp files
    double startTimeInHours;                  // time of beginning of routing after time0Grib
    Pp pOr;                                   // point of origine
@@ -235,6 +243,7 @@ typedef struct {
    double threshold;                         // threshold for motor use
    double efficiency;                        // efficiency of team 
    char editor [MAX_SIZE_NAME];              // name of text file editor
+   char spreadsheet [MAX_SIZE_NAME];         // name of text file editor
    char mailPw [MAX_SIZE_NAME];              // password for smtp and imap
    double dispLonLatRatio;                   // for display ratio between deltaLon and deltaLat
    int nForbidZone;                          // number of forbidden zones
@@ -248,8 +257,9 @@ typedef Pp Isoc [MAX_SIZE_ISOC];             // isochrone is an array of points
 typedef struct {
    double lat;
    double lon;
-   char   name [MAX_SIZE_POI_NAME];
    int    type;
+   int    level;
+   char   name [MAX_SIZE_POI_NAME];
 } Poi;
 
 /*! For GPS management */

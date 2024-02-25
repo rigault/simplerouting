@@ -42,7 +42,7 @@ double lastBestVmg = 0;          // best VMG found up to now
 /*! true if P is within the zone */
 static inline bool isInZone (Pp pt, Zone zone) {
    if (par.constWindTws > 0) return true;
-   else return (pt.lat >= zone.latMin) && (pt.lat <= zone.latMax) & (pt.lon >= zone.lonLeft) && (pt.lon <= zone.lonRight);
+   else return (pt.lat >= zone.latMin) && (pt.lat <= zone.latMax) && (pt.lon >= zone.lonLeft) && (pt.lon <= zone.lonRight);
 }
 
 /*! return fx : linear interpolation */
@@ -88,7 +88,7 @@ double extFindPolar (double twa, double w, PolMat mat) {
 /*! return max speed of boat at tws for all twa */
 static inline double maxSpeedInPolarAt (double tws, PolMat mat) {
    double max = 0.0;
-   double speed = 0.0;
+   double speed;
    for (int i = 1; i < mat.nLine; i++) {
       speed = findPolar (mat.t [i][0], tws, mat);
       if (speed > max) max = speed;
@@ -156,6 +156,7 @@ static inline int forwardSectorOptimize (Isoc isoList, int isoLen, Isoc optIsoc,
    double dLon = (isoDesc [n].bestVmg * jFactor - distTarget) * sin (DEG_TO_RAD * pOrTtoPDestCog) /
           cos (DEG_TO_RAD * (par.pOr.lat + par.pDest.lat)/2);                              // nautical miles in E W direction
 
+   memset (&ptTarget, 0, sizeof (Pp));
    ptTarget.lat = par.pOr.lat + dLat / 60; 
    ptTarget.lon = par.pOr.lon + dLon / 60;
    isoDesc [nIsoc].focalLat = ptTarget.lat;
@@ -214,6 +215,7 @@ static inline int NsectorOptimize (Isoc isoList, int isoLen, Isoc optIsoc, int n
    // nMaxOptIsoc = nSector (lastClosestDist);
    double thetaStep = 360.0 / nMaxOptIsoc;
    Pp ptTarget;
+   memset (&ptTarget, 0, sizeof (Pp));
    double dPtTarget = par.pOr.dd - lastClosestDist + distTarget;
    double dLat = dPtTarget * cos (DEG_TO_RAD * pOrTtoPDestCog);            // nautical miles in N S direction
    ptTarget.lat = lastClosest.lat + dLat / 60;
@@ -263,6 +265,7 @@ static inline int sectorOptimize (Isoc isoList, int isoLen, Isoc optIsoc, int nM
    // nMaxOptIsoc = nSector (lastClosestDist);
    double thetaStep = 360.0 / nMaxOptIsoc;
    Pp ptTarget;
+   memset (&ptTarget, 0, sizeof (Pp));
    double dPtTarget = par.pOr.dd - lastClosestDist + distTarget;
    double dLat = dPtTarget * cos (DEG_TO_RAD * pOrTtoPDestCog);            // nautical miles in N S direction
    ptTarget.lat = par.pOr.lat + dLat / 60;
@@ -306,7 +309,7 @@ static inline int sectorOptimize (Isoc isoList, int isoLen, Isoc optIsoc, int nM
 }
 
 /*! do nothing. Just copy. For testing. */
-static int Noptimize (Isoc isoList, int isoLen, Isoc optIsoc) {
+static int Noptimize (const Isoc isoList, int isoLen, Isoc optIsoc) {
    for (int i = 0; i < isoLen; i++) {
        optIsoc [i] = isoList [i];
    }
@@ -322,8 +325,8 @@ static inline int optimize (int algo, Isoc isoList, int isoLen, Isoc optIsoc) {
    switch (algo) {
       case 0: return Noptimize (isoList, isoLen, optIsoc);
       case 1: return forwardSectorOptimize (isoList, isoLen, optIsoc, par.nSectors, par.jFactor/100.0, distTarget);
-      case 2: return sectorOptimize (isoList, isoLen, optIsoc, par.nSectors, distTarget);
-      case 3: return NsectorOptimize (isoList, isoLen, optIsoc, par.nSectors, distTarget);
+      //case 2: return sectorOptimize (isoList, isoLen, optIsoc, par.nSectors, distTarget);
+      //case 3: return NsectorOptimize (isoList, isoLen, optIsoc, par.nSectors, distTarget);
       default:; 
    } 
    return 0;
@@ -343,7 +346,7 @@ static int buildNextIsochrone (Isoc isoList, int isoLen, Pp pDest, double t, dou
    double tws = par.constWindTws;
    bool motor = false;
    double efficiency = par.efficiency;
-   double waveCorrection = 0;
+   double waveCorrection = 1.0;
    *bestVmg = 0;
    
    for (int k = 0; k < isoLen; k++) {
@@ -398,6 +401,8 @@ static int buildNextIsochrone (Isoc isoList, int isoLen, Pp pDest, double t, dou
          newPt.lon = isoList [k].lon + dLon/60;
          newPt.id = pId;
          newPt.father = isoList [k].id;
+         newPt.vmg = 0;
+         newPt.sector = 0;
          if (isSea (newPt.lon, newPt.lat)) {
             newPt.dd = orthoDist (newPt.lat, newPt.lon, pDest.lat, pDest.lon);
             double alpha = directCap (par.pOr, newPt) - pOrTtoPDestCog;
@@ -437,13 +442,13 @@ bool isoDectToStr (char *str, size_t maxLength) {
    char strLat [MAX_SIZE_LINE];
    char strLon [MAX_SIZE_LINE];
    const int DIST_MAX = 100000;
-   double dist;
+   double distance;
    sprintf (str, "No  Size First Closest Distance VMG      FocalLat  FocalLon\n");
    for (int i = 0; i < nIsoc; i++) {
-      dist = isoDesc [i].distance;
-      if (dist > DIST_MAX) dist = -1;
+      distance = isoDesc [i].distance;
+      if (distance > DIST_MAX) distance = -1;
       snprintf (line, MAX_SIZE_LINE, "%03d %03d  %03d   %03d     %07.2lf  %07.2lf  %s  %s\n", i, isoDesc[i].size, isoDesc[i].first, 
-         isoDesc[i].closest, dist, isoDesc[i].bestVmg, 
+         isoDesc[i].closest, distance, isoDesc[i].bestVmg, 
          latToStr (isoDesc [i].focalLat, par.dispDms, strLat), lonToStr (isoDesc [i].focalLon, par.dispDms, strLon));
       if ((strlen (str) + strlen (line)) > maxLength) return false;
       strncat (str, line, MAX_SIZE_LINE); 
@@ -491,7 +496,7 @@ bool dumpAllIsoc (char *fileName) {
 /*! write in CSV file routes */
 bool dumpRoute (char *fileName, Pp dest) {
    FILE *f = NULL;
-   int i = nIsoc;
+   int i;
    int iFather;
    int dep = (dest.id == 0) ? nIsoc : nIsoc - 1;
    Pp pt = dest;
@@ -575,7 +580,7 @@ void routeToStr (Route route, char *str) {
    
    strncat (str, line, MAX_SIZE_LINE);
    for (int i = 1; i < route.n-1; i++) {
-      if ((fabs(route.t[i].lat) > 360.0) || (fabs (route.t[i].lat) > 90.0))
+      if ((fabs(route.t[i].lon) > 180.0) || (fabs (route.t[i].lat) > 90.0))
          snprintf (line, MAX_SIZE_LINE, " Isoc %2d: Erreur sur latitude ou longitude\n", i-1);   
       else
          snprintf (line, MAX_SIZE_LINE, " Isoc %2d: %-12s%-12s %6d %6d %7.2f° %7.2f    %7.2f\n", \
@@ -652,9 +657,9 @@ static inline bool goalP (Pp pFrom, Pp pDest, double t, double dt, double *timeT
    return ((sog * (dt - penalty)) > *distance);
 }
 
-/*! return closest point to pDest in Isoc */ 
-/*! true if goal can be reached directly in dt from isochrone */
-/* side effect : pDest.father can be modified ! */
+/*! return closest point to pDest in Isoc 
+  true if goal can be reached directly in dt from isochrone 
+  side effect : pDest.father can be modified ! */
 static inline bool goal (int nIsoc, Isoc isoList, int len, double t, double dt, double *lastStepDuration) {
    double bestTime = DBL_MAX;
    double time, distance;
@@ -684,7 +689,7 @@ static inline bool goal (int nIsoc, Isoc isoList, int len, double t, double dt, 
 
 /*! return closest point to pDest in Isoc */ 
 static inline Pp closest (Isoc isoc, int n, Pp pDest, int *index) {
-   Pp best;
+   Pp best = isoc [0];
    double d;
    int i;
    *index = -1;

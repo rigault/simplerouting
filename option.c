@@ -7,12 +7,12 @@
 #include "rutil.h"
 #include "engine.h"
 
+/*! Manage command line option reduced to one character */
 void optionManage (char option) {
 	FILE *f = NULL;
    char buffer [MAX_SIZE_BUFFER] = "";
    double u, v, g, w, twa, tws, time, lon, lat, lat2, lon2;
    char str [MAX_SIZE_LINE] = "";
-   int k = 0;
    Pp pt;
    switch (option) {
    case 'c': // cap
@@ -104,13 +104,11 @@ void optionManage (char option) {
       printf ("Time now minus Time0 Grib in hours %.2lf\n", diffNowGribTime0 (zone)/3600.0);
       break;
    case 'z': //
-      while (true) {
-         buffer [0] = '\0';
-         printf ("val: ");
-         scanf ("%d", &k);
-         printf ("%s\n", formatThousandSep (buffer, k));
-      }
-   break;
+      printf ("str: ");
+      scanf ("%10s", str);
+      strClean (str);
+      printf ("%s\n", str);
+      break;
    default:
       printf ("Option unknown: -%c\n", option);
       break;
