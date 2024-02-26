@@ -58,7 +58,7 @@ for msg_id in message_ids:
       filename = part.get_filename()
       if filename:
          #filepath = os.path.join('/home/rr/routing/grib', filename)
-         filepath = os.path.join( sys.argv [1], filename)
+         filepath = os.path.join (sys.argv [1], filename)
          print ("File:", os.path.abspath(filepath), " ") # space is required
          with open(filepath, 'wb') as f:
             f.write(part.get_payload(decode=True))
