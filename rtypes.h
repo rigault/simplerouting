@@ -179,10 +179,12 @@ typedef struct {
 /*! Route description  */
 typedef struct {
    Pr     t [MAX_N_ISOC + 1];
+   double calculationTime;
    int    n;
    long   kTime0;                           // relative index time of departure
    double duration;
    double totDist;
+   int    ret;                              // return value of routing
    bool   destinationReached;
 } Route;
 

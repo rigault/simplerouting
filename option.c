@@ -28,14 +28,25 @@ void optionManage (char option) {
       break;
    case 'g': // grib
       printf ("grib read: %s\n", par.gribFileName);
-      readGrib (NULL);
-      printf ("grib print...\n");
-      // printGrib (zone, gribData);
-      //gribToStr (buffer, zone);
+      readGribAll (par.gribFileName, &zone, WIND);
+      gribToStr (buffer, zone);
       printf ("%s\n", buffer);
-      //printf ("\n\n Following lines are suspects info...\n");
-      //checkGribToStr (buffer, zone, gribData);
-      //printf ("%s\n", buffer);
+      printf ("grib print...\n");
+      printGrib (zone, tGribData [WIND]);
+      printf ("\n\n Following lines are suspects info...\n");
+      checkGribToStr (buffer, zone, tGribData [WIND]);
+      printf ("%s\n", buffer);
+      break;
+   case 'G': // grib
+      printf ("grib current read: %s\n", par.currentGribFileName);
+      readGribAll (par.currentGribFileName, &currentZone, CURRENT);
+      gribToStr (buffer, currentZone);
+      printf ("%s\n", buffer);
+      printf ("grib print...\n");
+      printGrib (currentZone, tGribData [CURRENT]);
+      printf ("\n\n Following lines are suspects info...\n");
+      checkGribToStr (buffer, currentZone, tGribData [CURRENT]);
+      printf ("%s\n", buffer);
       break;
    case 'h': // help
 	   if ((f = fopen (par.cliHelpFileName, "r")) == NULL) {
@@ -96,7 +107,7 @@ void optionManage (char option) {
       scanf ("%lf", &pt.lat);
       printf ("Lon = ");
       scanf ("%lf", &pt.lon);
-      findFlow (pt, time, &u, &v, &g, &w, zone, gribData);
+      findFlow (pt, time, &u, &v, &g, &w, zone, tGribData [WIND]);
       printf ("u: %.2f m/s v: %.2f m/s g: %.2f m/s w: %2.f m\n", u, v, g, w);
       break;
    case 'y':

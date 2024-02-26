@@ -352,7 +352,7 @@ static int buildNextIsochrone (Isoc isoList, int isoLen, Pp pDest, double t, dou
    for (int k = 0; k < isoLen; k++) {
       uCurr = 0; vCurr = 0; w = 0;
       if (par.constWindTws == 0) {
-         findFlow (isoList [k], t, &u, &v, &gust, &w, zone, gribData);
+         findFlow (isoList [k], t, &u, &v, &gust, &w, zone, tGribData [WIND]);
          //printf ("u: %.2lf v:%.2lf\n", u, v);
          twd = fTwd (u, v);
          tws = fTws (u, v);
@@ -364,7 +364,7 @@ static int buildNextIsochrone (Isoc isoList, int isoLen, Pp pDest, double t, dou
          uCurr = -KN_TO_MS * par.constCurrentS * sin (DEG_TO_RAD * par.constCurrentD);
          vCurr = -KN_TO_MS * par.constCurrentS * cos (DEG_TO_RAD * par.constCurrentD);
       }
-      else findFlow (isoList [k], t - tDeltaCurrent, &uCurr, &vCurr, &gust, &bidon, currentZone, currentGribData);
+      else findFlow (isoList [k], t - tDeltaCurrent, &uCurr, &vCurr, &gust, &bidon, currentZone, tGribData [CURRENT]);
       vDirectCap = directCap (isoList [k], pDest);
       directCog = ((int)(vDirectCap / par.cogStep)) * par.cogStep;
       sog = par.motorSpeed;
@@ -622,7 +622,7 @@ static inline bool goalP (Pp pFrom, Pp pDest, double t, double dt, double *timeT
       w = 0;
    }
    else {
-      findFlow (pFrom, t, &u, &v, &gust, &w, zone, gribData);
+      findFlow (pFrom, t, &u, &v, &gust, &w, zone, tGribData [WIND]);
       twd = fTwd (u, v);
       tws = fTws (u, v);
    }
@@ -632,7 +632,7 @@ static inline bool goalP (Pp pFrom, Pp pDest, double t, double dt, double *timeT
       uCurr = -KN_TO_MS * par.constCurrentS * sin (DEG_TO_RAD * par.constCurrentD);
       vCurr = -KN_TO_MS * par.constCurrentS * cos (DEG_TO_RAD * par.constCurrentD);
    }
-   else findFlow (pFrom, t - tDeltaCurrent, &uCurr, &vCurr, &gust, &bidon, currentZone, currentGribData);
+   else findFlow (pFrom, t - tDeltaCurrent, &uCurr, &vCurr, &gust, &bidon, currentZone, tGribData [CURRENT]);
    twa = (cog > twd) ? cog - twd : cog - twd + 360;      // angle of the boat with the wind
    motor =  ((maxSpeedInPolarAt (tws, polMat) < par.threshold) && (par.motorSpeed > 0));
    // printf ("maxSpeedinPolar: %.2lf\n", maxSpeedInPolarAt (tws, polMat));
@@ -707,8 +707,8 @@ static inline Pp closest (Isoc isoc, int n, Pp pDest, int *index) {
 }
 
 /*! find optimal routing from p0 to pDest using grib file and polar
-    return number of steps to reach pDest, NIL if unreached, -1 if problem 
-    retuen also lastStepDuration if the duration of last step if destination reached (0 if unreached) */
+    return number of steps to reach pDest, NIL if unreached, -1 if problem, 0 reserved for not terminated
+    return also lastStepDuration if the duration of last step if destination reached (0 if unreached) */
 int routing (Pp pOr, Pp pDest, double t, double dt, double *lastStepDuration) {
    Isoc tempList;
    double distance;
@@ -719,7 +719,6 @@ int routing (Pp pOr, Pp pDest, double t, double dt, double *lastStepDuration) {
    double bestVmg;
    par.pOr.id = -1;
    par.pOr.father = -1;
-   par.pDest.id = 0;
    par.pDest.father = 0;
    pOr.dd = orthoDist (pOr.lat, pOr.lon, pDest.lat, pDest.lon);
    pOr.vmg = 0;
@@ -745,6 +744,7 @@ int routing (Pp pOr, Pp pDest, double t, double dt, double *lastStepDuration) {
       return 1;
    }
    isoDesc [0].size = buildNextIsochrone (tempList, 1, pDest, t, dt, isocArray [0], &bestVmg);
+   if (isoDesc [0].size < 0) return -1;
    lastBestVmg = bestVmg;
    isoDesc [0].bestVmg = bestVmg;
    isoDesc [0].first = 0; 
@@ -777,4 +777,37 @@ int routing (Pp pOr, Pp pDest, double t, double dt, double *lastStepDuration) {
    }
    *lastStepDuration = 0.0;
    return NIL;
+}
+
+/*! launch routing wih parameters */
+void *routingLaunch () {
+   struct timeval t0, t1;
+   long ut0, ut1;
+   double lastStepDuration;
+   lastClosest = par.pOr;
+   route.kTime0 = (int) (par.startTimeInHours / (zone.timeStamp [1] - zone.timeStamp [0]));
+
+   gettimeofday (&t0, NULL);
+   ut0 = t0.tv_sec * MILLION + t0.tv_usec;
+
+   //Launch routing !
+   printf ("Before routingLaunch: ret = %d\n", route.ret);
+   route.ret = routing (par.pOr, par.pDest, par.startTimeInHours, par.tStep, &lastStepDuration);
+   printf ("After routingLaunch:  ret = %d\n", route.ret);
+
+   gettimeofday (&t1, NULL);
+   ut1 = t1.tv_sec * MILLION + t1.tv_usec;
+   route.calculationTime = (double) ((ut1-ut0)/MILLION);
+   route.destinationReached = (route.ret > 0);
+   if (route.destinationReached) {
+      storeRoute (par.pDest, lastStepDuration);
+      if (strlen (par.dumpRFileName) > 0) dumpRoute (par.dumpRFileName, par.pDest);
+   }
+   else {
+      storeRoute (lastClosest, lastStepDuration);
+      if (strlen (par.dumpRFileName) > 0) dumpRoute (par.dumpRFileName, lastClosest);
+   }
+   if (strlen (par.dumpIFileName) > 0) dumpAllIsoc (par.dumpIFileName);
+   // printf ("lastStepDuration: %lf\n", lastStepDuration);
+   return NULL;
 }

@@ -6,9 +6,7 @@ extern struct DictElmt dicTab [];
 extern struct DictProvider providerTab [];
 
 /*! grib data description */
-extern FlowP *gribData;                // wind
-extern FlowP *currentGribData;         // current
-
+extern FlowP *tGribData [];            // wind, current
 extern Par par;
 
 /*! Zone description */
@@ -72,7 +70,8 @@ extern bool   readPolar (char *fileName, PolMat *mat);
 extern char   *polToStr (char*str, PolMat mat);
 extern void   *readGrib (void *data);
 extern void   *readCurrentGrib (void *data);
-extern double findTwsByIt (Pp p, int iT0);
+extern bool   readGribAll (const char *fileName, Zone *zone, int iFlow);
+extern double findTwsByIt (Pp p, int iT0, FlowP *gribData);
 extern bool   findFlow (Pp p, double t, double *rU, double *rV, double *rG, double *rW, Zone zone, FlowP *gribData);
 extern char   *newDate (long intDate, double myTime, char *res);
 extern char   *gribToStr (char *str, Zone zone);

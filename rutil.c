@@ -53,8 +53,7 @@ Zone currentZone = {false, 0, 0, 0, 0, 0, 90.0, 0.0, 359.99, 0.0, 0, 0, 0, 0, 0,
 char *tIsSea = NULL; 
 
 /*! grib data description */
-FlowP *gribData = NULL;           // wind
-FlowP *currentGribData = NULL;    // current
+FlowP *tGribData []= {NULL, NULL};//wind, current
 
 /*! poi sata strutures */ 
 Poi tPoi [MAX_N_POI];
@@ -79,7 +78,7 @@ pthread_t gps_thread;
 MyGpsData my_gps_data;
 pthread_mutex_t gps_data_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-const int delay [] = {6, 12}; // 6 hours before now for wind, 12 hours for current
+const int delay [] = {6, 12};    // 6 hours before now for wind, 12 hours for current
 const char *WIND_URL [N_WIND_URL * 2] = {
    "Atlantic North",   "%sMETEOCONSULT%02dZ_VENT_%02d%02d_Nord_Atlantique.grb",
    "Atlantic Center",  "%sMETEOCONSULT%02dZ_VENT_%02d%02d_Centre_Atlantique.grb",
@@ -185,7 +184,6 @@ void freeSHP () {
    }
    free(entities);
 }
-
 
 /*! select most recent file in "directory" that contains "pattern" in name 
   return true if found wirh name of selected file */
@@ -665,6 +663,7 @@ time_t diffNowGribTime0 (Zone zone) {
 void printGrib (Zone zone, FlowP *gribData) {
    double t;
    int iGrib;
+   printf ("printGrib\n");
    for (size_t  k = 0; k < zone.nTimeStamp; k++) {
       t = zone.timeStamp [k];
       printf ("Time: %.0lf\n", t);
@@ -821,12 +820,12 @@ static inline void find4PointsAround (double lat, double lon,  double *latMin,
    if (zone.lonLeft > *lonMax) *lonMax = zone.lonLeft;
 }
 
-/*! return indice of lat in gribData ot currentGribData */
+/*! return indice of lat in gribData wind or current  */
 static inline int indLat (double lat, Zone zone) {
    return (int) round ((lat - zone.latMin)/zone.latStep); // ATTENTION
 }
 
-/*! return indice of lon in gribData or currentGribData */
+/*! return indice of lon in gribData wind or current */
 static inline int indLon (double lon, Zone zone) {
    if (lon < zone.lonLeft) lon += 360;
    return (int) round ((lon - zone.lonLeft)/zone.lonStep);
@@ -839,7 +838,7 @@ bool extIsInZone (Pp pt, Zone zone) {
 }
 
 /*! interpolation to return tws at index time iT */
-double findTwsByIt (Pp p, int iT0) {
+double findTwsByIt (Pp p, int iT0, const FlowP *gribData) {
    double latMin, latMax, lonMin, lonMax;
    double a, b, u0, v0;
 
@@ -945,7 +944,7 @@ bool findFlow (Pp p, double t, double *rU, double *rV, double *rG, double *rW, Z
 }
 
 /*! Read lists zone.timeStamp, shortName, zone.dataDate, dataTime before full grib reading */
-static bool readGribLists (char *fileName, Zone *zone) {
+static bool readGribLists (const char *fileName, Zone *zone) {
    codes_index* index = NULL;
    int ret = 0;
     
@@ -985,7 +984,7 @@ static bool readGribLists (char *fileName, Zone *zone) {
 }
 
 /*! Read grib parameters in zone before full grib reading */
-static bool readGribParameters (char *fileName, Zone *zone) {
+static bool readGribParameters (const char *fileName, Zone *zone) {
    int err = 0;
    FILE* f = NULL;
    double lat1, lat2;
@@ -1058,8 +1057,10 @@ static inline int indexOf (int timeStep, double lat, double lon, Zone zone) {
    return  (iT * zone.nbLat * zone.nbLon) + (iLat * zone.nbLon) + iLon;
 }
 
-/*! read grib file using eccodes C API */
-void *readGrib () {
+
+/*! read grib file using eccodes C API 
+   return readGribRet */
+bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
    FILE* f = NULL;
    int err = 0, iGrib = 0;
    long bitmapPresent  = 0, timeStep;
@@ -1069,37 +1070,36 @@ void *readGrib () {
    const long GUST_GFS = 180;
    
    //memset (zone, 0,  sizeof (Zone));
-   zone.wellDefined = false;
-   if (! readGribLists (par.gribFileName, &zone)) {
-      readGribRet = 0;
-      return NULL;
+   zone->wellDefined = false;
+   if (! readGribLists (fileName, zone)) {
+      return false;
    }
-   if (! readGribParameters (par.gribFileName, &zone)) {
-      readGribRet = 0;
-      return NULL;
+   printf ("ATT0\n");
+   if (! readGribParameters (fileName, zone)) {
+      return false;
    }
-   if (zone.nShortName < 2) {
-      readGribRet = 0;
-      fprintf (stderr, "readGrib ShortName not presents in: %s\n", par.gribFileName);
-      return NULL;
+   printf ("ATT1\n");
+   if (zone->nShortName < 2) {
+      fprintf (stderr, "readGrib ShortName not presents in: %s\n", fileName);
+      return false;
    }
-   if (gribData != NULL) free (gribData); 
-   if ((gribData = calloc (sizeof(FlowP),  zone.nTimeStamp * zone.nbLat * zone.nbLon)) == NULL) {
-      readGribRet = 0;
-      fprintf (stderr, "readGrib Error, calloc gribData\n");
-      return NULL;
+   printf ("ATT2\n");
+   if (tGribData [iFlow] != NULL) free (tGribData [iFlow]); 
+   if ((tGribData [iFlow] = calloc (sizeof(FlowP),  zone->nTimeStamp * zone->nbLat * zone->nbLon)) == NULL) {
+      fprintf (stderr, "readGrib Error, calloc tGribData [iFlow]\n");
+      return false;
    }
-   printf ("In readGrib    : %lu allocated\n", sizeof(FlowP) * zone.nTimeStamp * zone.nbLat * zone.nbLon);
+   printf ("In readGrib    : %lu allocated\n", sizeof(FlowP) * zone->nTimeStamp * zone->nbLat * zone->nbLon);
    
    // Message handle. Required in all the ecCodes calls acting on a message.
    codes_handle* h = NULL;
    // Iterator on lat/lon/values.
    codes_iterator* iter = NULL;
-   if ((f = fopen (par.gribFileName, "rb")) == NULL) {
-       fprintf(stderr, "readGrib Error: unable to open file %s\n", par.gribFileName);
-       return NULL;
+   if ((f = fopen (fileName, "rb")) == NULL) {
+       fprintf(stderr, "readGrib Error: unable to open file %s\n", fileName);
+       return false;
    }
-   zone.nMessage = 0;
+   zone->nMessage = 0;
  
    // Loop on all the messages in a file
    while ((h = codes_handle_new_from_file(0, f, PRODUCT_GRIB, &err)) != NULL) {
@@ -1126,113 +1126,44 @@ void *readGrib () {
       while (codes_grib_iterator_next(iter, &lat, &lon, &val)) {
          // printf("%.2f %.2f %.2lf %ld %s\n", lat, lon, val, timeStep, shortName);
          lon = lonCanonize (lon);
-         iGrib = indexOf ((int) timeStep, lat, lon, zone);
+         iGrib = indexOf ((int) timeStep, lat, lon, *zone);
          if (iGrib == -1) return NULL;
-         gribData [iGrib].lat = lat; 
-         gribData [iGrib].lon = lon; 
-         if ((strcmp (shortName, "10u") == 0) || (strcmp (shortName, "u") == 0))
-            gribData [iGrib].u = val;
-         else if ((strcmp (shortName, "10v") == 0) || (strcmp (shortName, "v") == 0))
-            gribData [iGrib].v = val;
+         tGribData [iFlow] [iGrib].lat = lat; 
+         tGribData [iFlow] [iGrib].lon = lon; 
+         if ((strcmp (shortName, "10u") == 0) || (strcmp (shortName, "u") == 0) || (strcmp (shortName, "ucurr") == 0))
+            tGribData [iFlow] [iGrib].u = val;
+         else if ((strcmp (shortName, "10v") == 0) || (strcmp (shortName, "v") == 0) || (strcmp (shortName, "vcurr") == 0))
+            tGribData [iFlow] [iGrib].v = val;
          else if (strcmp (shortName, "gust") == 0)
-            gribData [iGrib].g = val;
+            tGribData [iFlow] [iGrib].g = val;
          else if (strcmp (shortName, "swh") == 0) // waves
-            gribData [iGrib].w = val;
+            tGribData [iFlow] [iGrib].w = val;
          else if (indicatorOfParameter == GUST_GFS) // find gust in GFS file specific parameter = 180
-            gribData [iGrib].g = val;
+            tGribData [iFlow] [iGrib].g = val;
             
          // printf ("%7.2lf; %7.2lf; %.0lf; %7.2lf\n", lat, lon, timeStep, val);
       }
       codes_grib_iterator_delete (iter);
       codes_handle_delete (h);
-      zone.nMessage += 1;
+      zone->nMessage += 1;
    }
  
    fclose (f);
-   readGribRet = 1;
-   zone.wellDefined = true;
+   zone->wellDefined = true;
+   return true;
+}
+
+/*! launch readGribAll wih Wind parameters */   
+void *readGrib () {
+   printf ("in ReadGrib\n");
+   readGribRet = readGribAll (par.gribFileName, &zone, WIND);
    return NULL;
 }
-   
-/*! read grib file current using command line from eccodes */
+
+/*! launch readGribAll wih Current parameters */   
 void *readCurrentGrib () {
-   FILE* f = NULL;
-   int err = 0, iGrib = 0;
-   long bitmapPresent  = 0, timeStep;
-   double lat, lon, val;
-   char shortName [MAX_SIZE_SHORT_NAME];
-   size_t lenName = MAX_SIZE_SHORT_NAME;
-   
-   currentZone.wellDefined = false;
-
-   if (! readGribLists (par.currentGribFileName, &currentZone)) {
-      readCurrentGribRet = 0;
-      return NULL;
-   }
-   if (! readGribParameters (par.currentGribFileName, &currentZone)) {
-      readCurrentGribRet = 0;
-      return NULL;
-   }
-   if (currentZone.nShortName < 2) {
-      fprintf (stderr, "readGrib current ShortName not presents in: %s\n", par.currentGribFileName);
-      readCurrentGribRet = 0;
-      return NULL;
-   }
-
-   if (currentGribData != NULL) free (currentGribData);
-   if ((currentGribData = calloc (sizeof(FlowP),  currentZone.nTimeStamp * currentZone.nbLat * currentZone.nbLon)) == NULL) {
-      fprintf (stderr, "readCurrentGrib Error, calloc currentGribData\n");
-      readCurrentGribRet = 0;
-      return NULL;
-   }
-   printf ("In readCurrentGrib: %lu allocated\n", sizeof(FlowP) * currentZone.nTimeStamp * currentZone.nbLat * currentZone.nbLon);
-
-   codes_handle* h = NULL;
-   codes_iterator* iter = NULL;
-   if ((f = fopen (par.currentGribFileName, "rb")) == NULL) {
-      fprintf(stderr, "readCurrentGrib Error: unable to open file %s\n", par.currentGribFileName);
-      readCurrentGribRet = 0;
-      return NULL;
-   }
-   currentZone.nMessage = 0;
-   while ((h = codes_handle_new_from_file(0, f, PRODUCT_GRIB, &err)) != NULL) {
-      if (err != CODES_SUCCESS) CODES_CHECK(err, 0);
-
-      CODES_CHECK(codes_get_long(h, "bitmapPresent", &bitmapPresent), 0);
-      if (bitmapPresent) {
-          CODES_CHECK(codes_set_double(h, "missingValue", MISSING), 0);
-      }
-
-      lenName = MAX_SIZE_SHORT_NAME;
-      CODES_CHECK(codes_get_string(h, "shortName", shortName, &lenName), 0);
-      CODES_CHECK(codes_get_long(h, "step", &timeStep), 0);
-      // printf ("shortname :%s, timeStep %ld\n", shortName, timeStep);
- 
-      iter = codes_grib_iterator_new(h, 0, &err);
-      if (err != CODES_SUCCESS) CODES_CHECK(err, 0);
- 
-      while (codes_grib_iterator_next(iter, &lat, &lon, &val)) {
-          //printf("%.2f %.2f %.2lf %ld %s\n", lat, lon, val, timeStep, shortName);
-         lon = lonCanonize (lon);
-         iGrib = indexOf ((int) timeStep, lat, lon, currentZone);
-         if (iGrib == -1) return NULL;
-         currentGribData [iGrib].lat = lat; 
-         currentGribData [iGrib].lon = lon;  
-      
-         if (strcmp (shortName, "ucurr") == 0)
-            currentGribData [iGrib].u = val;
-         else if (strcmp (shortName, "vcurr") == 0)
-            currentGribData [iGrib].v = val;
-         // printf ("%7.2lf; %7.2lf; %.0lf; %7.2lf\n", lat, lon, timeStep, val);
-      }
-      codes_grib_iterator_delete(iter);
-      codes_handle_delete(h);
-      currentZone.nMessage += 1;
-   }
- 
-   fclose (f);
-   readCurrentGribRet = 1;
-   currentZone.wellDefined = true;
+   printf ("in CurrentGrib\n");
+   readCurrentGribRet = readGribAll (par.currentGribFileName, &currentZone, CURRENT);
    return NULL;
 }
    

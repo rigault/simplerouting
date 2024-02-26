@@ -46,6 +46,7 @@
 #define DISP_NB_LAT_STEP      10
 #define DISP_NB_LON_STEP      10
 #define ANIMATION_TEMPO       100
+#define ROUTING_TIME_OUT      1000
 #define GRIB_TIME_OUT         2000
 #define READ_GRIB_TIME_OUT    200
 #define MIN_MOVE_FOR_SELECT   50 // minimum move to launch smtp grib request after selection
@@ -86,6 +87,7 @@ int selectedPol = 0;             // select polar to draw. 0 = all
 double selectedTws = 0;          // selected TWS for polar draw
 GtkWidget *drawing_area;
 guint gribMailTimeout;
+guint routingTimeout;
 guint gribReadTimeout;
 guint currentGribReadTimeout;
 int kTime = 0;
@@ -164,7 +166,7 @@ static void meteogram ();
 static void spinner (const char *title, const char* str) {
    spinner_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
    gtk_window_set_title(GTK_WINDOW(spinner_window), title);
-   gtk_window_set_default_size(GTK_WINDOW(spinner_window), 200, 100);
+   gtk_window_set_default_size(GTK_WINDOW(spinner_window), 300, 100);
 
    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
    GtkWidget *label = gtk_label_new (str);
@@ -527,7 +529,7 @@ static void paintWind (cairo_t *cr, int width, int height) {
          if (isInDispZone (pt)) {
             //findFlow (pt, t, &u, &v, &gust, &w, zone, gribData);
             //tws = extTws (u, v);
-            tws = findTwsByIt (pt, (MIN (kTime, zone.nTimeStamp -1)));
+            tws = findTwsByIt (pt, (MIN (kTime, zone.nTimeStamp -1)), tGribData  [WIND]);
             mapColors (tws, &r, &g, &b);
             cairo_set_source_rgba (cr, r/255.0, g/255.0, b/255.0, 0.5);
             cairo_rectangle (cr, x, y, 1, 1);
@@ -1226,7 +1228,7 @@ static void statusBarUpdate () {
    Pp pt;
    memset (&pt, 0, sizeof (Pp));
    double u = 0, v = 0, g = 0, w = 0, uCurr = 0, vCurr = 0, bidon;
-   char seaEarth [10];
+   char seaEarth [MAX_SIZE_NAME];
    char strLat [MAX_SIZE_NAME] = "", strLon [MAX_SIZE_NAME] = "";
    double tDeltaCurrent = zoneTimeDiff (currentZone, zone);
    pt.lat = yToLat (whereIsMouse.y);
@@ -1236,19 +1238,18 @@ static void statusBarUpdate () {
 	   u = - KN_TO_MS * par.constWindTws * sin (DEG_TO_RAD * par.constWindTwd);
 	   v = - KN_TO_MS * par.constWindTws * cos (DEG_TO_RAD * par.constWindTwd);
    }
-	else findFlow (pt, zone.timeStamp [kTime], &u, &v, &g, &w, zone, gribData);
-	//else findFlow (pt, theTime, &u, &v, &w, zone, gribData);
-   strcpy (seaEarth, (extIsSea (pt.lon, pt.lat)) ? "OK" : "KO");
+	else findFlow (pt, zone.timeStamp [kTime], &u, &v, &g, &w, zone, tGribData [WIND]);
+   strcpy (seaEarth, (extIsSea (pt.lon, pt.lat)) ? "Authorized" : "Forbidden");
    if (par.constCurrentS != 0) {
       uCurr = -KN_TO_MS * par.constCurrentS * sin (DEG_TO_RAD * par.constCurrentD);
       vCurr = -KN_TO_MS * par.constCurrentS * cos (DEG_TO_RAD * par.constCurrentD);
    }
    else {
-	   findFlow (pt, currentZone.timeStamp [kTime] - tDeltaCurrent, &uCurr, &vCurr, &bidon, &bidon, currentZone, currentGribData);
+	   findFlow (pt, currentZone.timeStamp [kTime] - tDeltaCurrent, &uCurr, &vCurr, &bidon, &bidon, currentZone, tGribData [CURRENT]);
    }
    
    sprintf (sStatus, "%s         %d/%ld      %s %s, %s\
-      Wind: %03d° %05.2lf Knots  Gust: %05.2lf Knots  Waves: %05.2lf  Current: %03d° %05.2lf Knots         %s      Zoom: %.2lf       %s",
+      Wind: %03d° %05.2lf Knots  Gust: %05.2lf Knots  Waves: %05.2lf  Current: %03d° %05.2lf Knots         %s      Zoom: %.2lf       %s      %s",
       newDate (zone.dataDate [0], (zone.dataTime [0]/100)+ zone.timeStamp [kTime], pDate),\
       kTime + 1, zone.nTimeStamp, " ",\
       latToStr (pt.lat, par.dispDms, strLat),\
@@ -1257,7 +1258,8 @@ static void statusBarUpdate () {
       (int) (extTwd (uCurr, vCurr) + 360) % 360, extTws (uCurr, vCurr), 
       seaEarth,
       dispZone.zoom,
-      (gribRequestRunning || readGribRet == -1) ? "WAITING GRIB" : "");
+      (gribRequestRunning || readGribRet == -1) ? "WAITING GRIB" : "",
+      (route.ret == 0) ? g_strdup_printf ("Build Isochrone: %2d", nIsoc) :"");
   
    gtk_statusbar_push(GTK_STATUSBAR(statusbar), context_id, sStatus);
 
@@ -1324,7 +1326,7 @@ static gboolean drawGribCallback (GtkWidget *widget, cairo_t *cr, gpointer data)
 	            v = - KN_TO_MS * par.constWindTws * cos (DEG_TO_RAD * par.constWindTwd);
             }
 	         else {
-	            findFlow (pt, theTime, &u, &v, &gust, &w, zone, gribData);
+	            findFlow (pt, theTime, &u, &v, &gust, &w, zone, tGribData [WIND]);
             }
             twd = extTwd (u, v);
             tws = extTws (u, v);
@@ -1343,7 +1345,7 @@ static gboolean drawGribCallback (GtkWidget *widget, cairo_t *cr, gpointer data)
                   vCurr = -KN_TO_MS * par.constCurrentS * cos (DEG_TO_RAD * par.constCurrentD);
                }
                else {
-	               findFlow (pt, theTime - tDeltaCurrent, &uCurr, &vCurr, &bidon, &w, currentZone, currentGribData);
+	               findFlow (pt, theTime - tDeltaCurrent, &uCurr, &vCurr, &bidon, &w, currentZone, tGribData [CURRENT]);
                }
                if ((uCurr != 0) || (vCurr !=0)) {
                   tws = extTws (uCurr, vCurr);
@@ -1361,11 +1363,11 @@ static gboolean drawGribCallback (GtkWidget *widget, cairo_t *cr, gpointer data)
    circle (cr, par.pOr.lon, par.pOr.lat, 0.0, 1.0, 0.0);
    if (! isnan (my_gps_data.lon) && ! isnan (my_gps_data.lat))
       circle (cr, my_gps_data.lon, my_gps_data.lat , 1.0, 0.0, 0.0);
+   drawAllIsochrones (cr, par.style);
    if ((route.n != 0) && (isfinite(route.totDist)) && (route.totDist > 0)) { 
-      drawAllIsochrones (cr, par.style);
       drawRoute (cr);
       focusOnPointInRoute (cr);
-      Pp selectedPt = isocArray [nIsoc - 1][selectedPointInLastIsochrone]; // delected point in last isochrone
+      Pp selectedPt = isocArray [nIsoc - 1][selectedPointInLastIsochrone]; // selected point in last isochrone
       circle (cr, selectedPt.lon, selectedPt.lat, 1.0, 0.0, 1.1);
    }
    if (destPressed) circle (cr, par.pDest.lon, par.pDest.lat, 0.0, 0.0, 1.0);
@@ -1951,12 +1953,33 @@ static void niceReport (double computeTime) {
    gtk_widget_destroy (dialog);
 }
 
+/*! check if routing is terminated */
+static gboolean routingCheck (gpointer data) {
+   // printf ("readGribCheck: %d\n", readGribRet);
+   if (route.ret == 0) { // not terminated
+      statusBarUpdate ();
+      gtk_widget_queue_draw(drawing_area); // affiche le tout
+      return TRUE;
+   }
+   g_source_remove (routingTimeout); // timer stopped
+   gtk_widget_destroy (spinner_window);
+   if (route.ret == -1) {
+      infoMessage ("Too many points in isochrone", GTK_MESSAGE_ERROR);
+      return TRUE;
+   }
+   if (! isfinite (route.totDist) || (route.totDist <= 1)) {
+      infoMessage ("No route calculated. Check if wind !", GTK_MESSAGE_WARNING);
+   }
+   else {
+      niceReport (route.calculationTime);
+   }
+   selectedPointInLastIsochrone = (nIsoc <= 1) ? 0 : isoDesc [nIsoc -1].closest; 
+   gtk_widget_queue_draw (drawing_area);
+   return TRUE;
+}
+
 /*! launch routing */
 static void on_run_button_clicked (GtkWidget *widget, gpointer data) {
-   int ret;
-   struct timeval t0, t1;
-   long ut0, ut1;
-   double lastStepDuration = 0.0;
    if (! extIsInZone (par.pOr, zone)) {
      infoMessage ("Origin point not in wind zone", GTK_MESSAGE_WARNING);
      return;
@@ -1972,35 +1995,10 @@ static void on_run_button_clicked (GtkWidget *widget, gpointer data) {
       infoMessage ("start time should be within grib window time !", GTK_MESSAGE_WARNING);
       return;
    }
-   gettimeofday (&t0, NULL);
-   ut0 = t0.tv_sec * MILLION + t0.tv_usec;
-   lastClosest = par.pOr;
-   route.kTime0 = (int) (par.startTimeInHours / (zone.timeStamp [1] - zone.timeStamp [0]));
-   ret = routing (par.pOr, par.pDest, par.startTimeInHours, par.tStep, &lastStepDuration);
-   if (ret == -1) {
-      infoMessage ("Too many points in isochrone", GTK_MESSAGE_ERROR);
-      return;
-   }
-   // printf ("lastStepDuration: %lf\n", lastStepDuration);
-   gettimeofday (&t1, NULL);
-   ut1 = t1.tv_sec * MILLION + t1.tv_usec;
-   route.destinationReached = (ret != NIL);
-   if (ret != NIL) {
-      storeRoute (par.pDest, lastStepDuration);
-      if (strlen (par.dumpRFileName) > 0) dumpRoute (par.dumpRFileName, par.pDest);
-   }
-   else {
-      storeRoute (lastClosest, lastStepDuration);
-      if (strlen (par.dumpRFileName) > 0) dumpRoute (par.dumpRFileName, lastClosest);
-   }
-   if (strlen (par.dumpIFileName) > 0) dumpAllIsoc (par.dumpIFileName);
-   if (! isfinite (route.totDist) || (route.totDist <= 1)) {
-      infoMessage ("No route calculated. Check if wind !", GTK_MESSAGE_WARNING);
-   }
-   else {
-      niceReport (((double) ut1-ut0)/MILLION);
-   }
-   selectedPointInLastIsochrone = (nIsoc <= 1) ? 0 : isoDesc [nIsoc -1].closest; 
+   route.ret = 0;             // mean routing not terminated
+   g_thread_new("routingLaunch", routingLaunch, NULL); // launch routing
+   routingTimeout = g_timeout_add (ROUTING_TIME_OUT, routingCheck, NULL);
+   spinner ("Isochrone building", " ");
 }
 
 /*! Callback for stop button */
@@ -2394,7 +2392,6 @@ static bool urlChange (char *url) {
    return (response == GTK_RESPONSE_ACCEPT);
 }
 
-/*! check if readGrib is terminated */
 static gboolean readGribCheck (gpointer data) {
    statusBarUpdate ();
    // printf ("readGribCheck: %d\n", readGribRet);
@@ -2454,7 +2451,7 @@ static void loadGribFile (int type, char *fileName) {
 static void urlDownloadGrib (int type, int indice) {
    char url [MAX_SIZE_BUFFER];
    char outputFileName [MAX_SIZE_LINE];
-   sprintf (outputFileName, "%sgrib", par.workingDir);
+   sprintf (outputFileName, (type == WIND) ? "%sgrib": "%scurrentgrib", par.workingDir);
    buildMeteoUrl (type, indice, url);
    if (urlChange (url)) {
       printf ("new url %s\n", url);
@@ -2470,7 +2467,7 @@ static void openGrib (GtkWidget *widget, gpointer data) {
    int *comportement = (int *) data;
    char directory [MAX_SIZE_DIR_NAME];
    //strcat (directory, "grib");
-   sprintf (directory, "%sgrib", par.workingDir);
+   sprintf (directory, (*comportement == WIND) ? "%sgrib": "%scurrentgrib", par.workingDir);
 
    GtkWidget *dialog = gtk_file_chooser_dialog_new ("Open Grib", NULL, GTK_FILE_CHOOSER_ACTION_OPEN, \
     "_Cancel", GTK_RESPONSE_CANCEL, "_Open", GTK_RESPONSE_ACCEPT, NULL);
@@ -2729,6 +2726,8 @@ static void gribInfoDisplay (const char *fileName, Zone zone) {
          if ((k > 0) && ((k % 20) == 0)) 
             strcat (buffer, "\n");
          sprintf (str, "%ld ", zone.timeStamp [k]);
+         if (strlen (buffer) > MAX_SIZE_BUFFER - 10)
+            break;
          strcat (buffer, str);
       }
       strcat (buffer, "]\n");
@@ -2780,7 +2779,7 @@ static void gribInfo (GtkWidget *widget, gpointer data) {
          if ((!zone.wellDefined ) || (zone.nShortName < 2))
             infoMessage ("No wind data grib check possible", GTK_MESSAGE_WARNING);
             else {
-               if (checkGribToStr (buffer, zone, gribData))
+               if (checkGribToStr (buffer, zone, tGribData [WIND]))
                   displayText (buffer, "Grib Wind Check");
             }
       }
@@ -2793,7 +2792,7 @@ static void gribInfo (GtkWidget *widget, gpointer data) {
          if ((!currentZone.wellDefined) || (currentZone.nShortName < 2)) 
             infoMessage ("No current data grib check possible", GTK_MESSAGE_WARNING);
          else {
-            if (checkGribToStr (buffer, currentZone, currentGribData))
+            if (checkGribToStr (buffer, currentZone, tGribData [CURRENT]))
                displayText (buffer, "Grib Current Check");
          }
       }
@@ -2811,7 +2810,8 @@ static gboolean mailGribRead (gpointer data) {
    char buffer[MAX_SIZE_BUFFER] = "\n";
    int n = 0;
    char *fileName, *end;
-   sprintf (command, "%s %sgrib %s", par.imapScript, par.workingDir, par.mailPw); 
+   sprintf (command, "%s %s%s %s", par.imapScript, par.workingDir, (provider == SAILDOCS_CURR) ? "currentgrib" : "grib", par.mailPw); 
+   // printf ("mailGribRead: %s\n", command);
    fp = popen (command, "r");
    if (fp == NULL) {
       fprintf (stderr, "mailGribRead Error opening: %s\n", command);
@@ -3886,8 +3886,8 @@ static void on_meteogram_event (GtkWidget *widget, cairo_t *cr, gpointer user_da
 
    // find max Tws max gust max waves max current and draw twa arrows
    for (int i = 0; i < tMax; i += 1) {
-      findFlow (pt, i, &u, &v, &g, &w, zone, gribData);
-	   findFlow (pt, i - tDeltaCurrent, &uCurr, &vCurr, &bidon, &bidon, currentZone, currentGribData);
+      findFlow (pt, i, &u, &v, &g, &w, zone, tGribData [WIND]);
+	   findFlow (pt, i - tDeltaCurrent, &uCurr, &vCurr, &bidon, &bidon, currentZone, tGribData [CURRENT]);
       tws = extTws (u, v);
       twd = extTwd (u, v);
       currTws = extTws (uCurr, vCurr);
@@ -3952,7 +3952,7 @@ static void on_meteogram_event (GtkWidget *widget, cairo_t *cr, gpointer user_da
    CAIRO_SET_SOURCE_RGB_BLUE(cr);
    // draw tws 
    for (int i = 0; i < tMax; i += 1) {
-      findFlow (pt, i, &u, &v, &g, &w, zone, gribData);
+      findFlow (pt, i, &u, &v, &g, &w, zone, tGribData [WIND]);
       tws = extTws (u,v);
       x = X_LEFT + XK * i;
       y = Y_BOTTOM - YK * tws;
@@ -3965,7 +3965,7 @@ static void on_meteogram_event (GtkWidget *widget, cairo_t *cr, gpointer user_da
    if (maxG > 0) { 
       CAIRO_SET_SOURCE_RGB_RED(cr);
       for (int i = 0; i < tMax; i += 1) {
-         findFlow (pt, i, &u, &v, &g, &w, zone, gribData);
+         findFlow (pt, i, &u, &v, &g, &w, zone, tGribData [WIND]);
          x = X_LEFT + XK * i;
          y = Y_BOTTOM - YK * g * MS_TO_KN;
          if (i == 0) cairo_move_to (cr, x, y);
@@ -3978,7 +3978,7 @@ static void on_meteogram_event (GtkWidget *widget, cairo_t *cr, gpointer user_da
    if (maxWave > 0) { 
       CAIRO_SET_SOURCE_RGB_GREEN(cr);
       for (int i = 0; i < tMax; i += 1) {
-         findFlow (pt, i, &u, &v, &g, &w, zone, gribData);
+         findFlow (pt, i, &u, &v, &g, &w, zone, tGribData [WIND]);
          x = X_LEFT + XK * i;
          y = Y_BOTTOM - YK * w;
          if (i == 0) cairo_move_to (cr, x, y);
@@ -3990,7 +3990,7 @@ static void on_meteogram_event (GtkWidget *widget, cairo_t *cr, gpointer user_da
    if (maxCurrTws > 0) {
       CAIRO_SET_SOURCE_RGB_ORANGE(cr);
       for (int i = 0; i < tMax; i += 1) {
-	      findFlow (pt, i - tDeltaCurrent, &uCurr, &vCurr, &bidon, &bidon, currentZone, currentGribData);
+	      findFlow (pt, i - tDeltaCurrent, &uCurr, &vCurr, &bidon, &bidon, currentZone, tGribData [CURRENT]);
          currTws = extTws (uCurr, vCurr);
          x = X_LEFT + XK * i;
          y = Y_BOTTOM - YK * currTws;

@@ -10,6 +10,7 @@ extern double  extFindPolar (double twa, double w, PolMat mat);
 extern void    storeRoute (Pp pDest, double lastStepDuration);
 extern void    allIsocToStr (char *str);
 extern int     routing (Pp pOr, Pp pDest, double t, double dt, double *lastStepDuration);
+extern void    *routingLaunch ();
 extern bool    dumpAllIsoc (char *fileName);
 extern bool    isoDectToStr (char *str, int maxLength);
 extern bool    dumpRoute (char *fileName, Pp dest);
