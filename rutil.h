@@ -5,21 +5,24 @@ extern Polygon forbidZones [MAX_N_FORBID_ZONE];
 extern struct DictElmt dicTab [];
 extern struct DictProvider providerTab [];
 
-/*! grib data description */
-extern FlowP *tGribData [];            // wind, current
+/*! polar description */
+extern PolMat polMat;
+extern PolMat wavePolMat;
+
 extern Par par;
 
 /*! Zone description */
 extern Zone zone;                      // wind
 extern Zone currentZone;               // current
 
-/*! polar description */
-extern PolMat polMat;
-extern PolMat wavePolMat;
-
 extern char *tIsSea;                   // array of byte. 0 if earth, 1 if sea
+
+/*! grib data description */
+extern FlowP *tGribData [];            // wind, current
+
 extern Poi tPoi [MAX_N_POI];
 extern int nPoi;
+
 extern int readGribRet;                // to check if readGrib is terminated
 extern int readCurrentGribRet;         // to check if readCurrentGrib is terminated
 
@@ -44,7 +47,7 @@ extern double lonCanonize (double lon);
 extern char   *formatThousandSep (char *buffer, int value);
 extern bool   gpsToStr (char *buffer);
 extern void   *gps_thread_function(void *data);
-extern int    initGPS ();
+extern bool   initGPS ();
 extern void   closeGPS ();
 extern bool   initSHP (char* nameFile);
 extern void   freeSHP ();
@@ -55,11 +58,11 @@ extern double getCoord (const char *str);
 extern long   getFileSize (const char *fileName);
 extern char   *latToStr (double lat, int type, char* str);
 extern char   *lonToStr (double lon, int type, char* str);
-extern double extTwd (double u, double v);
-extern double extTws (double u, double v);
+extern double fTwd (double u, double v);
+extern double fTws (double u, double v);
 extern void   initConst (Zone *zone);
-extern double loxCap (double lat1, double lon1, double lat2, double lon2);
-extern double loxDist (double lat1, double lon1, double lat2, double lon2);
+extern double directCap (double lat1, double lon1, double lat2, double lon2);
+extern double loxoDist (double lat1, double lon1, double lat2, double lon2);
 extern double orthoDist (double lat1, double lon1, double lat2, double lon2);
 extern double givry (double lat1, double lon1, double lat2, double lon2);
 extern time_t dateToTime_t (long date);
@@ -69,7 +72,6 @@ extern time_t diffNowGribTime0 (Zone zone);
 extern bool   readPolar (char *fileName, PolMat *mat);
 extern char   *polToStr (char*str, PolMat mat);
 extern void   *readGrib (void *data);
-extern void   *readCurrentGrib (void *data);
 extern bool   readGribAll (const char *fileName, Zone *zone, int iFlow);
 extern double findTwsByIt (Pp p, int iT0, FlowP *gribData);
 extern bool   findFlow (Pp p, double t, double *rU, double *rV, double *rG, double *rW, Zone zone, FlowP *gribData);
@@ -95,5 +97,6 @@ extern bool   curlGet (char *url, char *outputFile);
 extern bool   isInPolygon (Point p, Polygon po);
 extern bool   isInForbidArea (Pp p);
 extern void   updateIsSeaWithForbiddenAreas ();
+extern bool   isServerAccessible (const char *url);
 
 

@@ -20,6 +20,9 @@
 #include "rtypes.h"
 #include "shapefil.h"
 /*! forbid zones is a set of polygons */
+extern Route route; // defined in engine.c
+static const char *CSV_SEP = ";,\t";
+
 Polygon forbidZones [MAX_N_FORBID_ZONE];
 
 /*! dictionnary of meteo services */
@@ -34,8 +37,6 @@ struct DictProvider providerTab [N_PROVIDERS] = {
    {"gmngrib@globalmarinenet.net", "GlobalMarinet GFS",      ""}
 };
 
-extern Route route; // defined in engine.c
-const char *CSV_SEP = ";,\t";
 /*! polar matrix description */
 PolMat polMat;
 
@@ -97,10 +98,10 @@ const char *CURRENT_URL [N_CURRENT_URL * 2] = {
 };
 
 
-void mercatorToLatLon(double y_mercator, double x_mercator, double *latitude, double *longitude) {
+/*static void mercatorToLatLon(double y_mercator, double x_mercator, double *latitude, double *longitude) {
     *longitude = x_mercator / 20037508.34 * 180.0;
     *latitude = atan(sinh(y_mercator / 20037508.34 * M_PI)) * 180.0 / M_PI;
-}
+}*/
 
 /*! build entities based on .shp file */
 bool initSHP (char* nameFile) {
@@ -127,6 +128,7 @@ bool initSHP (char* nameFile) {
    else {
       if ((entities = (Entity *) realloc (entities,  sizeof (Entity) * (nEntities + nTotEntities))) == NULL) {
          fprintf (stderr, "In initSHP, realloc failed\n");
+         free (entities);
          return false;
       }
    }
@@ -429,13 +431,13 @@ bool smtpGribRequestPython (int type, double lat1, double lon1, double lat2, dou
 }
    
 /*! true wind direction */
-double extTwd (double u, double v) {
+double fTwd (double u, double v) {
 	double val = 180 + RAD_TO_DEG * atan2 (u, v);
    return (val > 180) ? val - 360 : val;
 }
 
 /*! true wind speed. cf Pythagore */
-double extTws (double u, double v) {
+double fTws (double u, double v) {
     return MS_TO_KN * sqrt ((u * u) + (v * v));
 }
 
@@ -557,7 +559,7 @@ char *poiToStr (char *str) {
 }
 
 /*! read issea file and fill table tIsSea */
-int readIsSea (const char *fileName) {
+bool readIsSea (const char *fileName) {
    FILE *f = NULL;
    int i = 0;
    char c;
@@ -579,7 +581,7 @@ int readIsSea (const char *fileName) {
    }
    fclose (f);
    printf ("nSea: %d size: %d proportion sea: %lf\n", nSea, i, (double) nSea/ (double) i); 
-   return i;
+   return true;
 } 
 
 /*! reinit zone decribing geographic meta data */
@@ -595,7 +597,7 @@ void initConst (Zone *zone) {
 }
 
 /*! direct loxodromic cap from origin to dest */
-double loxCap (double lat1, double lon1, double lat2, double lon2) {
+double directCap (double lat1, double lon1, double lat2, double lon2) {
    return RAD_TO_DEG * atan2 ((lon2 - lon1) * cos (DEG_TO_RAD * (lat1+lat2)/2), lat2 - lat1);
 }
 
@@ -605,13 +607,14 @@ static inline double dist (double x, double y) {
 }
 
 /*! direct loxodromic dist from origi to dest */
-double loxDist (double lat1, double lon1, double lat2, double lon2) {
+double loxoDist (double lat1, double lon1, double lat2, double lon2) {
    double coeffLat = cos (DEG_TO_RAD * (lat1 + lat2)/2);
    return 60 * dist ((lat1 - lat2), (lon2 - lon1) * coeffLat);
 }
 
 /*! return orthodomic distance in nautical miles */
 double orthoDist (double lat1, double lon1, double lat2, double lon2) {
+    //return loxDist (lat1, lon1, lat2, lon2);
     double theta = lon1 - lon2;
     double distRad = acos(
         sin(lat1 * DEG_TO_RAD) * sin(lat2 * DEG_TO_RAD) + 
@@ -703,6 +706,7 @@ bool checkGribToStr (char *buffer, Zone zone, FlowP *gribData) {
       strcpy (buffer, "No consistent info for shortname: 10u 10v ucurr vcurr");
       return true;
    }
+
    for (size_t k = 0; k < zone.nTimeStamp; k++) {
       //t = zone.timeStamp [k];
       for (int i = 0; i < zone.nbLat; i++) {
@@ -714,12 +718,13 @@ bool checkGribToStr (char *buffer, Zone zone, FlowP *gribData) {
             v = gribData [iGrib].v;
             lat = zone.latMin + i * zone.latStep;
             lon = lonCanonize (zone.lonLeft + j * zone.lonStep);
-            if (fabs (lat - gribData [iGrib].lat) > 0.01/*(zone.latStep / 2.0)*/) {
-               printf ("CheckGribStr strange: lat: %.2lf gribData lat: %.2lf\n", lat, gribData [iGrib].lat);
+            if (fabs (lat - gribData [iGrib].lat) > 0.01) {
+               // printf ("CheckGribStr strange: lat: %.2lf gribData lat: %.2lf\n", lat, gribData [iGrib].lat);
                nLatSuspect += 1;
             }
-            if (fabs (lon - gribData [iGrib].lon) > 0.01/*(zone.lonStep / 2.0)*/) {
-               printf ("CheckGribStr strange: lon: %.2lf gribData lon: %.2lf\n", lon, gribData [iGrib].lon);
+            // if (fabs (lon - gribData [iGrib].lon) > (zone.lonStep / 2.0)) {
+            if (fabs (lon - gribData [iGrib].lon) > 0.01) {
+               // printf ("CheckGribStr strange: lon: %.2lf gribData lon: %.2lf\n", lon, gribData [iGrib].lon);
                nLonSuspect += 1;
             }
             if (fabs (lat) > 90)
@@ -862,7 +867,7 @@ double findTwsByIt (Pp p, int iT0, const FlowP *gribData) {
    b = interpolate (p.lon, windP10.lon, windP11.lon, windP10.v, windP11.v); 
    v0 = interpolate (p.lat, windP00.lat, windP10.lat, a, b);
 
-   return extTws (u0, v0);
+   return fTws (u0, v0);
 }
 
 /*! interpolation to get u, v, g (gust), w (waves) at point p and time t */
@@ -1153,20 +1158,17 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
    return true;
 }
 
-/*! launch readGribAll wih Wind parameters */   
-void *readGrib () {
-   printf ("in ReadGrib\n");
-   readGribRet = readGribAll (par.gribFileName, &zone, WIND);
+/*! launch readGribAll wih Wind or current  parameters */   
+void *readGrib (void *data) {
+   int *iFlow = (int *) (data);
+   printf ("in ReadGrib: flow: %d\n", *iFlow);
+   if ((*iFlow == WIND) && (par.gribFileName [0] != '\0'))
+      readGribRet = readGribAll (par.gribFileName, &zone, WIND);
+   else if ((*iFlow == CURRENT) && (par.currentGribFileName [0] != '\0'))
+           readCurrentGribRet = readGribAll (par.currentGribFileName, &currentZone, CURRENT);
    return NULL;
 }
 
-/*! launch readGribAll wih Current parameters */   
-void *readCurrentGrib () {
-   printf ("in CurrentGrib\n");
-   readCurrentGribRet = readGribAll (par.currentGribFileName, &currentZone, CURRENT);
-   return NULL;
-}
-   
 /*! write Grib information in string */
 char *gribToStr (char *str, Zone zone) {
    char line [MAX_SIZE_LINE] = "";
@@ -1334,7 +1336,7 @@ void dollarReplace (char* str) {
 }
 
 /*! find name, lat and lon */
-void analyseCoord (char *str, char* name, double *lat, double *lon) {
+static void analyseCoord (char *str, char* name, double *lat, double *lon) {
    char *pt = NULL;
    name [0] = '\0';
    g_strstrip (str);
@@ -1386,7 +1388,7 @@ void updateIsSeaWithForbiddenAreas () {
 }
 
 /*! read forbid zone */
-void forbidZoneAdd (char *line, int n) {
+static void forbidZoneAdd (char *line, int n) {
    char *latToken, *lonToken;
    // Allouer de la mémoire pour les points
    if ((forbidZones [n].points = (Point *) malloc (MAX_SIZE_FORBID_ZONE * sizeof(Point))) == NULL) {
@@ -1766,7 +1768,7 @@ static size_t WriteCallback (void* contents, size_t size, size_t nmemb, void* us
    return fwrite (contents, size, nmemb, f);
 }
 
-/*! return true if URL has been dowlmoaded */
+/*! return true if URL has been downloaded */
 bool curlGet (char *url, char* outputFile) {
    long http_code;
    CURL* curl = curl_easy_init();
@@ -1797,5 +1799,44 @@ bool curlGet (char *url, char* outputFile) {
       return false;
    }
    return true;
+}
+
+/*! check server accessibility */
+bool isServerAccessible (const char *url) {
+    CURL *curl;
+    CURLcode res;
+
+    curl_global_init(CURL_GLOBAL_DEFAULT);
+    curl = curl_easy_init();
+
+    if (curl) {
+        curl_easy_setopt (curl, CURLOPT_URL, url);
+        curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
+        res = curl_easy_perform(curl);
+        if (res != CURLE_OK) {
+            fprintf (stderr, "Error curl request: %s\n", curl_easy_strerror(res));
+            curl_easy_cleanup(curl);
+            curl_global_cleanup();
+            return false; // Serveur non accessible en raison d'une erreur de requête
+        }
+
+        long http_code;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+
+        // 2xx signifie que le serveur est accessible
+        if (http_code >= 200 && http_code < 300) {
+            curl_easy_cleanup(curl);
+            curl_global_cleanup();
+            return true; // Serveur accessible
+        } else {
+            curl_easy_cleanup(curl);
+            curl_global_cleanup();
+            return false; // Serveur non accessible en raison d'un code de réponse HTTP non 2xx
+        }
+    } else {
+        fprintf (stderr, "Error init curl.\n");
+        curl_global_cleanup();
+        return false; // Erreur d'initialisation de curl
+    }
 }
 

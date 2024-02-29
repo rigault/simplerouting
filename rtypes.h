@@ -23,6 +23,7 @@
 #define PROG_AUTHOR           "René Rigault"
 #define DESCRIPTION           "Routing calculates best route from pOr (Origin) to pDest (Destination) \
    taking into account grib files and boat polars"
+#define LIBRAIRIES            "eccodes from ECMWF\ncurl\ngpsd\nshapelib\n"
 #define MILLION               1000000
 #define NIL                   (-100000)
 #define MAX_N_ISOC            512               // max number of isochrones in isocArray

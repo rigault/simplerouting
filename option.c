@@ -24,7 +24,7 @@ void optionManage (char option) {
       scanf ("%lf", &lon2);
       printf ("Lat2 = ");
       scanf ("%lf", &lat2);
-      printf ("cap1: %.2lf°,  cap2: %.2lf°\n", loxCap (lat, lon, lat2, lon2), loxCap (lat2, lon2, lat, lon));
+      printf ("cap1: %.2lf°,  cap2: %.2lf°\n", directCap (lat, lon, lat2, lon2), directCap (lat2, lon2, lat, lon));
       break;
    case 'g': // grib
       printf ("grib read: %s\n", par.gribFileName);
@@ -56,6 +56,11 @@ void optionManage (char option) {
       while ((fgets (str, MAX_SIZE_LINE, f) != NULL ))
          printf ("%s", str);
       fclose (f);
+      break;
+   case 'n': //network
+      if (isServerAccessible ("http://www.google.com"))
+         printf ("Network OK\n");
+      else printf ("No network\n");
       break;
    case 'p': //polar
       readPolar (par.polarFileName, &polMat);
