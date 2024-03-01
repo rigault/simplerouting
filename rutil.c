@@ -19,20 +19,25 @@
 #include "eccodes.h"
 #include "rtypes.h"
 #include "shapefil.h"
-/*! forbid zones is a set of polygons */
-extern Route route; // defined in engine.c
+
 static const char *CSV_SEP = ";,\t";
 
+/*! store sail route calculated in engine.c by routing */  
+SailRoute route;
+
+/*! forbid zones is a set of polygons */
 Polygon forbidZones [MAX_N_FORBID_ZONE];
 
 /*! dictionnary of meteo services */
 struct DictElmt dicTab [] = {{7, "Weather service US"}, {78, "DWD Germany"}, {85, "Meteo France"}, {98,"ECMWF European"}};
 
 struct DictProvider providerTab [N_PROVIDERS] = {
-   {"query@saildocs.com",          "Saildocs Wind GFS",      "gfs"} ,
-   {"query@saildocs.com",          "Saildocs Wind ECWMF",    "ECMWF"} ,
-   {"query@saildocs.com",          "Saildocs Wind ICON",     "ICON"} ,
-   {"query@saildocs.com",          "Saildocs Current RTOFS", "RTOFS"} ,
+   {"query@saildocs.com",          "Saildocs Wind GFS",      "gfs"},
+   {"query@saildocs.com",          "Saildocs Wind ECWMF",    "ECMWF"},
+   {"query@saildocs.com",          "Saildocs Wind ICON",     "ICON"},
+   {"query@saildocs.com",          "Saildocs Wind ARPEGE",   "ARPEGE"},
+   {"query@saildocs.com",          "Saildocs Wind Arome",    "AROME"},
+   {"query@saildocs.com",          "Saildocs Current RTOFS", "RTOFS"},
    {"weather@mailasail.com",       "MailaSail Wind GFS",     ""},
    {"gmngrib@globalmarinenet.net", "GlobalMarinet GFS",      ""}
 };
@@ -97,11 +102,13 @@ const char *CURRENT_URL [N_CURRENT_URL * 2] = {
    "Gascogne",          "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Gascogne.grb"
 };
 
-
-/*static void mercatorToLatLon(double y_mercator, double x_mercator, double *latitude, double *longitude) {
-    *longitude = x_mercator / 20037508.34 * 180.0;
-    *latitude = atan(sinh(y_mercator / 20037508.34 * M_PI)) * 180.0 / M_PI;
-}*/
+/*! say if point is in sea */
+bool isSea (double lon, double lat) {
+   if (tIsSea == NULL) return true;
+   int iLon = round (lon * 10  + 1800);
+   int iLat = round (-lat * 10  + 900);
+   return tIsSea [(iLat * 3601) + iLon];
+}
 
 /*! build entities based on .shp file */
 bool initSHP (char* nameFile) {
@@ -384,6 +391,8 @@ bool smtpGribRequestPython (int type, double lat1, double lon1, double lat2, dou
    case SAILDOCS_GFS:
    case SAILDOCS_ECMWF:
    case SAILDOCS_ICON:
+   case SAILDOCS_ARPEGE:
+   case SAILDOCS_AROME:
    case SAILDOCS_CURR:
       printf ("smtp saildocs python with: %s %s\n", providerTab [type].service, suffix);
       sprintf (command, "%s %s grib \"send %s:%d%c,%d%c,%d%c,%d%c|%.2lf,%.2lf|0,%d,..%d|%s\" %s\n",\
@@ -430,17 +439,6 @@ bool smtpGribRequestPython (int type, double lat1, double lon1, double lat2, dou
    return true;
 }
    
-/*! true wind direction */
-double fTwd (double u, double v) {
-	double val = 180 + RAD_TO_DEG * atan2 (u, v);
-   return (val > 180) ? val - 360 : val;
-}
-
-/*! true wind speed. cf Pythagore */
-double fTws (double u, double v) {
-    return MS_TO_KN * sqrt ((u * u) + (v * v));
-}
-
 /*! filter char */
 void strClean (char *str) {
    char *pt = str;
@@ -594,46 +592,6 @@ void initConst (Zone *zone) {
    zone->lonStep = 5;
    zone->nbLat = 0;
    zone->nbLon = 0;
-}
-
-/*! direct loxodromic cap from origin to dest */
-double directCap (double lat1, double lon1, double lat2, double lon2) {
-   return RAD_TO_DEG * atan2 ((lon2 - lon1) * cos (DEG_TO_RAD * (lat1+lat2)/2), lat2 - lat1);
-}
-
-/*! return pythagore distance */
-static inline double dist (double x, double y) {
-   return sqrt (x*x + y*y);
-}
-
-/*! direct loxodromic dist from origi to dest */
-double loxoDist (double lat1, double lon1, double lat2, double lon2) {
-   double coeffLat = cos (DEG_TO_RAD * (lat1 + lat2)/2);
-   return 60 * dist ((lat1 - lat2), (lon2 - lon1) * coeffLat);
-}
-
-/*! return orthodomic distance in nautical miles */
-double orthoDist (double lat1, double lon1, double lat2, double lon2) {
-    //return loxDist (lat1, lon1, lat2, lon2);
-    double theta = lon1 - lon2;
-    double distRad = acos(
-        sin(lat1 * DEG_TO_RAD) * sin(lat2 * DEG_TO_RAD) + 
-        cos(lat1 * DEG_TO_RAD) * cos(lat2 * DEG_TO_RAD) * cos(theta * DEG_TO_RAD)
-    );
-    return fabs (60 * (180/M_PI) * distRad);
-}
-
-/*! return givry correction to apply to loxodromic cap to get orthodromic cap  */
-double givry (double lat1, double lon1, double lat2, double lon2) {
-   double theta = lon1 - lon2;
-   double latM = (lat1 + lat2) / 2;
-   return (theta/2) * sin (latM * DEG_TO_RAD);
-}
-
-/*! return fx : linear interpolation */
-static inline double interpolate (double x, double x0, double x1, double fx0, double fx1) {
-   if (x1 == x0) return fx0;
-   else return fx0 + (x-x0) * (fx1-fx0) / (x1-x0);
 }
 
 /*! convert long date found in grib file in seconds time_t */
@@ -837,7 +795,7 @@ static inline int indLon (double lon, Zone zone) {
 }
 
 /*! true if P is within the zone */
-bool extIsInZone (Pp pt, Zone zone) {
+bool isInZone (Pp pt, Zone zone) {
    if (par.constWindTws > 0) return true;
    else return (pt.lat >= zone.latMin) && (pt.lat <= zone.latMax) && (pt.lon >= zone.lonLeft) && (pt.lon <= zone.lonRight);
 }
@@ -848,7 +806,7 @@ double findTwsByIt (Pp p, int iT0, const FlowP *gribData) {
    double a, b, u0, v0;
 
    FlowP windP00, windP01, windP10, windP11;
-   if ((!zone.wellDefined) || (zone.nbLat == 0) || (! extIsInZone (p, zone))) {
+   if ((!zone.wellDefined) || (zone.nbLat == 0) || (! isInZone (p, zone))) {
       return 0;
    }
    
@@ -877,7 +835,7 @@ bool findFlow (Pp p, double t, double *rU, double *rV, double *rG, double *rW, Z
    double a, b, u0, u1, v0, v1, g0, g1, w0, w1;
    int iT0, iT1;
    FlowP windP00, windP01, windP10, windP11;
-   if ((!zone.wellDefined) || (zone.nbLat == 0) || (! extIsInZone (p, zone)) || (t < 0)){
+   if ((!zone.wellDefined) || (zone.nbLat == 0) || (! isInZone (p, zone)) || (t < 0)){
       *rU = 0, *rV = 0, *rG = 0; *rW = 0;
       return false;
    }

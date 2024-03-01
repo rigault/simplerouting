@@ -25,6 +25,8 @@ void optionManage (char option) {
       printf ("Lat2 = ");
       scanf ("%lf", &lat2);
       printf ("cap1: %.2lf°,  cap2: %.2lf°\n", directCap (lat, lon, lat2, lon2), directCap (lat2, lon2, lat, lon));
+      printf ("orthodist1: %.2lf,  orthodist2: %.2lf\n", orthoDist (lat, lon, lat2, lon2), orthoDist (lat2, lon2, lat, lon));
+      printf ("loxodist1 : %.2lf,  loxodist2 : %.2lf\n", loxoDist(lat, lon, lat2, lon2), loxoDist (lat2, lon2, lat, lon));
       break;
    case 'g': // grib
       printf ("grib read: %s\n", par.gribFileName);
@@ -71,7 +73,7 @@ void optionManage (char option) {
          scanf ("%lf", &twa);
          printf ("tws true wind speed = ");
          scanf ("%lf", &tws);
-         printf ("speed over ground: %.2lf\n", extFindPolar (twa, tws, polMat));
+         printf ("speed over ground: %.2lf\n", findPolar (twa, tws, polMat));
       }
       break;
    case 'P': // Wave polar
@@ -83,7 +85,7 @@ void optionManage (char option) {
          scanf ("%lf", &twa);
          printf ("w = ");
          scanf ("%lf", &w);
-         printf ("coeff: %.2lf\n", extFindPolar (twa, w, wavePolMat)/100.0);
+         printf ("coeff: %.2lf\n", findPolar (twa, w, wavePolMat)/100.0);
       }
       break;
    case 's': // isIsea
@@ -95,7 +97,7 @@ void optionManage (char option) {
          scanf ("%lf", &lon);
          printf ("Lat = ");
          scanf ("%lf", &lat);
-         if (extIsSea (lon, lat))
+         if (isSea (lon, lat))
             printf ("Sea\n");
          else printf ("Earth\n");
       }

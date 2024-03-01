@@ -1,6 +1,13 @@
+/* this file includes in other file provides
+. Constant definition with #define
+. Type deiition with typedef
+. small inline functions
+*/
+
 #include <stdbool.h>
 #include <time.h>
 #include <pthread.h>
+#include <math.h>
 #define N_WIND_URL            6
 #define N_CURRENT_URL         6
 #define ROOT_GRIB_URL         "https://static1.mclcm.net/mc2020/int/cartes/marine/grib/" // Meteoconsult
@@ -47,7 +54,7 @@
 #define GPSD_TCP_PORT         "2947"            // TCP port for gps demon
 #define MAX_SIZE_FORBID_ZONE  100               // max size per forbidden zone
 #define MAX_N_FORBID_ZONE     10                // max nummber of forbidden zones
-#define N_PROVIDERS           6                 // for DictProvider dictTab size
+#define N_PROVIDERS           8                 // for DictProvider dictTab size
 #define MAX_INDEX_ENTITY      32                // for shp. Index.
 
 enum {WIND, CURRENT};                           // for grib information, either WIND or CURRENT
@@ -61,11 +68,17 @@ enum {NOTHING, POINT, SEGMENT, BEZIER};         // bezier or segment representat
 enum {UNVISIBLE, NORMAL, CAT, PORT, NEW};       // for POI point of interest
 
 /*! for meteo services */
-enum {SAILDOCS_GFS, SAILDOCS_ECMWF, SAILDOCS_ICON, SAILDOCS_CURR, MAILASAIL, GLOBALMARINET}; // grib mail service providers
+enum {SAILDOCS_GFS, SAILDOCS_ECMWF, SAILDOCS_ICON, SAILDOCS_ARPEGE, SAILDOCS_AROME, SAILDOCS_CURR, MAILASAIL, GLOBALMARINET}; // grib mail service providers
 struct DictElmt {int id; char name [MAX_SIZE_NAME];};
 struct DictProvider {char address [MAX_SIZE_LINE]; char libelle [MAX_SIZE_LINE]; char service [MAX_SIZE_NAME];};
 
-/*! Structure to point for SHP and forbid zones */
+/*! Structure to store coordinates */
+typedef struct {
+    double x;
+    double y;
+} Coordinates;
+
+/*! Structure for SHP and forbid zones */
 typedef struct {
    double lat;
    double lon;
@@ -76,6 +89,16 @@ typedef struct {
     int n;
     Point *points;
 } Polygon;
+
+/* Structure for best departure time choice */
+typedef struct {
+   int ret;
+   int count;
+   double beginT;
+   double endT;
+   double stepT;
+   double bestTime;
+} ChooseDeparture;
 
 /*! My date */
 typedef struct {
@@ -145,7 +168,7 @@ typedef struct {
    double lat;
    double lon;
    double dd;     // distance to pDest
-   double vmg;    // velocity made good
+   double vmc;    // velocity made on course
 } Pp;
 
 /*! isochrone meta data */ 
@@ -166,28 +189,47 @@ typedef struct {
    int    nCol;
 } PolMat;
 
-/*! Point for Route description  */
+/*! Point for way point route */
+typedef struct {
+   double lat;
+   double lon;
+   double od;     // ortho dist
+   double oCap;   // ortho cap 
+   double ld;     // loxo dist
+   double lCap;   // loxo  cap 
+} WayPoint;
+
+/* Way point route description */
+typedef struct {
+   int n;
+   double totOrthoDist;
+   double totLoxoDist;
+   WayPoint t [MAX_N_WAY_POINT];
+} WayRoute;
+
+/*! Point for Sail Route  */
 typedef struct {
    double lat;
    double lon;
    int    id;
    int    father;
-   double cap;
-   double d;
-   double dOrtho;
-} Pr;
+   double od;
+   double oCap;
+   double ld;
+   double lCap;
+} SailPoint;
 
 /*! Route description  */
 typedef struct {
-   Pr     t [MAX_N_ISOC + 1];
-   double calculationTime;
    int    n;
+   double calculationTime;
    long   kTime0;                           // relative index time of departure
    double duration;
    double totDist;
    int    ret;                              // return value of routing
    bool   destinationReached;
-} Route;
+   SailPoint t [MAX_N_ISOC + 1];
+} SailRoute;
 
 /*! Parameters */
 typedef struct {
@@ -268,11 +310,86 @@ typedef struct {
 
 /*! For GPS management */
 typedef struct {
-   int    ret;
    double lat;
    double lon;
    double alt;
    int    status;
    int    nSat;
    struct timespec timestamp;
+   int    ret;
 } MyGpsData;
+
+// inlines small functions
+
+/*! true wind direction */
+static inline double fTwd (double u, double v) {
+	double val = 180 + RAD_TO_DEG * atan2 (u, v);
+   return (val > 180) ? val - 360 : val;
+}
+
+/*! true wind speed. cf Pythagore */
+static inline double fTws (double u, double v) {
+    return MS_TO_KN * sqrt ((u * u) + (v * v));
+}
+
+/*! return fx : linear interpolation */
+static inline double interpolate (double x, double x0, double x1, double fx0, double fx1) {
+   if (x1 == x0) return fx0;
+   else return fx0 + (x-x0) * (fx1-fx0) / (x1-x0);
+}
+
+/*! return pythagore distance */
+static inline double dist (double x, double y) {
+   return sqrt (x*x + y*y);
+}
+
+/*! return givry correction to apply to direct or loxodromic cap to get orthodromic cap  */
+static inline double givry (double lat1, double lon1, double lat2, double lon2) {
+   double theta = lon1 - lon2;
+   double latM = (lat1 + lat2) / 2;
+   return (theta/2) * sin (latM * DEG_TO_RAD);
+}
+/*! direct loxodromic cap from origin to dest */
+static inline double directCap (double lat1, double lon1, double lat2, double lon2) {
+   return RAD_TO_DEG * atan2 ((lon2 - lon1) * cos (DEG_TO_RAD * (lat1+lat2)/2), lat2 - lat1);
+}
+
+/*! direct loxodromic cap from origin to dest */
+static inline double orthoCap (double lat1, double lon1, double lat2, double lon2) {
+   return directCap (lat1, lon1, lat2, lon2) + givry (lat1, lon1, lat2, lon2);
+}
+
+/*! direct loxodromic dist from origi to dest */
+static inline double loxoDist (double lat1, double lon1, double lat2, double lon2) {
+   double coeffLat = cos (DEG_TO_RAD * (lat1 + lat2)/2);
+   return 60 * dist ((lat1 - lat2), (lon2 - lon1) * coeffLat);
+}
+
+/*! return orthodomic distance in nautical miles */
+static inline double orthoDist (double lat1, double lon1, double lat2, double lon2) {
+    double theta = lon1 - lon2;
+    double distRad = acos(
+        sin(lat1 * DEG_TO_RAD) * sin(lat2 * DEG_TO_RAD) + 
+        cos(lat1 * DEG_TO_RAD) * cos(lat2 * DEG_TO_RAD) * cos(theta * DEG_TO_RAD)
+    );
+    return fabs (60 * (180/M_PI) * distRad);
+}
+
+/*! find in polar boat speed or wave coeff */
+static inline double findPolar (double twa, double w, PolMat mat) {
+   int l, c, lInf, cInf, lSup, cSup;
+   if (twa > 180) twa = 360 - twa;
+   else if (twa < 0) twa = -twa;
+   for (l = 1; l < mat.nLine; l++) 
+      if (mat.t [l][0] > twa) break;
+   lSup = (l < mat.nLine - 1) ? l : mat.nLine - 1;
+   lInf = (l == 1) ? 1 : l - 1;
+   for (c = 1; c < mat.nCol; c++) 
+      if (mat.t [0][c] > w) break;
+   cSup = (c < mat.nCol - 1) ? c : mat.nCol - 1;
+   cInf = (c == 1) ? 1 : c - 1;
+   double s0 = interpolate (twa, mat.t [lInf][0], mat.t [lSup][0], mat.t [lInf][cInf], mat.t [lSup][cInf]);
+   double s1 = interpolate (twa, mat.t [lInf][0], mat.t [lSup][0], mat.t [lInf][cSup], mat.t [lSup][cSup]);
+   return interpolate (w, mat.t [0][cInf], mat.t [0][cSup], s0, s1);
+}
+

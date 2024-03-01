@@ -18,62 +18,30 @@
 #include <math.h>
 #include "rtypes.h"
 #include "rutil.h"
+#include "engine.h"
 
 /*! global variables */
-Pp      isocArray [MAX_N_ISOC][MAX_SIZE_ISOC];  // list of isochrones
-IsoDesc isoDesc [MAX_N_ISOC];                   // Isochrone meta data
-int     nIsoc = 0;                              // total number of isochrones 
-Route   route;                                  // store route found by routing
-Pp      lastClosest;                            // closest point to destination in last isochrone computed
+Pp        isocArray [MAX_N_ISOC][MAX_SIZE_ISOC];  // list of isochrones
+IsoDesc   isoDesc [MAX_N_ISOC];                   // Isochrone meta data
+int       nIsoc = 0;                              // total number of isochrones 
+Pp        lastClosest;                            // closest point to destination in last isochrone computed
 
-double   pOrTtoPDestCog = 0;                    // cog from par.pOr to par.pDest.
+ChooseDeparture chooseDeparture;                  // for choice of departure time
+
+/*! following global variable could be static but linking issue */
+double    pOrTtoPDestCog = 0;                      // cog from par.pOr to par.pDest.
 
 struct {
    double dd;
-   double vmg;
+   double vmc;
    double nPt;
 } sector [2][MAX_SIZE_ISOC];                    // we keep even and odd last sectors
 
-//int first;
 int      pId = 1;                               // global ID for points. -1 and 0 are reserved for pOr and pDest
 double   tDeltaCurrent = 0.0;                   // delta time in hours between Wind zone and current zone
 double   lastClosestDist;                       // closest distance to destination in last isochrone computed
 double   lastBestVmg = 0;                       // best VMG found up to now
 
-/*! true if P is within the zone */
-static inline bool isInZone (Pp pt, Zone zone) {
-   if (par.constWindTws > 0) return true;
-   else return (pt.lat >= zone.latMin) && (pt.lat <= zone.latMax) && (pt.lon >= zone.lonLeft) && (pt.lon <= zone.lonRight);
-}
-
-/*! return fx : linear interpolation */
-static inline double interpolate (double x, double x0, double x1, double fx0, double fx1) {
-   if (x1 == x0) return fx0;
-   else return fx0 + (x-x0) * (fx1-fx0) / (x1-x0);
-}
-
-/*! find in polar boat speed or wave coeff */
-static inline double findPolar (double twa, double w, PolMat mat) {
-   int l, c, lInf, cInf, lSup, cSup;
-   if (twa > 180) twa = 360 - twa;
-   else if (twa < 0) twa = -twa;
-   for (l = 1; l < mat.nLine; l++) 
-      if (mat.t [l][0] > twa) break;
-   lSup = (l < mat.nLine - 1) ? l : mat.nLine - 1;
-   lInf = (l == 1) ? 1 : l - 1;
-   for (c = 1; c < mat.nCol; c++) 
-      if (mat.t [0][c] > w) break;
-   cSup = (c < mat.nCol - 1) ? c : mat.nCol - 1;
-   cInf = (c == 1) ? 1 : c - 1;
-   double s0 = interpolate (twa, mat.t [lInf][0], mat.t [lSup][0], mat.t [lInf][cInf], mat.t [lSup][cInf]);
-   double s1 = interpolate (twa, mat.t [lInf][0], mat.t [lSup][0], mat.t [lInf][cSup], mat.t [lSup][cSup]);
-   return interpolate (w, mat.t [0][cInf], mat.t [0][cSup], s0, s1);
-}
-
-/*! idem findPolar but extern not inline */
-double extFindPolar (double twa, double w, PolMat mat) {
-   return findPolar (twa, w, mat);
-}
 
 /*! return max speed of boat at tws for all twa */
 static inline double maxSpeedInPolarAt (double tws, PolMat mat) {
@@ -84,24 +52,6 @@ static inline double maxSpeedInPolarAt (double tws, PolMat mat) {
       if (speed > max) max = speed;
    }
    return max;
-}
-
-/*! say if point is in sea */
-static inline bool isSea (double lon, double lat) {
-   if (tIsSea == NULL) return true;
-   int iLon = round (lon * 10  + 1800);
-   int iLat = round (-lat * 10  + 900);
-   return tIsSea [(iLat * 3601) + iLon];
-}
-
-/*! idem isSea but not inline */
-bool extIsSea (double lon, double lat) {
-   return isSea (lon, lat);
-}
-
-/*! return pythagore distance */
-static inline double dist (double x, double y) {
-   return sqrt (x*x + y*y);
 }
 
 /*! find first point in isochrone. Useful for drawAllIsochrones */ 
@@ -122,10 +72,10 @@ static inline int findFirst (int nIsoc) {
 }
 
 /*! initialization of sector */
-static void initSector (int nIsoc, int nMax) {
+static inline void initSector (int nIsoc, int nMax) {
    for (int i = 0; i < nMax; i++) {
       sector [nIsoc][i].dd = DBL_MAX;
-	   sector [nIsoc][i].vmg = 0;
+	   sector [nIsoc][i].vmc = 0;
       sector [nIsoc][i].nPt = 0;
    }
 }
@@ -148,21 +98,20 @@ static inline int forwardSectorOptimize (int nIsoc, Isoc isoList, int isoLen, Is
    isoDesc [nIsoc].focalLon = ptTarget.lon;
   
    //ptTarget = par.pDest; 
-   double beta = directCap (par.pOr.lat, par.pOr.lon, par.pDest.lat, par.pDest.lon);
+   double beta = orthoCap (par.pOr.lat, par.pOr.lon, par.pDest.lat, par.pDest.lon);
    initSector (nIsoc % 2, par.nSectors);
    for (int i = 0; i < par.nSectors; i++)
       optIsoc [i].lat = DBL_MAX;
 
    for (int i = 0; i < isoLen; i++) {
-      alpha = directCap (ptTarget.lat, ptTarget.lon, isoList [i].lat, isoList [i].lon);
+      alpha = orthoCap (ptTarget.lat, ptTarget.lon, isoList [i].lat, isoList [i].lon);
       theta = beta - alpha;
-      // if (round ((180.0 - theta) / thetaStep) == 0) first = i; 
       if (theta < 0) theta += 360;
       if (fabs (theta) <= 360) {
          iSector = round ((360.0 - theta) / thetaStep);
-		   if ((isoList [i].dd < sector [nIsoc%2][iSector].dd) && (isoList [i].vmg > sector [nIsoc%2] [iSector].vmg)) {
+		   if ((isoList [i].dd < sector [nIsoc%2][iSector].dd) && (isoList [i].vmc > sector [nIsoc%2] [iSector].vmc)) {
             sector [nIsoc%2][iSector].dd = isoList [i].dd;
-            sector [nIsoc%2][iSector].vmg = isoList [i].vmg;
+            sector [nIsoc%2][iSector].vmc = isoList [i].vmc;
             optIsoc [iSector] = isoList [i];
          }
          sector [nIsoc%2][iSector].nPt += 1;
@@ -173,11 +122,11 @@ static inline int forwardSectorOptimize (int nIsoc, Isoc isoList, int isoLen, Is
    for (iSector = 0; iSector < par.nSectors; iSector++) {
       if ((sector [nIsoc%2][iSector].nPt >= par.minPt)  
          && (sector [nIsoc%2][iSector].dd < DBL_MAX -1) 
-         && (sector [nIsoc%2][iSector].vmg > 0.6 * lastBestVmg) 
+         && (sector [nIsoc%2][iSector].vmc > 0.6 * lastBestVmg) 
          && ((par.kFactor == 0)
-            || ((par.kFactor == 1) && (sector [nIsoc%2][iSector].vmg >= sector [(nIsoc-1)%2][iSector].vmg))
+            || ((par.kFactor == 1) && (sector [nIsoc%2][iSector].vmc >= sector [(nIsoc-1)%2][iSector].vmc)) // Best !
             || ((par.kFactor == 2) && (sector [nIsoc%2][iSector].dd < sector [(nIsoc-1)%2][iSector].dd))
-            || ((par.kFactor == 3) && (sector [nIsoc%2][iSector].vmg >= sector [(nIsoc-1)%2][iSector].vmg) && (sector [nIsoc%2][iSector].dd < sector [(nIsoc-1)%2][iSector].dd)))) {
+            || ((par.kFactor == 3) && (sector [nIsoc%2][iSector].vmc >= sector [(nIsoc-1)%2][iSector].vmc) && (sector [nIsoc%2][iSector].dd < sector [(nIsoc-1)%2][iSector].dd)))) {
          optIsoc [k] = optIsoc [iSector];
          optIsoc [k].sector = iSector;
 	      k += 1;
@@ -187,7 +136,7 @@ static inline int forwardSectorOptimize (int nIsoc, Isoc isoList, int isoLen, Is
 }
 
 /*! do nothing. Just copy. For testing. */
-static int isocCpy (const Isoc isoList, int isoLen, Isoc optIsoc) {
+static inline int isocCpy (const Isoc isoList, int isoLen, Isoc optIsoc) {
    for (int i = 0; i < isoLen; i++) {
        optIsoc [i] = isoList [i];
    }
@@ -237,7 +186,7 @@ static int buildNextIsochrone (Isoc isoList, int isoLen, Pp pDest, double t, dou
          vCurr = -KN_TO_MS * par.constCurrentS * cos (DEG_TO_RAD * par.constCurrentD);
       }
       else findFlow (isoList [k], t - tDeltaCurrent, &uCurr, &vCurr, &gust, &bidon, currentZone, tGribData [CURRENT]);
-      vDirectCap = directCap (isoList [k].lat, isoList [k].lon, pDest.lat, pDest.lon);
+      vDirectCap = orthoCap (isoList [k].lat, isoList [k].lon, pDest.lat, pDest.lon);
       directCog = ((int)(vDirectCap / par.cogStep)) * par.cogStep;
       sog = par.motorSpeed;
       vMaxSpeedInPolarAt = maxSpeedInPolarAt (tws, polMat); // store in global variable for future use
@@ -274,23 +223,21 @@ static int buildNextIsochrone (Isoc isoList, int isoLen, Pp pDest, double t, dou
          newPt.lon = isoList [k].lon + dLon/60;
          newPt.id = pId;
          newPt.father = isoList [k].id;
-         newPt.vmg = 0;
+         newPt.vmc = 0;
          newPt.sector = 0;
          if (isSea (newPt.lon, newPt.lat)) {
             newPt.dd = orthoDist (newPt.lat, newPt.lon, pDest.lat, pDest.lon);
-            double alpha = directCap (par.pOr.lat, par.pOr.lon, newPt.lat, newPt.lon) - pOrTtoPDestCog;
+            double alpha = orthoCap (par.pOr.lat, par.pOr.lon, newPt.lat, newPt.lon) - pOrTtoPDestCog;
          
-            newPt.vmg = orthoDist (newPt.lat, newPt.lon, par.pOr.lat, par.pOr.lon) * cos (DEG_TO_RAD * alpha);
-            if (newPt.vmg > *bestVmg) *bestVmg = newPt.vmg;
-            //if (newPt.vmg > 0.5 * lastBestVmg) { // vmg not too bad compared to the padt ? Really a good ideé ?
-               if (lenNewL < MAX_SIZE_ISOC)
-                  newList [lenNewL++] = newPt;                      // new point added to the isochrone
-               else {
-                  fprintf (stderr, "Routing Error in buildNextIsochrone, limit of MAX_SIZE_ISOC: %d\n", MAX_SIZE_ISOC);
-                  return -1;
-               }
-               pId += 1;
-           //} 
+            newPt.vmc = orthoDist (newPt.lat, newPt.lon, par.pOr.lat, par.pOr.lon) * cos (DEG_TO_RAD * alpha);
+            if (newPt.vmc > *bestVmg) *bestVmg = newPt.vmc;
+            if (lenNewL < MAX_SIZE_ISOC)
+               newList [lenNewL++] = newPt;                      // new point added to the isochrone
+            else {
+               fprintf (stderr, "Routing Error in buildNextIsochrone, limit of MAX_SIZE_ISOC: %d\n", MAX_SIZE_ISOC);
+               return -1;
+            }
+            pId += 1;
          }
       }
    }
@@ -309,7 +256,7 @@ static int findFather (int ptId, Isoc isoc, int lIsoc) {
 
 /*! copy isoc Descriptors in a string 
    true if enough space, false if truncated */
-bool isoDectToStr (char *str, size_t maxLength) {
+bool isoDescToStr (char *str, size_t maxLength) {
    char line [MAX_SIZE_LINE];
    char strLat [MAX_SIZE_LINE];
    char strLon [MAX_SIZE_LINE];
@@ -408,9 +355,10 @@ void storeRoute (Pp pDest, double lastStepDuration) {
    route.t [dep+1].lon = pDest.lon;
    route.t [dep+1].id = pDest.id;
    route.t [dep+1].father = pDest.father;
-   route.t [dep+1].cap = 0;
-   route.t [dep+1].d  = 0;
-   route.t [dep+1].dOrtho = 0;
+   route.t [dep+1].lCap = 0;
+   route.t [dep+1].oCap = 0;
+   route.t [dep+1].ld  = 0;
+   route.t [dep+1].od = 0;
 
    for (int i = dep - 1; i >= 0; i--) {
       iFather = findFather (pt.father, isocArray [i], isoDesc[i].size);
@@ -422,10 +370,11 @@ void storeRoute (Pp pDest, double lastStepDuration) {
       route.t [k].lon = pt.lon;
       route.t [k].id = pt.id;
       route.t [k].father = pt.father;
-      route.t [k].cap = directCap (pt.lat, pt.lon, ptLast.lat, ptLast.lon);
-      route.t [k].d  = loxoDist (pt.lat, pt.lon, ptLast.lat, ptLast.lon);
-      route.t [k].dOrtho = orthoDist (pt.lat, pt.lon, pDest.lat, pDest.lon);;
-      route.totDist += route.t [k].d;
+      route.t [k].lCap = directCap (pt.lat, pt.lon, ptLast.lat, ptLast.lon);
+      route.t [k].oCap = orthoCap (pt.lat, pt.lon, ptLast.lat, ptLast.lon);
+      route.t [k].ld  = loxoDist (pt.lat, pt.lon, ptLast.lat, ptLast.lon);
+      route.t [k].od = orthoDist (pt.lat, pt.lon, pDest.lat, pDest.lon);;
+      route.totDist += route.t [k].ld;
       ptLast = pt;
    }
    if (!found) {
@@ -436,33 +385,34 @@ void storeRoute (Pp pDest, double lastStepDuration) {
    route.t [0].lon = par.pOr.lon;
    route.t [0].id = par.pOr.id;
    route.t [0].father = par.pOr.father;
-   route.t [0].cap = directCap (par.pOr.lat, par.pOr.lon, ptLast.lat, ptLast.lon);
-   route.t [0].d  = loxoDist (par.pOr.lat, par.pOr.lon, ptLast.lat, ptLast.lon);
-   route.t [0].dOrtho = orthoDist (par.pOr.lat, par.pOr.lon, pDest.lat, pDest.lon);
-   route.totDist += route.t[0].d;
+   route.t [0].lCap = directCap (par.pOr.lat, par.pOr.lon, ptLast.lat, ptLast.lon);
+   route.t [0].oCap = orthoCap (par.pOr.lat, par.pOr.lon, ptLast.lat, ptLast.lon);
+   route.t [0].ld = loxoDist (par.pOr.lat, par.pOr.lon, ptLast.lat, ptLast.lon);
+   route.t [0].od = orthoDist (par.pOr.lat, par.pOr.lon, pDest.lat, pDest.lon);
+   route.totDist += route.t[0].ld;
    route.n = dep + 2;
    route.duration = par.tStep * nIsoc + lastStepDuration; // hours
 }
 
 /*! copy route in a string */
-void routeToStr (Route route, char *str) {
+void routeToStr (SailRoute route, char *str) {
    char line [MAX_SIZE_LINE];
    char strLat [MAX_SIZE_LINE];
    char strLon [MAX_SIZE_LINE];
-   sprintf (str, " No       Lat        Lon             Id Father     Cap     Dist      Ortho\n");
-   snprintf (line, MAX_SIZE_LINE, " pOr:     %-12s%-12s %6d %6d %7.2f° %7.2f    %7.2f\n", \
+   sprintf (str, " No       Lat        Lon             Id Father     Cap   OrthoCap        Dist      Ortho\n");
+   snprintf (line, MAX_SIZE_LINE, " pOr:     %-12s%-12s %6d %6d %7.2f°   %7.2f°    %7.2lf    %7.2f\n", \
       latToStr (route.t[0].lat, par.dispDms, strLat), lonToStr (route.t[0].lon, par.dispDms, strLon), \
-      route.t[0].id, route.t[0].father, route.t[0].cap, route.t[0].d, route.t[0].dOrtho);
+      route.t[0].id, route.t[0].father, route.t[0].lCap, route.t[0].oCap, route.t[0].ld, route.t[0].od);
    
    strncat (str, line, MAX_SIZE_LINE);
    for (int i = 1; i < route.n-1; i++) {
       if ((fabs(route.t[i].lon) > 180.0) || (fabs (route.t[i].lat) > 90.0))
          snprintf (line, MAX_SIZE_LINE, " Isoc %2d: Erreur sur latitude ou longitude\n", i-1);   
       else
-         snprintf (line, MAX_SIZE_LINE, " Isoc %2d: %-12s%-12s %6d %6d %7.2f° %7.2f    %7.2f\n", \
+         snprintf (line, MAX_SIZE_LINE, " Isoc %2d: %-12s%-12s %6d %6d %7.2f°   %7.2lf°    %7.2f    %7.2f\n", \
             i-1, latToStr (route.t[i].lat, par.dispDms, strLat), lonToStr (route.t[i].lon, par.dispDms, strLon), \
             route.t[i].id, route.t[i].father, \
-            route.t[i].cap, route.t[i].d, route.t[i].dOrtho); 
+            route.t[i].lCap, route.t[i].oCap, route.t[i].ld, route.t[i].od); 
       strncat (str, line, MAX_SIZE_LINE);
    }
    if (route.destinationReached)
@@ -582,7 +532,7 @@ static inline Pp closest (Isoc isoc, int n, Pp pDest, int *index) {
 /*! find optimal routing from p0 to pDest using grib file and polar
     return number of steps to reach pDest, NIL if unreached, -1 if problem, 0 reserved for not terminated
     return also lastStepDuration if the duration of last step if destination reached (0 if unreached) */
-int routing (Pp pOr, Pp pDest, double t, double dt, double *lastStepDuration) {
+static int routing (Pp pOr, Pp pDest, double t, double dt, double *lastStepDuration) {
    Isoc tempList;
    double distance;
    double timeToReach = 0;
@@ -594,8 +544,8 @@ int routing (Pp pOr, Pp pDest, double t, double dt, double *lastStepDuration) {
    par.pOr.father = -1;
    par.pDest.father = 0;
    pOr.dd = orthoDist (pOr.lat, pOr.lon, pDest.lat, pDest.lon);
-   pOr.vmg = 0;
-   pOrTtoPDestCog = directCap (pOr.lat, pOr.lon, pDest.lat, pDest.lon);
+   pOr.vmc = 0;
+   pOrTtoPDestCog = orthoCap (pOr.lat, pOr.lon, pDest.lat, pDest.lon);
    lastClosestDist = pOr.dd;
    lastBestVmg = 0;
    tDeltaCurrent = zoneTimeDiff (currentZone, zone); // global variable
@@ -690,3 +640,37 @@ void *routingLaunch () {
    if (strlen (par.dumpIFileName) > 0) dumpAllIsoc (par.dumpIFileName);
    return NULL;
 }
+
+/*! choose best time de reach pDest in minimum time */
+void *bestTimeDeparture () {
+   int n;
+   double lastStep, duration, minDuration = DBL_MAX;
+   chooseDeparture.bestTime = -1;
+   chooseDeparture.count = 0;
+   double beginT = 0.0;
+   double stepT = 1.0;
+   double endT = beginT + zone.timeStamp [zone.nTimeStamp - 1];
+   for (double t = beginT; t < endT; t += stepT) {
+      n = routing (par.pOr, par.pDest, t, par.tStep, &lastStep);
+      if (n > 0) {
+         duration = (double) par.tStep * (n-1) + lastStep; // hours
+         if (duration < minDuration) {
+            minDuration = duration;
+            chooseDeparture.bestTime = t;
+         }
+         //printf ("Count: %d, time %.2lf, last duration: %.2lf, min: %.2lf, bestTime: %.2lf\n", chooseDeparture.count, t, duration, minDuration, chooseDeparture.bestTime);
+      }
+      else {
+         //printf ("Count: %d, time %.2lf, Unreachable\n", chooseDeparture.count, t);
+         break;
+      }
+      chooseDeparture.count += 1;
+   }
+   if (chooseDeparture.bestTime != -1) {
+      routingLaunch ();
+   }  
+   chooseDeparture.ret = 1;
+   return NULL;
+}
+      
+
