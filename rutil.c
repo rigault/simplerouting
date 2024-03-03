@@ -1405,7 +1405,6 @@ bool readParam (const char *fileName) {
    par.efficiency = 1;
    par.kFactor = 20;
    par.minPt = 2;
-   par.dispLonLatRatio  = 2.8;
    route.n = 0;
    nPoi = 0;
    while (fgets (pLine, MAX_SIZE_BUFFER, f) != NULL ) {
@@ -1446,7 +1445,6 @@ bool readParam (const char *fileName) {
             strcpy (par.pDestName, tPoi [poiIndex].name);
          else par.pDestName [0] = '\0';
       }
-      else if (sscanf (pLine, "GRIB_LAT_STEP:%lf", &par.gribResolution) > 0); //depecated
       else if (sscanf (pLine, "GRIB_RESOLUTION:%lf", &par.gribResolution) > 0);
       else if (sscanf (pLine, "GRIB_TIME_STEP:%d", &par.gribTimeStep) > 0);
       else if (sscanf (pLine, "GRIB_TIME_MAX:%d", &par.gribTimeMax) > 0);
@@ -1499,6 +1497,8 @@ bool readParam (const char *fileName) {
          buildRootName (str, par.dumpIFileName);
       else if (sscanf (pLine, "DUMPR:%255s", str) > 0)
          buildRootName (str, par.dumpRFileName);
+      else if (sscanf (pLine, "PAR_INFO:%255s", str) > 0)
+         buildRootName (str, par.parInfoFileName);
       else if (sscanf (pLine, "OPT:%d", &par.opt) > 0);
       else if (sscanf (pLine, "MAX_THETA:%lf", &par.maxTheta) > 0);
       else if (sscanf (pLine, "J_FACTOR:%d", &par.jFactor) > 0);
@@ -1525,7 +1525,6 @@ bool readParam (const char *fileName) {
          g_strstrip (pLine);
          strcpy (par.spreadsheet, pLine);
       }
-      else if (sscanf (pLine, "LON_LAT_RATIO:%lf", &par.dispLonLatRatio));
       else if ((strstr (pLine, "FORBID_ZONE:") != NULL) && (par.nForbidZone < MAX_N_FORBID_ZONE)) {
          pLine = strchr (pLine, ':') + 1;
          g_strstrip (pLine);
@@ -1553,6 +1552,8 @@ bool writeParam (const char *fileName, bool header) {
    if (header) 
       fprintf (f, "Name             Value\n");
    fprintf (f, "WD:              %s\n", par.workingDir);
+   fprintf (f, "POI:             %s\n", par.poiFileName);
+   fprintf (f, "PORT:            %s\n", par.portFileName);
    fprintf (f, "POR:             %.2lf,%.2lf\n", par.pOr.lat, par.pOr.lon);
    fprintf (f, "PDEST:           %.2lf,%.2lf\n", par.pDest.lat, par.pDest.lon);
    if (par.pOrName [0] != '\0')
@@ -1568,8 +1569,6 @@ bool writeParam (const char *fileName, bool header) {
    fprintf (f, "POLAR:           %s\n", par.polarFileName);
    fprintf (f, "WAVE_POL:        %s\n", par.wavePolFileName);
    fprintf (f, "ISSEA:           %s\n", par.isSeaFileName);
-   fprintf (f, "POI:             %s\n", par.poiFileName);
-   fprintf (f, "PORT:            %s\n", par.portFileName);
    fprintf (f, "HELP:            %s\n", par.helpFileName);
    fprintf (f, "CLI_HELP:        %s\n", par.cliHelpFileName);
    for (int i = 0; i < par.nShpFiles; i++)
@@ -1601,6 +1600,7 @@ bool writeParam (const char *fileName, bool header) {
 
    fprintf (f, "DUMPI:           %s\n", par.dumpIFileName);
    fprintf (f, "DUMPR:           %s\n", par.dumpRFileName);
+   fprintf (f, "PAR_INFO:        %s\n", par.parInfoFileName);
    fprintf (f, "OPT:             %d\n", par.opt);
    fprintf (f, "ISOC_DISP:       %d\n", par.style);
    fprintf (f, "COLOR_DISP:      %d\n", par.showColors);
@@ -1619,7 +1619,6 @@ bool writeParam (const char *fileName, bool header) {
    fprintf (f, "IMAP_SCRIPT:     %s\n", par.imapScript);
    fprintf (f, "EDITOR:          %s\n", par.editor);
    fprintf (f, "SPREADSHEET:     %s\n", par.spreadsheet);
-   fprintf (f, "LON_LAT_RATIO:   %.2lf\n", par.dispLonLatRatio);
    for (int i = 0; i < par.nForbidZone; i++) {
       fprintf (f, "FORBID_ZONE:     ");
       for (int j = 0; j < forbidZones [i].n; j++)

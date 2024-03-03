@@ -271,6 +271,7 @@ typedef struct {
    char cliHelpFileName [MAX_SIZE_FILE_NAME];// text help for cli mode
    char poiFileName [MAX_SIZE_FILE_NAME];    // list of point of interest
    char portFileName [MAX_SIZE_FILE_NAME];   // list of ports
+   char parInfoFileName [MAX_SIZE_FILE_NAME]; // parameter info
    int nShpFiles;                            // number of Shp files
    double startTimeInHours;                  // time of beginning of routing after time0Grib
    Pp pOr;                                   // point of origine
@@ -296,7 +297,6 @@ typedef struct {
    char editor [MAX_SIZE_NAME];              // name of text file editor
    char spreadsheet [MAX_SIZE_NAME];         // name of text file editor
    char mailPw [MAX_SIZE_NAME];              // password for smtp and imap
-   double dispLonLatRatio;                   // for display ratio between deltaLon and deltaLat
    int nForbidZone;                          // number of forbidden zones
    char forbidZone [MAX_N_FORBID_ZONE][MAX_SIZE_LINE]; // array of forbid zones
 } Par;

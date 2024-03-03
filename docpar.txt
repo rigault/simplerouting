@@ -1,0 +1,58 @@
+Name              Comment
+WD:               Working Directory
+POI:              Point of Interests
+PORT:             Point of Interest (ports)
+POR:              Point of Origin
+PDEST:            Point of Destination
+POR_NAME:         Name of Origin Point
+PDEST_NAME:       Name of Destination Point
+CGRIB:            Grib File Name
+CURRENT_GRIB:     Current Grib File Name
+GRIB_RESOLUTION:  Resolution (lat, lon) requested for Grib files
+GRIB_TIME_STEP:   Step requested for Frib Files
+GRIB_TIME_MAX:    Max in hours requested for Grb Files
+POLAR:            Polar File Name
+WAVE_POL:         Wave Polar File Name
+ISSEA:            Is Sea File Name
+HELP:             Help html File Name
+CLI_HELP:         Text Help File Name
+SHP:              Shape File Name
+START_TIME:       Start Time in Hours after befinning of Grib
+T_STEP:           Time Step between Isochrones
+RANGE_COG:        Range COG in degrees for Isochrone Calculation
+COG_STEP:         COG Steps in degress for Isochrone Calculation
+MAX_ISO:          Max number of Isochrones
+VERBOSE:          Deprecated
+PENALTY0:         Penalty in hours for virement de bort. e.g. : 0.1
+PENALTY1:         Penalty in hours for empannage. eg. : 0.1
+MOTOR_S:          Motor Speed if Threshold done
+THRESHOLD:        Threshold (Sail speed thar lauvhe motor)
+EFFICIENCY:       Efficiency. e.g.: 0.9
+CONST_WAVE:       If > 0, Constant waves height in meters
+CONST_WIND_TWS:   If > 0, Constant Wind Speed in Knots
+CONST_WIND_TWD:   If CONST_WIND_TWS > 0, Constant Wind Direction in degrees
+CONST_CURRENT_S:  If > 0, Constant Currenet Speed in Knots
+CONST_CURRENT_D:  If CONST_WIND_TWS > 0, Constant Current Direction in degrees
+DUMPI:            Dump Isochrone Text File Name
+DUMPR:            Dump Route Text File Name
+PAR_INFO:         Parameter Infomation Text File Name
+OPT:              Optimizatin Algorithm
+ISOC_DISP:        Isochrone Display
+COLOR_DISP:       Color Wind Grib Display
+DMS_DISP:         Degree Minutes Second Display 
+WIND_DISP:        Wind Display
+CURRENT_DISP:     Current Display
+WAVE_DISP:        Wave Display
+LEVEL_POI_DISP:   Level of Point of Interest for Display
+MAX_THETA:        Deprecated
+J_FACTOR:         For ForwardOptimization algorithm
+K_FACTOR:         For ForwardOptimization algorithm
+MIN_PT:           Depecated. For ForwardOptimization algorithm
+N_SECTORS:        Number of sectors. For ForwardOptimization algorithm
+SMTP_SCRIPT:      SMTP script Name
+IMAP_TO_SEEN:     Script Name that translate messages to seeen 
+IMAP_SCRIPT:      IMAP script name
+MAIL_PW:          Mail Password (be careful)
+EDITOR:           Editor Name
+SPREADSHEET:      SpreadSheet name (be careful)
+FORBID_ZONE:      Specification of Forbidden Zone

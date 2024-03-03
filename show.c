@@ -49,10 +49,11 @@
 #define ROUTING_TIME_OUT      1000
 #define GRIB_TIME_OUT         2000
 #define READ_GRIB_TIME_OUT    200
-#define MIN_MOVE_FOR_SELECT   50 // minimum move to launch smtp grib request after selection
-#define MIN_POINT_FOR_BEZIER  10 // minimum number of point to select bezier representation
-#define MIN_NAME_SIZE         3  // mimimum poi name length to be considered
-#define K_LON_LAT            (0.71)
+#define MIN_MOVE_FOR_SELECT   50    // minimum move to launch smtp grib request after selection
+#define MIN_POINT_FOR_BEZIER  10    // minimum number of point to select bezier representation
+#define MIN_NAME_SIZE         3     // mimimum poi name length to be considered
+#define K_LON_LAT            (0.71) // lon deformation
+#define LON_LAT_RATIO         2.8   // not that useful
 
 #define CAIRO_SET_SOURCE_RGB_BLACK(cr)             cairo_set_source_rgb (cr,0,0,0)
 #define CAIRO_SET_SOURCE_RGB_WHITE(cr)             cairo_set_source_rgb (cr,1.0,1.0,1.0)
@@ -358,7 +359,7 @@ static void initDispZone () {
    double latCenter = (zone.latMin + zone.latMax) / 2;
    double lonCenter = (zone.lonRight + zone.lonLeft) / 2;
    double deltaLat = MAX (0.1, zone.latMax - latCenter);
-   double deltaLon = deltaLat * par.dispLonLatRatio;
+   double deltaLon = deltaLat * LON_LAT_RATIO;
    dispZone.zoom = 180 / deltaLat;
    // printf ("init zoom: %.2lf\n", dispZone.zoom); 
    dispZone.latMin = zone.latMin;
@@ -373,7 +374,7 @@ static void initDispZone () {
 static void centerDispZone (double lon, double lat) {
    double oldLatCenter = (dispZone.latMin + dispZone.latMax) / 2.0;
    double deltaLat = MAX (0.1, dispZone.latMax - oldLatCenter);
-   double deltaLon = deltaLat * par.dispLonLatRatio;
+   double deltaLon = deltaLat * LON_LAT_RATIO;
    dispZone.zoom = 180 / deltaLat;
    dispZone.latMin = lat - deltaLat;
    dispZone.latMax = lat + deltaLat;
@@ -388,7 +389,7 @@ static void dispZoom (double z) {
    double latCenter = (dispZone.latMin + dispZone.latMax) / 2.0;
    double lonCenter = (dispZone.lonLeft + dispZone.lonRight) / 2.0;
    double deltaLat = MAX (0.1, dispZone.latMax - latCenter);
-   double deltaLon = deltaLat * par.dispLonLatRatio;
+   double deltaLon = deltaLat * LON_LAT_RATIO;
    dispZone.zoom = 180 / deltaLat;
    if ((z < 1.0) && (deltaLat < 0.1)) return; // stop zoom
    if ((z > 1.0) && (deltaLat > 60)) return; // stop zoom
@@ -1262,6 +1263,44 @@ static void statusBarUpdate () {
    gtk_statusbar_push(GTK_STATUSBAR(statusbar), context_id, sStatus);
 }
 
+/*! draw scale, scaleLen is for one degree. Modified if not ad hoc */
+static void drawScale (cairo_t *cr, bool vertical, guint scaleX, guint scaleY, int scaleLen, const char *str) {
+   CAIRO_SET_SOURCE_RGB_RED (cr);
+   cairo_set_line_width (cr, 2.0);
+   int val;
+   if (scaleLen > 200) {
+      scaleLen /= 10;
+      val = 6; 
+   }
+   else val = 60;
+   
+   cairo_move_to (cr, scaleX, scaleY);
+   if (vertical)
+      cairo_line_to (cr, scaleX, scaleY - scaleLen);
+   else cairo_line_to (cr, scaleX + scaleLen, scaleY);
+   cairo_stroke(cr);
+
+   cairo_move_to (cr, scaleX, scaleY + 15);
+   cairo_show_text (cr, g_strdup_printf ("%s: %d miles", str, val));
+   cairo_stroke(cr);
+    
+   if (vertical) {
+      cairo_move_to (cr, scaleX - 10, scaleY);
+      cairo_line_to (cr, scaleX + 10, scaleY);
+      cairo_stroke(cr);
+      cairo_move_to (cr, scaleX + 10, scaleY - scaleLen);
+      cairo_line_to (cr, scaleX - 10, scaleY - scaleLen);
+   }
+   else {
+      cairo_move_to (cr, scaleX, scaleY - 10);
+      cairo_line_to (cr, scaleX, scaleY + 10);
+      cairo_stroke(cr);
+      cairo_move_to (cr, scaleX + scaleLen, scaleY - 10);
+      cairo_line_to (cr, scaleX + scaleLen, scaleY + 10);
+   }
+   cairo_stroke(cr);
+}
+
 /*! draw the main window */
 static gboolean drawGribCallback (GtkWidget *widget, cairo_t *cr, gpointer data) {
    if (widget == NULL) return FALSE;
@@ -1298,34 +1337,10 @@ static gboolean drawGribCallback (GtkWidget *widget, cairo_t *cr, gpointer data)
 
    draw_shp_map (cr);
    
-   // echelle
-   CAIRO_SET_SOURCE_RGB_RED (cr);
-   cairo_set_line_width(cr, 2.0);
-   const int SCALE_XL = 100;
-   const int SCALE_Y = dispZone.yB - 150;
-   int val;
-   int scaleLen = getY (dispZone.latMax - 1) - getY (dispZone.latMax);
-   if (scaleLen > 200) {
-      scaleLen /= 10;
-      val = 6; 
-   }
-   else val = 60;
-   
-   cairo_move_to (cr, SCALE_XL, SCALE_Y);
-   cairo_line_to (cr, SCALE_XL + scaleLen, SCALE_Y);
-   cairo_stroke(cr);
-
-   cairo_move_to (cr, SCALE_XL, SCALE_Y + 30);
-   cairo_show_text (cr, g_strdup_printf("%d miles", val));
-   cairo_stroke(cr);
-    
-   cairo_move_to (cr, SCALE_XL, SCALE_Y - 10);
-   cairo_line_to (cr, SCALE_XL, SCALE_Y + 10);
-   cairo_stroke(cr);
-
-   cairo_move_to (cr, SCALE_XL + scaleLen, SCALE_Y - 10);
-   cairo_line_to (cr, SCALE_XL + scaleLen, SCALE_Y + 10);
-   cairo_stroke(cr);
+   drawScale (cr, true, 100, dispZone.yB - 500, (getY (dispZone.latMax - 1) - getY (dispZone.latMax)), "Lat"); // Lat vertical 
+   drawScale (cr, false, 100, dispZone.yB - 150, 
+      (getX (dispZone.lonRight) - getX (dispZone.lonRight - 1)) / MAX (0.1, cos (DEG_TO_RAD * (dispZone.latMax + dispZone.latMin)/2)), 
+      "Lon");   // Lon horizontal
 
    // Quelques meridiens
    CAIRO_SET_SOURCE_RGB_LIGHT_GRAY (cr);
@@ -2423,6 +2438,12 @@ static void parDump (GtkWidget *widget, gpointer data) {
    char str [MAX_SIZE_LINE];
    writeParam (buildRootName (TEMP_FILE_NAME, str), true);
    displayFile (buildRootName (TEMP_FILE_NAME, str), "Parameter Dump");
+}
+
+/*! show parameters information */
+static void parInfo (GtkWidget *widget, gpointer data) {
+   char str [MAX_SIZE_LINE];
+   displayFile (buildRootName (par.parInfoFileName, str), "Parameter Info");
 }
 
 /*! edit poi or port */
@@ -4488,12 +4509,14 @@ static void windowSettings () {
    GtkWidget *scenario_item_get = mySubMenu ("Show", "document-open-symbolic");
    GtkWidget *scenario_item_save = mySubMenu ("Save", "media-floppy-symbolic");
    GtkWidget *scenario_item_edit = mySubMenu ("Edit", "document-edit-symbolic");
+   GtkWidget *scenario_item_info = mySubMenu ("Info Parameters", "document-properties-symbolic");
    
    gtk_menu_shell_append(GTK_MENU_SHELL(scenario_menu), scenario_item_open);
    gtk_menu_shell_append(GTK_MENU_SHELL(scenario_menu), scenario_item_change);
    gtk_menu_shell_append(GTK_MENU_SHELL(scenario_menu), scenario_item_get);
    gtk_menu_shell_append(GTK_MENU_SHELL(scenario_menu), scenario_item_save);
    gtk_menu_shell_append(GTK_MENU_SHELL(scenario_menu), scenario_item_edit);
+   gtk_menu_shell_append(GTK_MENU_SHELL(scenario_menu), scenario_item_info);
 
    // Ajout d'éléments dans le menu dump "Display"
    GtkWidget *dump_item_isoc = gtk_menu_item_new_with_label("Isochrones");
@@ -4550,6 +4573,7 @@ static void windowSettings () {
    g_signal_connect(G_OBJECT(scenario_item_get), "activate", G_CALLBACK(parDump), NULL);
    g_signal_connect(G_OBJECT(scenario_item_save), "activate", G_CALLBACK(saveScenario), NULL);
    g_signal_connect(G_OBJECT(scenario_item_edit), "activate", G_CALLBACK(editScenario), NULL);
+   g_signal_connect(G_OBJECT(scenario_item_info), "activate", G_CALLBACK(parInfo), NULL);
    g_signal_connect(G_OBJECT(dump_item_isoc), "activate", G_CALLBACK(isocDump), NULL);
    g_signal_connect(G_OBJECT(dump_item_desc_isoc), "activate", G_CALLBACK(isocDescDump), NULL);
    g_signal_connect(G_OBJECT(dump_item_ortho), "activate", G_CALLBACK(orthoDump), NULL);
