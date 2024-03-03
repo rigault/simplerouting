@@ -486,7 +486,7 @@ int readPoi (const char *fileName) {
          }
       }
       i += 1;
-      if (i > MAX_N_POI) {
+      if (i >= MAX_N_POI) {
          fprintf (stderr, "In readPoi, exceed MAX_N_POI : %d\n", i);
 	      fclose (f);
          return 0;
@@ -537,6 +537,20 @@ int findPoiByName (const char *name, double *lat, double *lon) {
    }
    return -1;
 }
+
+/*! printf poi table into a string 
+static void poiPrint () {
+   char strLat [MAX_SIZE_LINE] = "";
+   char strLon [MAX_SIZE_LINE] = "";
+   printf ("Lat          Lon         type   level   Name\n");
+   for (int i = 0; i < nPoi; i++) {
+      if ((tPoi [i].type != UNVISIBLE) && (tPoi [i].type != PORT)) {
+         printf ("%-12s %-12s %d %d %s\n", latToStr (tPoi[i].lat, par.dispDms, strLat), \
+            lonToStr (tPoi[i].lon, par.dispDms, strLon), tPoi [i].type, tPoi [i].level, tPoi[i].name);
+      }
+   }
+   printf ("\nNumber of Points Of Interest: %d\n", nPoi);
+} */
 
 /*! translate poi table into a string */
 char *poiToStr (char *str) {
@@ -1391,8 +1405,9 @@ bool readParam (const char *fileName) {
    par.efficiency = 1;
    par.kFactor = 20;
    par.minPt = 2;
-   route.n = 0;
    par.dispLonLatRatio  = 2.8;
+   route.n = 0;
+   nPoi = 0;
    while (fgets (pLine, MAX_SIZE_BUFFER, f) != NULL ) {
       str [0] = '\0';
       while (isspace (*pLine)) pLine++;

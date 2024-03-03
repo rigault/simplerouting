@@ -78,8 +78,8 @@ const double tTws [] = {0.0, 15.0, 20.0, 25.0, 30.0, 40.0};
 
 char   parameterFileName [MAX_SIZE_NAME];
 guint  context_id;                // for statusBar
-int    selectedPol = 0;             // select polar to draw. 0 = all
-double selectedTws = 0;          // selected TWS for polar draw
+int    selectedPol = 0;           // select polar to draw. 0 = all
+double selectedTws = 0;           // selected TWS for polar draw
 guint  gribMailTimeout;
 guint  routingTimeout;
 guint  gribReadTimeout;
@@ -142,11 +142,18 @@ struct {
 
 static void meteogram ();
 
+/*! destroy spînner window */
+static void stopSpinner (GtkComboBox *widget, gpointer user_data) {
+   printf ("destroy spinner\n");
+   chooseDeparture.ret = STOPPED;
+}
+
 /*! draw spinner when waiting for something */
 static void spinner (const char *title, const char* str) {
    spinner_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
    gtk_window_set_title(GTK_WINDOW(spinner_window), title);
    gtk_window_set_default_size(GTK_WINDOW(spinner_window), 300, 100);
+   g_signal_connect(spinner_window, "delete-event", G_CALLBACK(stopSpinner), NULL);
 
    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
    GtkWidget *label = gtk_label_new (str);
@@ -253,7 +260,7 @@ static void displayText (const char *text, const char *title) {
    // Création de la fenêtre principale
    window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
    gtk_window_set_title(GTK_WINDOW(window), title);
-   gtk_window_set_default_size(GTK_WINDOW(window), 850, 400);
+   gtk_window_set_default_size(GTK_WINDOW(window), 750, 400);
    gtk_container_set_border_width(GTK_CONTAINER(window), 10);
 
    // Création de la zone de défilement
@@ -1212,6 +1219,7 @@ static void barbule (cairo_t *cr, Pp pt, double u, double v, double tws, int typ
 
 /*! update status bar */
 static void statusBarUpdate () {
+   if (statusbar == NULL) return;
    char totalDate [MAX_SIZE_DATE]; 
    char *pDate = &totalDate [0];
    char sStatus [MAX_SIZE_BUFFER];
@@ -1289,9 +1297,39 @@ static gboolean drawGribCallback (GtkWidget *widget, cairo_t *cr, gpointer data)
    }
 
    draw_shp_map (cr);
+   
+   // echelle
+   CAIRO_SET_SOURCE_RGB_RED (cr);
+   cairo_set_line_width(cr, 2.0);
+   const int SCALE_XL = 100;
+   const int SCALE_Y = dispZone.yB - 150;
+   int val;
+   int scaleLen = getY (dispZone.latMax - 1) - getY (dispZone.latMax);
+   if (scaleLen > 200) {
+      scaleLen /= 10;
+      val = 6; 
+   }
+   else val = 60;
+   
+   cairo_move_to (cr, SCALE_XL, SCALE_Y);
+   cairo_line_to (cr, SCALE_XL + scaleLen, SCALE_Y);
+   cairo_stroke(cr);
+
+   cairo_move_to (cr, SCALE_XL, SCALE_Y + 30);
+   cairo_show_text (cr, g_strdup_printf("%d miles", val));
+   cairo_stroke(cr);
+    
+   cairo_move_to (cr, SCALE_XL, SCALE_Y - 10);
+   cairo_line_to (cr, SCALE_XL, SCALE_Y + 10);
+   cairo_stroke(cr);
+
+   cairo_move_to (cr, SCALE_XL + scaleLen, SCALE_Y - 10);
+   cairo_line_to (cr, SCALE_XL + scaleLen, SCALE_Y + 10);
+   cairo_stroke(cr);
+
+   // Quelques meridiens
    CAIRO_SET_SOURCE_RGB_LIGHT_GRAY (cr);
    cairo_set_line_width(cr, 0.5);
-   // Quelques meridiens
    for (int intLon = -90; intLon <= 180; intLon += 90) {
       cairo_move_to (cr, getX (intLon), getY (85.0));
       cairo_line_to (cr, getX (intLon), getY (-85.0));
@@ -1303,7 +1341,7 @@ static gboolean drawGribCallback (GtkWidget *widget, cairo_t *cr, gpointer data)
    cairo_stroke(cr);
 
    //printf ("disp.latMin: %.2lf, disp.latMax: %.2lf, disp.lonLeft: %.2lf, disp.lonRight: %.2lf\ndisp.latStep: %.2lf, disp.latStep: %.2lf", dispZone.latMin, dispZone.latMax, dispZone.lonLeft, dispZone.lonRight, dispZone.latStep, dispZone.lonStep); 
-   
+  
    // dessiner les barbules ou fleches de vent
    pt.lat = dispZone.latMin;
    while (pt.lat <= dispZone.latMax) {
@@ -1376,7 +1414,6 @@ static gboolean drawGribCallback (GtkWidget *widget, cairo_t *cr, gpointer data)
       cairo_fill(cr);
    }
    drawForbidArea (cr);
-
    statusBarUpdate ();
    return FALSE;
 }
@@ -1953,7 +1990,7 @@ static gboolean routingCheck (gpointer data) {
    g_source_remove (routingTimeout); // timer stopped
    gtk_widget_destroy (spinner_window);
    if (route.ret == -1) {
-      infoMessage ("Too many points in isochrone", GTK_MESSAGE_ERROR);
+      infoMessage ("Stopped", GTK_MESSAGE_ERROR);
       return TRUE;
    }
    if (! isfinite (route.totDist) || (route.totDist <= 1)) {
@@ -1990,24 +2027,50 @@ static void on_run_button_clicked (GtkWidget *widget, gpointer data) {
 
 /*! check if bestDepartureTime is terminated */
 static gboolean bestDepartureCheck (gpointer data) {
-   if (chooseDeparture.ret == 0) { // not terminated
+   switch (chooseDeparture.ret) {
+   case RUNNING: // not terminated
       gtk_window_set_title(GTK_WINDOW(spinner_window), g_strdup_printf("Evaluation count: %d", chooseDeparture.count));
-      return TRUE;
-   }
-   g_source_remove (routingTimeout); // timer stopped
-   gtk_widget_destroy (spinner_window);
-   if (chooseDeparture.bestTime == -1) {
+      break;;
+   case NO_SOLUTION: 
+      g_source_remove (routingTimeout); // timer stopped
+      if (spinner_window != NULL) gtk_widget_destroy (spinner_window);
       infoMessage ("No solution", GTK_MESSAGE_WARNING);
-   }
-   else {
-      infoMessage (g_strdup_printf("Best Time is %.2lf hours after beginning of Grib", chooseDeparture.bestTime), GTK_MESSAGE_WARNING);
-      par.startTimeInHours = chooseDeparture.bestTime;
+      break;
+   case STOPPED:
+      g_source_remove (routingTimeout); // timer stopped
+      if (spinner_window != NULL) gtk_widget_destroy (spinner_window);
+      infoMessage ("Stopped", GTK_MESSAGE_WARNING);
+      break;
+   case EXIST_SOLUTION:
+      g_source_remove (routingTimeout); // timer stopped
+      if (spinner_window != NULL) gtk_widget_destroy (spinner_window);
+      infoMessage (g_strdup_printf ("Quickest trip lasts %.2lf hours, start time: %d hours after beginning of Grib\nSee simulation Report for details", 
+         chooseDeparture.minDuration, chooseDeparture.bestTime), GTK_MESSAGE_WARNING);
       initStart (start);
-      niceReport (route.calculationTime);
       selectedPointInLastIsochrone = (nIsoc <= 1) ? 0 : isoDesc [nIsoc -1].closest; 
+      niceReport (route.calculationTime);
       gtk_widget_queue_draw (drawing_area);
+      break;
+   default: 
+      fprintf (stderr, "BestDepartureCheck, Error; %d\n", chooseDeparture.ret);
+      break;
    }
    return TRUE;
+}
+
+/*! Callback simulation time step choice */
+static void simulation_time_step_changed (GtkSpinButton *spin_button, gpointer user_data) {
+   chooseDeparture.tStep = gtk_spin_button_get_value_as_int(spin_button);
+}
+
+/*! Callback simulation time mini choice */
+static void simulation_time_mini_changed (GtkSpinButton *spin_button, gpointer user_data) {
+   chooseDeparture.tBegin = gtk_spin_button_get_value_as_int(spin_button);
+}
+
+/*! Callback simulation time maxi choice */
+static void simulation_time_maxi_changed (GtkSpinButton *spin_button, gpointer user_data) {
+   chooseDeparture.tEnd = gtk_spin_button_get_value_as_int(spin_button);
 }
 
 /*! launch all routing in ordor to choose best departure time */
@@ -2020,10 +2083,56 @@ static void on_choose_departure_button_clicked (GtkWidget *widget, gpointer data
      infoMessage ("Destination point not in wind zone", GTK_MESSAGE_WARNING);
      return;
    }
-   chooseDeparture.ret = 0;             // mean not terminated
-   g_thread_new("chooseDepartureLaunch", bestTimeDeparture, NULL); // launch routing
-   routingTimeout = g_timeout_add (ROUTING_TIME_OUT, bestDepartureCheck, NULL);
-   spinner ("Evaluate Final Set", "It can take a while !!! ");
+   chooseDeparture.tStep = 1;
+   chooseDeparture.tBegin = 0;
+   chooseDeparture.tEnd = zone.timeStamp [zone.nTimeStamp - 1];
+   
+   // Création de la boîte de dialogue ATT Global variable
+   GtkWidget *dialog = gtk_dialog_new_with_buttons ("Simulation", \
+      GTK_WINDOW(window), GTK_DIALOG_MODAL, "OK", GTK_RESPONSE_OK, "Cancel", GTK_RESPONSE_CANCEL, NULL);
+
+    // Récupération de la zone de contenu de la boîte de dialogue
+   gtk_widget_set_size_request(dialog, 400, -1);
+   GtkWidget *content_area = gtk_dialog_get_content_area (GTK_DIALOG(dialog));
+
+   GtkWidget *grid = gtk_grid_new();   
+   gtk_container_add(GTK_CONTAINER(content_area), grid);
+   gtk_grid_set_column_spacing(GTK_GRID(grid), 10);
+   gtk_grid_set_row_spacing(GTK_GRID(grid), 5);
+   
+   GtkWidget *label_time_step = gtk_label_new("Time Step");
+   GtkWidget *spin_button_time_step = gtk_spin_button_new_with_range (1, 12, 1);
+   gtk_spin_button_set_value (GTK_SPIN_BUTTON (spin_button_time_step), chooseDeparture.tStep);
+   g_signal_connect (spin_button_time_step, "value-changed", G_CALLBACK(simulation_time_step_changed), NULL);
+   gtk_label_set_xalign(GTK_LABEL (label_time_step), 0);
+   gtk_grid_attach(GTK_GRID (grid), label_time_step,       0, 0, 1, 1);
+   gtk_grid_attach(GTK_GRID (grid), spin_button_time_step, 1, 0, 1, 1);
+   
+   GtkWidget *label_mini = gtk_label_new("Min Start After Grib");
+   GtkWidget *spin_button_mini = gtk_spin_button_new_with_range (0, zone.timeStamp [zone.nTimeStamp - 1], 1);
+   gtk_spin_button_set_value (GTK_SPIN_BUTTON (spin_button_mini), chooseDeparture.tBegin);
+   g_signal_connect (spin_button_mini, "value-changed", G_CALLBACK(simulation_time_mini_changed), NULL);
+   gtk_label_set_xalign(GTK_LABEL (label_mini), 0);
+   gtk_grid_attach(GTK_GRID (grid), label_mini,       0, 1, 1, 1);
+   gtk_grid_attach(GTK_GRID (grid), spin_button_mini, 1, 1, 1, 1);
+   
+   GtkWidget *label_maxi = gtk_label_new("Max Start After Grib");
+   GtkWidget *spin_button_maxi = gtk_spin_button_new_with_range (1, zone.timeStamp [zone.nTimeStamp - 1], 1);
+   gtk_spin_button_set_value (GTK_SPIN_BUTTON (spin_button_maxi), chooseDeparture.tEnd);
+   g_signal_connect (spin_button_maxi, "value-changed", G_CALLBACK(simulation_time_maxi_changed), NULL);
+   gtk_label_set_xalign(GTK_LABEL (label_maxi), 0);
+   gtk_grid_attach(GTK_GRID (grid), label_maxi,       0, 2, 1, 1);
+   gtk_grid_attach(GTK_GRID (grid), spin_button_maxi, 1, 2, 1, 1);
+   
+   gtk_widget_show_all(dialog);
+   int result = gtk_dialog_run(GTK_DIALOG(dialog));
+   gtk_widget_destroy(dialog);
+   if (result == GTK_RESPONSE_OK) {
+      chooseDeparture.ret = RUNNING;             // mean not terminated
+      g_thread_new("chooseDepartureLaunch", bestTimeDeparture, NULL); // launch routing
+      routingTimeout = g_timeout_add (ROUTING_TIME_OUT, bestDepartureCheck, NULL);
+      spinner ("Simulation Running", "It can take a while !!! ");
+   }
 }
 
 /*! Callback for stop button */
@@ -2183,13 +2292,110 @@ static void poiDump (GtkWidget *widget, gpointer data) {
    gtk_widget_destroy (dialog);
 }
 
-/*! print the report of route calculation */
+/*! display the report of route calculation */
 static void rteReport (GtkWidget *widget, gpointer data) {
    if (route.n <= 0)
       infoMessage ("No route calculated", GTK_MESSAGE_INFO);
    else {
       niceReport (0);
    }
+}
+
+/*! Draw simulation */
+static void on_simulation (GtkWidget *widget, cairo_t *cr, gpointer user_data) {
+   int width, height, x, y;
+   gtk_window_get_size (GTK_WINDOW(gtk_widget_get_toplevel(widget)), &width, &height);
+   cairo_set_line_width (cr, 1);
+   
+   const int X_LEFT = 30;
+   const int X_RIGHT = width - 20;
+   const int Y_TOP = 10;
+   const int Y_BOTTOM = height - 25;
+   const int XK = (X_RIGHT - X_LEFT) / (chooseDeparture.tStop -chooseDeparture.tBegin);  
+   const int YK = (Y_BOTTOM - Y_TOP) / (int) chooseDeparture.maxDuration;
+   const int DELTA = 5;
+   const int RECTANGLE_WIDTH = CLAMP (XK, 1, 20); // between 1 and 20
+
+   // printf ("XK:%d, RECTANGLE_WIDTH:%d\n", XK, RECTANGLE_WIDTH);
+   // Dessiner la ligne horizontale avec fleches
+   CAIRO_SET_SOURCE_RGB_BLACK(cr);
+   cairo_move_to (cr, X_LEFT,  Y_BOTTOM );
+   cairo_line_to (cr, X_RIGHT, Y_BOTTOM);
+   cairo_line_to (cr, X_RIGHT - DELTA, Y_BOTTOM + DELTA); // for arrow
+   cairo_stroke (cr);
+   cairo_move_to (cr, X_RIGHT, Y_BOTTOM );
+   cairo_line_to (cr, X_RIGHT - DELTA, Y_BOTTOM - DELTA);
+   cairo_stroke (cr);
+   
+   // Dessiner la ligne verticale avec fleches
+   cairo_move_to (cr, X_LEFT, Y_BOTTOM);
+   cairo_line_to (cr, X_LEFT, Y_TOP);
+   cairo_line_to (cr, X_LEFT - DELTA, Y_TOP + DELTA);
+   cairo_stroke (cr);
+   cairo_move_to (cr, X_LEFT, Y_TOP);
+   cairo_line_to (cr, X_LEFT + DELTA, Y_TOP + DELTA);
+   cairo_stroke (cr);
+   int h; 
+   CAIRO_SET_SOURCE_RGB_GRAY(cr);
+   for (int t = chooseDeparture.tBegin; t < chooseDeparture.tStop; t += chooseDeparture.tStep) {
+      if (t != chooseDeparture.bestTime) {
+         h = (int) chooseDeparture.t [t] * YK;
+         cairo_rectangle (cr, X_LEFT + t * XK, Y_BOTTOM - h, RECTANGLE_WIDTH, h);
+      }
+   }
+   cairo_fill (cr);
+   CAIRO_SET_SOURCE_RGB_GREEN(cr);
+   h = (int) chooseDeparture.t [chooseDeparture.bestTime] * YK;
+   cairo_rectangle (cr, X_LEFT + chooseDeparture.bestTime * XK, Y_BOTTOM - h, RECTANGLE_WIDTH, h);
+   cairo_fill (cr);
+
+   CAIRO_SET_SOURCE_RGB_BLACK(cr);
+   // Dessiner les libelles temps
+   cairo_select_font_face (cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
+   cairo_set_font_size (cr, 10);
+
+   const int displayStep = MAX (1, (chooseDeparture.tStop - chooseDeparture.tBegin) / 20);
+   
+   for (int t = chooseDeparture.tBegin; t < chooseDeparture.tStop; t += displayStep) {
+      x = X_LEFT + (RECTANGLE_WIDTH/2) + XK * t;
+      cairo_move_to (cr, x, Y_BOTTOM + 10);
+      cairo_show_text (cr, g_strdup_printf("%d", t));
+   }
+   cairo_stroke(cr);
+
+   // libelles duration;
+   const int durationStep = (int) (chooseDeparture.maxDuration) / 10;
+   for (int duration = 0; duration < chooseDeparture.maxDuration ; duration += durationStep) {
+      y = Y_BOTTOM - duration * YK;
+      cairo_move_to (cr, X_LEFT - 20, y);
+      cairo_show_text (cr, g_strdup_printf("%2d", duration));
+      CAIRO_SET_SOURCE_RGB_ULTRA_LIGHT_GRAY(cr); // lignes horizontales
+      cairo_move_to (cr, X_LEFT, y);
+      cairo_line_to (cr, X_RIGHT, y);
+      cairo_stroke (cr);
+      CAIRO_SET_SOURCE_RGB_BLACK(cr);
+   }
+   cairo_stroke(cr);
+}
+
+/*! display the report of simulation for best time departure */
+static void simulationReport (GtkWidget *widget, gpointer data) { 
+   char line [MAX_SIZE_LINE];
+   if (chooseDeparture.ret != EXIST_SOLUTION) {
+      infoMessage ("No simulation available", GTK_MESSAGE_INFO);
+      return;
+   }
+   sprintf (line, "Simulation Report. Min Duration: %.2lf hours, Best Departure Time:  %d hours after beginning of Grib", 
+      chooseDeparture.minDuration, chooseDeparture.bestTime);
+   GtkWidget *dialog = gtk_dialog_new_with_buttons (line, NULL, GTK_DIALOG_DESTROY_WITH_PARENT,
+       NULL, NULL, NULL, NULL, NULL);
+
+   gtk_widget_set_size_request(dialog, 1200, 400);
+   GtkWidget *simulation_drawing_area = gtk_dialog_get_content_area (GTK_DIALOG(dialog));
+   g_signal_connect(G_OBJECT(simulation_drawing_area), "draw", G_CALLBACK(on_simulation), NULL);
+   gtk_widget_show_all (dialog);
+   gtk_dialog_run (GTK_DIALOG (dialog));
+   gtk_widget_destroy (dialog);
 }
 
 /*! print the route from origin to destination or best point */
@@ -3292,7 +3498,7 @@ static void change (GtkWidget *widget, gpointer data) {
    gtk_grid_attach(GTK_GRID(tab_tec), spin_max_iso,      3, 4, 1, 1);
 
    // Création des éléments pour minPt et Isoc
-   labelCreate (tab_tec, "minPt/sector",                         0, 5);
+   labelCreate (tab_tec, "Unused/sector",                         0, 5);
    
    GtkListStore *liststore = gtk_list_store_new(2, G_TYPE_STRING, G_TYPE_INT);
    // Ajouter des éléments à la liste
@@ -3863,6 +4069,8 @@ static gboolean on_toolbar_key_press(GtkWidget *widget, GdkEventKey *event, gpoi
 /*! Translate screen on key arrow pressed */
 static gboolean on_key_press(GtkWidget *widget, GdkEventKey *event, gpointer user_data) {
    switch (event->keyval) {
+   case GDK_KEY_Escape:
+      exit (EXIT_SUCCESS); // exit if ESC key pressed
    case GDK_KEY_Up:
 	   dispTranslate (1.0, 0);
       break;
@@ -4294,6 +4502,7 @@ static void windowSettings () {
    GtkWidget *report_item_ortho = gtk_menu_item_new_with_label("Ortho and Loxo Report");
    GtkWidget *dump_item_rte = gtk_menu_item_new_with_label("Sail Route");
    GtkWidget *report_item_rte = gtk_menu_item_new_with_label("Sail Report");
+   GtkWidget *simulation_report_item = gtk_menu_item_new_with_label("Simulation Report");
    GtkWidget *dump_item_gps = gtk_menu_item_new_with_label("GPS");
 
    gtk_menu_shell_append(GTK_MENU_SHELL(dump_menu), dump_item_isoc);
@@ -4302,6 +4511,7 @@ static void windowSettings () {
    gtk_menu_shell_append(GTK_MENU_SHELL(dump_menu), report_item_ortho);
    gtk_menu_shell_append(GTK_MENU_SHELL(dump_menu), dump_item_rte);
    gtk_menu_shell_append(GTK_MENU_SHELL(dump_menu), report_item_rte);
+   gtk_menu_shell_append(GTK_MENU_SHELL(dump_menu), simulation_report_item);
    gtk_menu_shell_append(GTK_MENU_SHELL(dump_menu), dump_item_gps);
 
    // Ajout d'éléments dans le menu "Poi"
@@ -4346,6 +4556,7 @@ static void windowSettings () {
    g_signal_connect(G_OBJECT(report_item_ortho), "activate", G_CALLBACK(niceWayPointReport), NULL);
    g_signal_connect(G_OBJECT(dump_item_rte), "activate", G_CALLBACK(rteDump), NULL);
    g_signal_connect(G_OBJECT(report_item_rte), "activate", G_CALLBACK(rteReport), NULL);
+   g_signal_connect(G_OBJECT(simulation_report_item), "activate", G_CALLBACK(simulationReport), NULL);
    g_signal_connect(G_OBJECT(dump_item_gps), "activate", G_CALLBACK(gpsDump), NULL);
    g_signal_connect(G_OBJECT(poi_item_dump), "activate", G_CALLBACK(poiDump), NULL);
    g_signal_connect(G_OBJECT(poi_item_save), "activate", G_CALLBACK(poiSave), NULL);
@@ -4511,7 +4722,6 @@ static void windowSettings () {
 /*! Display main menu and make initializations */
 int main (int argc, char *argv[]) {
    char fileName [MAX_SIZE_FILE_NAME];
-   // char buffer [MAX_SIZE_BUFFER];
    bool ret = true;
    // initialisations
    my_gps_data.ret = initGPS ();

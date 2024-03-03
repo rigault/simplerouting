@@ -49,7 +49,7 @@
 #define MAX_SIZE_FILE_NAME    128               // max size of pLine in text files
 #define MAX_SIZE_DIR_NAME     192               // max size of directory name
 #define MAX_N_SHP_FILES       4                 // max number of shape file
-#define MAX_N_POI             15000             // max number of poi in poi file
+#define MAX_N_POI             4096              // max number of poi in poi file
 #define MAX_SIZE_POI_NAME     32                // max size of city name
 #define GPSD_TCP_PORT         "2947"            // TCP port for gps demon
 #define MAX_SIZE_FORBID_ZONE  100               // max size per forbidden zone
@@ -66,6 +66,7 @@ enum {NO_COLOR, B_W, COLOR};                    // wind representation
 enum {NONE, ARROW, BARBULE};                    // wind representation 
 enum {NOTHING, POINT, SEGMENT, BEZIER};         // bezier or segment representation
 enum {UNVISIBLE, NORMAL, CAT, PORT, NEW};       // for POI point of interest
+enum {RUNNING, STOPPED, NO_SOLUTION, EXIST_SOLUTION}; // for chooseDeparture.ret values
 
 /*! for meteo services */
 enum {SAILDOCS_GFS, SAILDOCS_ECMWF, SAILDOCS_ICON, SAILDOCS_ARPEGE, SAILDOCS_AROME, SAILDOCS_CURR, MAILASAIL, GLOBALMARINET}; // grib mail service providers
@@ -94,10 +95,14 @@ typedef struct {
 typedef struct {
    int ret;
    int count;
-   double beginT;
-   double endT;
-   double stepT;
-   double bestTime;
+   int tBegin;
+   int tEnd;
+   int tStep;
+   int tStop;
+   double t [MAX_N_TIME_STAMPS];
+   double minDuration;
+   double maxDuration;
+   int bestTime;
 } ChooseDeparture;
 
 /*! My date */
