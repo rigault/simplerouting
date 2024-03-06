@@ -36,7 +36,7 @@ void optionManage (char option) {
       printf ("grib print...\n");
       printGrib (zone, tGribData [WIND]);
       printf ("\n\n Following lines are suspects info...\n");
-      checkGribToStr (buffer, zone, tGribData [WIND]);
+      checkGribToStr (buffer);
       printf ("%s\n", buffer);
       break;
    case 'G': // grib
@@ -47,7 +47,7 @@ void optionManage (char option) {
       printf ("grib print...\n");
       printGrib (currentZone, tGribData [CURRENT]);
       printf ("\n\n Following lines are suspects info...\n");
-      checkGribToStr (buffer, currentZone, tGribData [CURRENT]);
+      checkGribToStr (buffer);
       printf ("%s\n", buffer);
       break;
    case 'h': // help

@@ -52,14 +52,14 @@ PolMat wavePolMat;
 Par par;
 
 /*! geographic zone covered by grib file */
-Zone zone = {false, 0, 0, 0, 0, 0, 90.0, 0.0, 359.99, 0.0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, {0}, {0}, {0}};          // wind
-Zone currentZone = {false, 0, 0, 0, 0, 0, 90.0, 0.0, 359.99, 0.0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL,  {0}, {0}, {0}};   // current
+Zone zone;                       // wind
+Zone currentZone;                // current
 
 /*! table describing if sea or earth */
 char *tIsSea = NULL; 
 
 /*! grib data description */
-FlowP *tGribData []= {NULL, NULL};//wind, current
+FlowP *tGribData []= {NULL, NULL};  //wind, current
 
 /*! poi sata strutures */ 
 Poi tPoi [MAX_N_POI];
@@ -597,7 +597,7 @@ bool readIsSea (const char *fileName) {
 } 
 
 /*! reinit zone decribing geographic meta data */
-void initConst (Zone *zone) {
+void initZone (Zone *zone) {
    zone->latMin = -85;
    zone->latMax = 85;
    zone->lonRight = -179;
@@ -623,9 +623,12 @@ time_t dateToTime_t (long date) {
 
 /*! return difference in hours between two zones (current zone and Wind zone) */
 double zoneTimeDiff (Zone zone1, Zone zone0) {
-   time_t time1 = dateToTime_t (zone1.dataDate [0]) + 3600 * (zone1.dataTime [0] / 100);
-   time_t time0 = dateToTime_t (zone0.dataDate [0]) + 3600 * (zone0.dataTime [0] /100);   // add seconds
-   return (time1 - time0) / 3600;
+   if (zone1.wellDefined && zone0.wellDefined) {
+      time_t time1 = dateToTime_t (zone1.dataDate [0]) + 3600 * (zone1.dataTime [0] / 100);
+      time_t time0 = dateToTime_t (zone0.dataDate [0]) + 3600 * (zone0.dataTime [0] /100);   // add seconds
+      return (time1 - time0) / 3600.0;
+   }
+   else return 0;
 } 
 
 /*! return number of second between beginning of grib to now */
@@ -656,91 +659,210 @@ void printGrib (Zone zone, FlowP *gribData) {
    }
 }
 
-/*! check Grib inAformation 
-    return true if something written in buffer */
-bool checkGribToStr (char *buffer, Zone zone, FlowP *gribData) {
-   //double t; 
-   double u, v, lat, lon;
-   int count = 0;
-   int iGrib, n = 0, nSuspect = 0, nLatSuspect = 0, nLonSuspect = 0;
-   int nOutOfRange = 0, nMissing = 0;
-   char str [MAX_SIZE_LINE];
-   long timeStep = zone.timeStamp [1] - zone.timeStamp [0];
-   bool isTimeStepOK = true;
-   strcpy (buffer, "\n");
-   for (size_t i = 0; i < zone.nShortName; i++) {
-      if ((strcmp (zone.shortName [i], "10u") == 0) || (strcmp (zone.shortName [i], "u") == 0)) count += 1;
-      else if ((strcmp (zone.shortName [i], "10v") == 0)  || (strcmp (zone.shortName [i], "v") == 0)) count += 1;
-      else if (strcmp (zone.shortName [i], "ucurr") == 0) count += 1;
-      else if (strcmp (zone.shortName [i], "vcurr") == 0) count += 1;
-   }
-   if (count < 2) {
-      strcpy (buffer, "No consistent info for shortname: 10u 10v ucurr vcurr");
-      return true;
-   }
+/* true if all value seem OK */
+bool checkGrib (Zone *zone, int iFlow, CheckGrib *check) {
+   const int MAX_UV = 100;
+   const int MAX_W = 20;
+   memset (check, 0, sizeof (CheckGrib));
+   for (size_t iGrib = 0; iGrib < zone->nTimeStamp * zone->nbLat * zone->nbLon; iGrib++) {
+      if (tGribData [iFlow] [iGrib].u == MISSING) check->uMissing += 1;
+	   else if (fabs (tGribData [iFlow] [iGrib].u) > MAX_UV) check->uStrange += 1;
+   
+      if (tGribData [iFlow] [iGrib].v == MISSING) check->vMissing += 1;
+	   else if (fabs (tGribData [iFlow] [iGrib].v) > MAX_UV) check->vStrange += 1;
 
-   for (size_t k = 0; k < zone.nTimeStamp; k++) {
-      //t = zone.timeStamp [k];
-      for (int i = 0; i < zone.nbLat; i++) {
-         for (int j = 0; j < zone.nbLon; j++) {
+      if (tGribData [iFlow] [iGrib].w == MISSING) check->wMissing += 1;
+	   else if ((tGribData [iFlow] [iGrib].w > MAX_W) ||  (tGribData [iFlow] [iGrib].w < 0)) check->wStrange += 1;
+
+      if (tGribData [iFlow] [iGrib].g == MISSING) check->gMissing += 1;
+	   else if ((tGribData [iFlow] [iGrib].g > MAX_UV) || (tGribData [iFlow] [iGrib].g < 0)) check->gStrange += 1;
+
+      if ((tGribData [iFlow] [iGrib].lat > zone->latMax) || (tGribData [iFlow] [iGrib].lat < zone->latMin) ||
+         (tGribData [iFlow] [iGrib].lon > zone->lonRight) || (tGribData [iFlow] [iGrib].lon < zone->lonLeft))
+		   check->outZone += 1;
+   }
+   return (check->uMissing == 0) && (check->vMissing == 0) && (check->gMissing == 0) && (check->wMissing == 0) && (check->outZone == 0);
+}
+
+/*! true if (wind) zone and currentZone intersect in geography */
+bool geoIntersectGrib (Zone *zone1, Zone *zone2) {
+	return 
+	  ((zone2->latMin < zone1 -> latMax) &&
+	   (zone2->latMax > zone1 -> latMin) &&
+	   (zone2->lonLeft < zone1 -> lonRight) &&
+	   (zone2->lonRight > zone1 -> lonLeft));
+}
+
+/*! true if (wind) zone and zone 2 intersect in time */
+bool timeIntersectGrib (Zone *zone1, Zone *zone2) {
+	time_t timeMin1 = dateToTime_t (zone1->dataDate [0]) + 3600 * (zone1->dataTime [0] / 100);
+	time_t timeMin2 = dateToTime_t (zone2->dataDate [0]) + 3600 * (zone2->dataTime [0] / 100);
+	time_t timeMax1 = timeMin1 + 3600 * (zone1-> timeStamp [zone1 -> nTimeStamp -1]);
+	time_t timeMax2 = timeMin2 + 3600 * (zone2-> timeStamp [zone2 -> nTimeStamp -1]);
+	
+	return (timeMin2 < timeMax1) && (timeMax2 > timeMin1);
+}
+
+/*! check if time steps are regular */
+bool timeStepRegularGrib (Zone *zone) {
+   long timeStep = zone->timeStamp [1] - zone->timeStamp [0];
+   for (size_t i = 1; i < zone->nTimeStamp - 1; i++) {
+      if ((zone->timeStamp [i] - zone->timeStamp [i-1]) != timeStep) {
+         return false;
+      }
+   }
+   return true;
+}
+
+/*! true if u and v (or uCurr, vCurr) are in zone */
+bool uvPresentGrib (Zone *zone) {
+   bool uPresent = false, vPresent = false;
+   for (size_t i = 0; i < zone->nShortName; i++) {
+      if ((strcmp (zone->shortName [i], "10u") == 0) || (strcmp (zone->shortName [i], "u") == 0) ||
+		   (strcmp (zone->shortName [i], "ucurr") == 0)) 
+		uPresent = true;
+      if ((strcmp (zone->shortName [i], "10v") == 0)  || (strcmp (zone->shortName [i], "v") == 0) || 
+		   (strcmp (zone->shortName [i], "vcurr") == 0)) 
+		vPresent = true;
+   }
+   return uPresent && vPresent;
+}
+
+/*! check lat, lon are consistent with indice 
+	return number of values */
+int consistentGrib (Zone *zone, int iFlow, double epsilon, int *nLatSuspects, int *nLonSuspects) {
+   int n = 0, iGrib;
+   double lat, lon;
+   *nLatSuspects = 0;
+   *nLonSuspects = 0;
+   for (size_t k = 0; k < zone->nTimeStamp; k++) {
+      for (int i = 0; i < zone->nbLat; i++) {
+         for (int j = 0; j < zone->nbLon; j++) {
             n += 1,
-            //iGrib = indexOf ((int) timeStep, lat, lon, zone);
-	         iGrib = (k * zone.nbLat * zone.nbLon) + (i * zone.nbLon) + j;
-            u = gribData [iGrib].u;
-            v = gribData [iGrib].v;
-            lat = zone.latMin + i * zone.latStep;
-            lon = lonCanonize (zone.lonLeft + j * zone.lonStep);
-            if (fabs (lat - gribData [iGrib].lat) > 0.01) {
-               // printf ("CheckGribStr strange: lat: %.2lf gribData lat: %.2lf\n", lat, gribData [iGrib].lat);
-               nLatSuspect += 1;
+	         iGrib = (k * zone->nbLat * zone->nbLon) + (i * zone->nbLon) + j;
+            lat = zone->latMin + i * zone->latStep;
+            lon = lonCanonize (zone->lonLeft + j * zone->lonStep);
+            if (fabs (lat - tGribData [iFlow][iGrib].lat) > epsilon) {
+               *nLatSuspects += 1;
             }
-            // if (fabs (lon - gribData [iGrib].lon) > (zone.lonStep / 2.0)) {
-            if (fabs (lon - gribData [iGrib].lon) > 0.01) {
-               // printf ("CheckGribStr strange: lon: %.2lf gribData lon: %.2lf\n", lon, gribData [iGrib].lon);
-               nLonSuspect += 1;
-            }
-            if (fabs (lat) > 90)
-               nOutOfRange += 1;
-            if (fabs (lon) > 180)
-               nOutOfRange += 1;
-
-            if ((u > 50) || (u < -50) || (v > 50) || (v < -50)) { 
-               nSuspect += 1;
+            if (fabs (lon - tGribData [iFlow][iGrib].lon) > epsilon) {
+               *nLonSuspects += 1;
             }
          }
       }
    }
+   return n;
+}
+
+/*! check Grib information and write report in the buffer
+    return true if something wrong  */
+bool checkGribToStr (char *buffer) {
+   const double LOC_EPSILON = 0.01;
+   CheckGrib sCheck;
+   int nWind = 0, nCurr = 0, nLatSuspects, nLonSuspects;
+   bool OK = true;
+   char str [MAX_SIZE_LINE];
    
-   for (size_t i = 0; i < (zone.nTimeStamp * zone.nbLat * zone.nbLon - 1); i++)
-      if ((gribData [i].u == MISSING) || (gribData [i].v == MISSING))
-         nMissing += 1;
-
-
-   for (size_t i = 1; i < zone.nTimeStamp - 1; i++)
-      if ((zone.timeStamp [i] - zone.timeStamp [i-1]) != timeStep) {
-         isTimeStepOK = false;
-         printf ("timeStep: %ld other timeStep: %ld\n", timeStep, zone.timeStamp [i] - zone.timeStamp [i-1]);
-      }
-      
-   if (n == 0) strcpy (buffer, "no value");
-   else if ((nSuspect >0 ) || (nLatSuspect > 0) || (nLonSuspect > 0) || (nMissing > 0)
-             || (nOutOfRange > 0) || ! isTimeStepOK) {
-      sprintf (str, "n Values        : %10d\n", n);
+   nWind = consistentGrib (&zone, WIND, LOC_EPSILON, &nLatSuspects, &nLonSuspects);
+   if ((nLatSuspects > 0) || (nLonSuspects > 0)) {
+	   OK = false;
+      sprintf (str, "n Wind suspect Lat      : %10d, ratio Lat suspect : %.2lf %% \n", nLatSuspects, 100 * (double)nLatSuspects/(double) (nWind));
       strncat (buffer, str, MAX_SIZE_LINE);
-      sprintf (str, "n suspect Values: %10d, ratio Val suspect: %.2lf %% \n", nSuspect, 100 * (double)nSuspect/(double) (n));
-      strncat (buffer, str, MAX_SIZE_LINE);
-      sprintf (str, "n missing Values: %10d, ratio Missing    : %.2lf %% \n", nMissing, 100 * (double)nMissing/(double) (n));
-      strncat (buffer, str, MAX_SIZE_LINE);
-      sprintf (str, "n suspect Lat   : %10d, ratio Lat suspect: %.2lf %% \n", nLatSuspect, 100 * (double)nLatSuspect/(double) (n));
-      strncat (buffer, str, MAX_SIZE_LINE);
-      sprintf (str, "n suspect Lon   : %10d, ratio Lon suspect: %.2lf %% \n", nLonSuspect, 100 * (double)nLonSuspect/(double) (n));
-      strncat (buffer, str, MAX_SIZE_LINE);
-      sprintf (str, "n out of range  : %d\n", nOutOfRange);
-      strncat (buffer, str, MAX_SIZE_LINE);
-      sprintf (str, "timeStep is     : %ld %s\n", timeStep, (isTimeStepOK) ? "regular" : "NOT REGULAR !!!");
+      sprintf (str, "n Wind suspect Lon      : %10d, ratio Lon suspect : %.2lf %% \n", nLonSuspects, 100 * (double)nLonSuspects/(double) (nWind));
       strncat (buffer, str, MAX_SIZE_LINE);
    }
-   return strlen (buffer) > 2; //because \n anyway
+   sprintf (buffer, "n Wind Values           : %10d\n", nWind); // at least this line
+   
+   nCurr = consistentGrib (&currentZone, CURRENT, LOC_EPSILON, &nLatSuspects, &nLonSuspects);
+   sprintf (str, "n Current Values        : %10d\n", nCurr); // at least this line also 
+   strncat (buffer, str, MAX_SIZE_LINE);
+   
+   if ((nLatSuspects > 0) || (nLonSuspects > 0)) {
+	   OK = false;
+      sprintf (str, "n Current suspect Lat   : %10d, ratio Lat suspect : %.2lf %% \n", nLatSuspects, 100 * (double)nLatSuspects/(double) (nCurr));
+      strncat (buffer, str, MAX_SIZE_LINE);
+      sprintf (str, "n Current suspect Lon   : %10d, ratio Lon suspect : %.2lf %% \n", nLonSuspects, 100 * (double)nLonSuspects/(double) (nCurr));
+      strncat (buffer, str, MAX_SIZE_LINE);
+   }
+   
+   if (!uvPresentGrib (&zone)) { 
+	   OK = false;
+      sprintf (str, "Wind lack u or v\n");
+      strncat (buffer, str, MAX_SIZE_LINE);
+   }
+   
+   if (!uvPresentGrib (&currentZone)) { 
+      OK = false;
+      sprintf (str, "Current lack u v\n");
+      strncat (buffer, str, MAX_SIZE_LINE);
+   }
+
+   if (! timeStepRegularGrib (&zone)) {
+      OK = false;
+	   sprintf (str, "Wind timeStep is NOT REGULAR !!!\n");
+      strncat (buffer, str, MAX_SIZE_LINE);
+   }
+   if (! timeStepRegularGrib (&currentZone)) {
+      OK = false;
+	   sprintf (str, "Current timeStep is NOT REGULAR !!!\n");
+      strncat (buffer, str, MAX_SIZE_LINE);
+   }
+   
+   // check geo intersection between current and wind
+   if (! geoIntersectGrib (&zone, &currentZone)) {
+      OK = false;
+      sprintf (str, "current and wind grib have no common geo\n");
+	   strncat (buffer, str, MAX_SIZE_LINE);
+	  
+   }
+    // check time intersection between current and wind
+   if (! timeIntersectGrib (&zone, &currentZone)) {
+      OK = false;
+	   sprintf (str, "current and wind grib have no common time\n");
+      strncat (buffer, str, MAX_SIZE_LINE);
+   } 
+   
+   // check grib missing or strange values and out of zone for wind
+   if (! checkGrib (&zone, WIND, &sCheck)) {
+      OK = false;
+	   sprintf (str, "u missing Values        : %10d, ratio Missing     : %.2lf %% \n", sCheck.uMissing, 100 * (double)sCheck.uMissing/(double) (nWind));
+      strncat (buffer, str, MAX_SIZE_LINE);
+	   sprintf (str, "v missing Values        : %10d, ratio Missing     : %.2lf %% \n", sCheck.vMissing, 100 * (double)sCheck.vMissing/(double) (nWind));
+      strncat (buffer, str, MAX_SIZE_LINE);
+	   sprintf (str, "w missing Values        : %10d, ratio Missing     : %.2lf %% \n", sCheck.wMissing, 100 * (double)sCheck.wMissing/(double) (nWind));
+      strncat (buffer, str, MAX_SIZE_LINE);
+	   sprintf (str, "g missing Values        : %10d, ratio Missing     : %.2lf %% \n", sCheck.gMissing, 100 * (double)sCheck.gMissing/(double) (nWind));
+      strncat (buffer, str, MAX_SIZE_LINE);
+      
+	   sprintf (str, "u strange Values        : %10d, ratio Missing     : %.2lf %% \n", sCheck.uStrange, 100 * (double)sCheck.uStrange/(double) (nWind));
+      strncat (buffer, str, MAX_SIZE_LINE);
+	   sprintf (str, "v strange Values        : %10d, ratio Missing     : %.2lf %% \n", sCheck.vStrange, 100 * (double)sCheck.vStrange/(double) (nWind));
+      strncat (buffer, str, MAX_SIZE_LINE);
+	   sprintf (str, "w strange Values        : %10d, ratio Missing     : %.2lf %% \n", sCheck.wStrange, 100 * (double)sCheck.wStrange/(double) (nWind));
+      strncat (buffer, str, MAX_SIZE_LINE);
+	   sprintf (str, "g strange Values        : %10d, ratio Missing     : %.2lf %% \n", sCheck.gStrange, 100 * (double)sCheck.gStrange/(double) (nWind));
+      strncat (buffer, str, MAX_SIZE_LINE);
+	  
+	   sprintf (str, "out zone Values         : %10d, ratio Missing     : %.2lf %% \n", sCheck.outZone, 100 * (double)sCheck.outZone/(double) (nWind));
+      strncat (buffer, str, MAX_SIZE_LINE);
+   } 
+   
+   // check grib missing or strange values and out of zone for current
+   if (! checkGrib (&currentZone, CURRENT, &sCheck)) {
+      OK = false;
+	   sprintf (str, "u Current missing Values: %10d, ratio Missing     : %.2lf %% \n", sCheck.uMissing, 100 * (double)sCheck.uMissing/(double) (nCurr));
+      strncat (buffer, str, MAX_SIZE_LINE);
+	   sprintf (str, "v Current missing Values: %10d, ratio Missing     : %.2lf %% \n", sCheck.vMissing, 100 * (double)sCheck.vMissing/(double) (nCurr));
+      strncat (buffer, str, MAX_SIZE_LINE);
+	   sprintf (str, "u Current strange Values: %10d, ratio Missing     : %.2lf %% \n", sCheck.uStrange, 100 * (double)sCheck.uStrange/(double) (nCurr));
+      strncat (buffer, str, MAX_SIZE_LINE); 
+	   sprintf (str, "v Current strange Values: %10d, ratio Missing     : %.2lf %% \n", sCheck.vStrange, 100 * (double)sCheck.vStrange/(double) (nCurr));
+      strncat (buffer, str, MAX_SIZE_LINE);
+	  
+	   sprintf (str, "out current zone Values : %10d, ratio Missing     : %.2lf %% \n", sCheck.outZone, 100 * (double)sCheck.outZone/(double) (nCurr));
+      strncat (buffer, str, MAX_SIZE_LINE);   
+   }
+   return OK;
 }
 
 /*! find iTinf and iTsup in order t : zone.timeStamp [iTInf] <= t <= zone.timeStamp [iTSup] */
@@ -920,6 +1042,46 @@ bool findFlow (Pp p, double t, double *rU, double *rV, double *rG, double *rW, Z
    return true;
 }
 
+/*! use findflow to get wind and waves */
+void findWind (Pp pt, double t, double *u, double *v, double *gust, double *w, double *twd, double *tws ) {
+   if (par.constWindTws != 0) {
+      *twd = par.constWindTwd;
+      *tws = par.constWindTws;
+	   *u = - KN_TO_MS * par.constWindTws * sin (DEG_TO_RAD * par.constWindTwd);
+	   *v = - KN_TO_MS * par.constWindTws * cos (DEG_TO_RAD * par.constWindTwd);
+      *w = 0;
+   }
+   else {
+      findFlow (pt, t, u, v, gust, w, zone, tGribData [WIND]);
+      *twd = fTwd (*u, *v);
+      *tws = fTws (*u, *v);
+   }
+   if (par.constWave != 0) *w = par.constWave;
+}
+
+/*! use findflow to get current */
+void findCurrent (Pp pt, double t, double *uCurr, double *vCurr, double *tcd, double *tcs) {
+   double gust, bidon;
+   *uCurr = 0;
+   *vCurr = 0;
+   *tcd = 0;
+   *tcs = 0;
+   if (par.constCurrentS != 0) {
+      *uCurr = -KN_TO_MS * par.constCurrentS * sin (DEG_TO_RAD * par.constCurrentD);
+      *vCurr = -KN_TO_MS * par.constCurrentS * cos (DEG_TO_RAD * par.constCurrentD);
+      *tcd = par.constCurrentD; // direction
+      *tcs = par.constCurrentS; // speed
+
+   }
+   else {
+      if (t <= currentZone.timeStamp [currentZone.nTimeStamp - 1]) {
+         findFlow (pt, t, uCurr, vCurr, &gust, &bidon, currentZone, tGribData [CURRENT]);
+         *tcd = fTwd (*uCurr, *vCurr);
+         *tcs = fTws (*uCurr, *vCurr);
+      }
+   }
+}
+
 /*! Read lists zone.timeStamp, shortName, zone.dataDate, dataTime before full grib reading */
 static bool readGribLists (const char *fileName, Zone *zone) {
    codes_index* index = NULL;
@@ -1051,16 +1213,13 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
    if (! readGribLists (fileName, zone)) {
       return false;
    }
-   printf ("ATT0\n");
    if (! readGribParameters (fileName, zone)) {
       return false;
    }
-   printf ("ATT1\n");
    if (zone->nShortName < 2) {
       fprintf (stderr, "readGrib ShortName not presents in: %s\n", fileName);
       return false;
    }
-   printf ("ATT2\n");
    if (tGribData [iFlow] != NULL) free (tGribData [iFlow]); 
    if ((tGribData [iFlow] = calloc (sizeof(FlowP),  zone->nTimeStamp * zone->nbLat * zone->nbLon)) == NULL) {
       fprintf (stderr, "readGrib Error, calloc tGribData [iFlow]\n");
@@ -1537,7 +1696,7 @@ bool readParam (const char *fileName) {
    if (par.mailPw [0] != '\0')
       dollarReplace (par.mailPw);
    if (par.maxIso > MAX_N_ISOC) par.maxIso = MAX_N_ISOC;
-   if (par.constWindTws != 0) initConst (&zone);
+   if (par.constWindTws != 0) initZone (&zone);
    fclose (f);
    return true;
 }

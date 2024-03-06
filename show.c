@@ -1139,10 +1139,10 @@ static void arrow (cairo_t *cr, Pp pt, double head_x, double head_y, double u, d
 static void barbule (cairo_t *cr, Pp pt, double u, double v, double tws, int typeFlow) {
    int i, j, k;
    double barb0_x, barb0_y, barb1_x, barb1_y, barb2_x, barb2_y;
-   if (tws == 0 || u <= (MISSING + 1) || v <= (MISSING +1) || fabs (u) > 100 || fabs (v) > 100) {
+   /*if (tws == 0 || u <= (MISSING + 1) || v <= (MISSING +1) || fabs (u) > 100 || fabs (v) > 100) {
       //printf ("In barbule, strange value lat: %.2lf, lon: %.2lf, u: %.2lf, v: %.2lf\n", pt.lat, pt.lon, u, v);
       return;
-   }
+   }*/
    // Calculer les coordonnées de la tête
    double head_x = getX (pt.lon); 
    double head_y = getY (pt.lat); 
@@ -1226,26 +1226,17 @@ static void statusBarUpdate () {
    char sStatus [MAX_SIZE_BUFFER];
    Pp pt;
    memset (&pt, 0, sizeof (Pp));
-   double u = 0, v = 0, g = 0, w = 0, uCurr = 0, vCurr = 0, bidon;
+   double u = 0, v = 0, g = 0, w = 0, uCurr = 0, vCurr = 0, currTwd = 0, currTws = 0;
    char seaEarth [MAX_SIZE_NAME];
    char strLat [MAX_SIZE_NAME] = "", strLon [MAX_SIZE_NAME] = "";
    double tDeltaCurrent = zoneTimeDiff (currentZone, zone);
+   double twd, tws;
    pt.lat = yToLat (whereIsMouse.y);
    pt.lon = xToLon (whereIsMouse.x);
    pt.lon = lonCanonize (pt.lon);
-   if (par.constWindTws != 0) {
-	   u = - KN_TO_MS * par.constWindTws * sin (DEG_TO_RAD * par.constWindTwd);
-	   v = - KN_TO_MS * par.constWindTws * cos (DEG_TO_RAD * par.constWindTwd);
-   }
-	else findFlow (pt, zone.timeStamp [kTime], &u, &v, &g, &w, zone, tGribData [WIND]);
+	findWind (pt, zone.timeStamp [kTime], &u, &v, &g, &w, &twd, &tws);
    strcpy (seaEarth, (isSea (pt.lon, pt.lat)) ? "Authorized" : "Forbidden");
-   if (par.constCurrentS != 0) {
-      uCurr = -KN_TO_MS * par.constCurrentS * sin (DEG_TO_RAD * par.constCurrentD);
-      vCurr = -KN_TO_MS * par.constCurrentS * cos (DEG_TO_RAD * par.constCurrentD);
-   }
-   else {
-	   findFlow (pt, currentZone.timeStamp [kTime] - tDeltaCurrent, &uCurr, &vCurr, &bidon, &bidon, currentZone, tGribData [CURRENT]);
-   }
+	findCurrent (pt, zone.timeStamp [kTime] - tDeltaCurrent, &uCurr, &vCurr, &currTwd, &currTws);
    
    sprintf (sStatus, "%s         %d/%ld      %s %s, %s\
       Wind: %03d° %05.2lf Knots  Gust: %05.2lf Knots  Waves: %05.2lf  Current: %03d° %05.2lf Knots         %s      Zoom: %.2lf       %s      %s",
@@ -1253,8 +1244,8 @@ static void statusBarUpdate () {
       kTime + 1, zone.nTimeStamp, " ",\
       latToStr (pt.lat, par.dispDms, strLat),\
       lonToStr (pt.lon, par.dispDms, strLon),\
-      (int) (fTwd (u,v) + 360) % 360, fTws (u,v), MS_TO_KN * g, w, 
-      (int) (fTwd (uCurr, vCurr) + 360) % 360, fTws (uCurr, vCurr), 
+      (int) (twd + 360) % 360, tws, MS_TO_KN * g, w, 
+      (int) (currTwd + 360) % 360, currTws, 
       seaEarth,
       dispZone.zoom,
       (gribRequestRunning || readGribRet == -1) ? "WAITING GRIB" : "",
@@ -1265,7 +1256,8 @@ static void statusBarUpdate () {
 
 /*! draw scale, scaleLen is for one degree. Modified if not ad hoc */
 static void drawScale (cairo_t *cr, bool vertical, guint scaleX, guint scaleY, int scaleLen, const char *str) {
-   CAIRO_SET_SOURCE_RGB_RED (cr);
+   const int DELTA = 4;
+   CAIRO_SET_SOURCE_RGB_BLACK (cr);
    cairo_set_line_width (cr, 2.0);
    int val;
    if (scaleLen > 200) {
@@ -1285,18 +1277,18 @@ static void drawScale (cairo_t *cr, bool vertical, guint scaleX, guint scaleY, i
    cairo_stroke(cr);
     
    if (vertical) {
-      cairo_move_to (cr, scaleX - 10, scaleY);
-      cairo_line_to (cr, scaleX + 10, scaleY);
+      cairo_move_to (cr, scaleX - DELTA, scaleY);
+      cairo_line_to (cr, scaleX + DELTA, scaleY);
       cairo_stroke(cr);
-      cairo_move_to (cr, scaleX + 10, scaleY - scaleLen);
-      cairo_line_to (cr, scaleX - 10, scaleY - scaleLen);
+      cairo_move_to (cr, scaleX + DELTA, scaleY - scaleLen);
+      cairo_line_to (cr, scaleX - DELTA, scaleY - scaleLen);
    }
    else {
-      cairo_move_to (cr, scaleX, scaleY - 10);
-      cairo_line_to (cr, scaleX, scaleY + 10);
+      cairo_move_to (cr, scaleX, scaleY - DELTA);
+      cairo_line_to (cr, scaleX, scaleY + DELTA);
       cairo_stroke(cr);
-      cairo_move_to (cr, scaleX + scaleLen, scaleY - 10);
-      cairo_line_to (cr, scaleX + scaleLen, scaleY + 10);
+      cairo_move_to (cr, scaleX + scaleLen, scaleY - DELTA);
+      cairo_line_to (cr, scaleX + scaleLen, scaleY + DELTA);
    }
    cairo_stroke(cr);
 }
@@ -1304,7 +1296,7 @@ static void drawScale (cairo_t *cr, bool vertical, guint scaleX, guint scaleY, i
 /*! draw the main window */
 static gboolean drawGribCallback (GtkWidget *widget, cairo_t *cr, gpointer data) {
    if (widget == NULL) return FALSE;
-   double u, v, gust, w, twd, tws, uCurr, vCurr, bidon, head_x, head_y;
+   double u, v, gust, w, twd, tws, uCurr, vCurr, currTwd, currTws, head_x, head_y;
    char str [MAX_SIZE_LINE] = "";
    double tDeltaCurrent = zoneTimeDiff (currentZone, zone);
    Pp pt;
@@ -1364,36 +1356,18 @@ static gboolean drawGribCallback (GtkWidget *widget, cairo_t *cr, gpointer data)
       while (pt.lon <= dispZone.lonRight) {
 	      u = 0; v = 0; w = 0; uCurr = 0; vCurr = 0;
          if (isInZone (pt, zone)) {
-            if (par.constWindTws != 0) {
-	            u = - KN_TO_MS * par.constWindTws * sin (DEG_TO_RAD * par.constWindTwd);
-	            v = - KN_TO_MS * par.constWindTws * cos (DEG_TO_RAD * par.constWindTwd);
-            }
-	         else {
-	            findFlow (pt, theTime, &u, &v, &gust, &w, zone, tGribData [WIND]);
-            }
-            twd = fTwd (u, v);
-            tws = fTws (u, v);
+	         findWind (pt, theTime, &u, &v, &gust, &w, &twd, &tws);
 	         if (par.windDisp == BARBULE) barbule (cr, pt, u, v, tws, WIND);
             else if (par.windDisp == ARROW) {
                head_x = getX (pt.lon); 
                head_y = getY (pt.lat); 
                arrow (cr, pt, head_x, head_y, u, v, twd, tws, WIND);
             }
-            if (par.constWave != 0) w = par.constWave;
             if (par.waveDisp) showWaves (cr, pt, w);
 
             if (par.currentDisp) {
-               if (par.constCurrentS != 0) {
-                  uCurr = -KN_TO_MS * par.constCurrentS * sin (DEG_TO_RAD * par.constCurrentD);
-                  vCurr = -KN_TO_MS * par.constCurrentS * cos (DEG_TO_RAD * par.constCurrentD);
-               }
-               else {
-	               findFlow (pt, theTime - tDeltaCurrent, &uCurr, &vCurr, &bidon, &w, currentZone, tGribData [CURRENT]);
-               }
-               if ((uCurr != 0) || (vCurr !=0)) {
-                  tws = fTws (uCurr, vCurr);
-                  barbule (cr, pt, uCurr, vCurr, tws, CURRENT);
-               }
+	            findCurrent (pt, theTime - tDeltaCurrent, &uCurr, &vCurr, &currTwd, &currTws);
+               barbule (cr, pt, uCurr, vCurr, currTws, CURRENT);
             }
 	      }
          pt.lon += (dispZone.lonStep) / 2;
@@ -1430,6 +1404,7 @@ static gboolean drawGribCallback (GtkWidget *widget, cairo_t *cr, gpointer data)
    }
    drawForbidArea (cr);
    statusBarUpdate ();
+   if (par.verbose) exit (EXIT_SUCCESS); // For endurance testing
    return FALSE;
 }
 
@@ -1864,9 +1839,17 @@ static double getDepartureTimeInHour (MyDate *start) {
 } 
 
 /*! get start date and time for routing. Returns true if OK Response */
-static bool calendar (MyDate *start) {
+static bool fcalendar (MyDate *start) {
+   char str [MAX_SIZE_LINE];
+   guint selected_year, selected_month, selected_day;
+   time_t currentTime = time (NULL);
+   struct tm *gmtTime = gmtime(&currentTime);
+
+   sprintf (str, "%d/%02d/%02d %02d:%02d UTC", gmtTime->tm_year + 1900, gmtTime->tm_mon + 1, 
+      gmtTime->tm_mday, gmtTime->tm_hour, gmtTime->tm_min);
+
    GtkWidget *dialog = gtk_dialog_new_with_buttons("Pick a Date", NULL, 
-     GTK_DIALOG_MODAL, "OK", GTK_RESPONSE_OK, "Cancel", GTK_RESPONSE_CANCEL, NULL);
+     GTK_DIALOG_MODAL, str, GTK_RESPONSE_NONE, "OK", GTK_RESPONSE_OK, "Cancel", GTK_RESPONSE_CANCEL, NULL);
 
    GtkWidget *calendar = gtk_calendar_new();
 
@@ -1894,22 +1877,31 @@ static bool calendar (MyDate *start) {
    gtk_box_pack_start(GTK_BOX(hbox), spinMinutes, FALSE, FALSE, 5);
 
    gtk_container_add(GTK_CONTAINER(content_area), hbox);
-
+   
    gtk_widget_show_all(dialog);
 
    int result = gtk_dialog_run(GTK_DIALOG(dialog));
-
    // Récupérer la date sélectionnée après la fermeture de la boîte de dialogue
-   if (result == GTK_RESPONSE_OK) {
-      guint selected_year, selected_month, selected_day;
+   gmtTime = gmtime(&currentTime);
+   switch (result) {
+   case GTK_RESPONSE_OK:
       gtk_calendar_get_date(GTK_CALENDAR(calendar), &selected_year, &selected_month, &selected_day);
       start -> hour = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(spinHour));
       start -> min = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(spinMinutes));
       start -> year = selected_year;
       start -> mon = selected_month;
       start -> day = selected_day;
-      start -> sec = 0;  
-   } else {
+      start -> sec = 0;
+      break; 
+   case GTK_RESPONSE_NONE:
+      start->day = gmtTime->tm_mday;
+      start->mon = gmtTime->tm_mon;
+      start->year = gmtTime->tm_year + 1900; // tm_year est le nombre d'années depuis 1900
+      start->hour = gmtTime->tm_hour;
+      start->min = gmtTime->tm_min;
+      start->sec = gmtTime->tm_sec;
+      break;
+   default: // cancel
       gtk_widget_destroy(dialog);
       return false;
    }
@@ -2028,8 +2020,9 @@ static void on_run_button_clicked (GtkWidget *widget, gpointer data) {
      return;
    }
    initStart (start);
-   if (!calendar (start)) return;
+   if (!fcalendar (start)) return;
    par.startTimeInHours = getDepartureTimeInHour (start); 
+   printf ("start:%.2lf\n", par.startTimeInHours);
    if ((par.startTimeInHours < 0) || (par.startTimeInHours > zone.timeStamp [zone.nTimeStamp -1])) {
       infoMessage ("start time should be within grib window time !", GTK_MESSAGE_WARNING);
       return;
@@ -2038,6 +2031,7 @@ static void on_run_button_clicked (GtkWidget *widget, gpointer data) {
    g_thread_new("routingLaunch", routingLaunch, NULL); // launch routing
    routingTimeout = g_timeout_add (ROUTING_TIME_OUT, routingCheck, NULL);
    spinner ("Isochrone building", " ");
+   printf ("end on run\n");
 }
 
 /*! check if bestDepartureTime is terminated */
@@ -3046,32 +3040,19 @@ static void gribInfoDisplay (const char *fileName, Zone zone) {
 /*! provides meta information about grib file */
 static void gribInfo (GtkWidget *widget, gpointer data) {
    int *comportement = (int *) data; // either WIND or CURRENT
-   char buffer [MAX_SIZE_BUFFER] = "";
    if (*comportement == WIND) {
       if (zone.nbLat == 0)
          infoMessage ("No wind data grib available", GTK_MESSAGE_ERROR);
-      else {
+      else 
          gribInfoDisplay (par.gribFileName, zone);
-         if ((!zone.wellDefined ) || (zone.nShortName < 2))
-            infoMessage ("No wind data grib check possible", GTK_MESSAGE_WARNING);
-            else {
-               if (checkGribToStr (buffer, zone, tGribData [WIND]))
-                  displayText (buffer, "Grib Wind Check");
-            }
-      }
+      
    }
    else { // current
       if (currentZone.nbLat == 0)
          infoMessage ("No current data grib available", GTK_MESSAGE_ERROR);
-      else {
+      else 
          gribInfoDisplay (par.currentGribFileName, currentZone);
-         if ((!currentZone.wellDefined) || (currentZone.nShortName < 2)) 
-            infoMessage ("No current data grib check possible", GTK_MESSAGE_WARNING);
-         else {
-            if (checkGribToStr (buffer, currentZone, tGribData [CURRENT]))
-               displayText (buffer, "Grib Current Check");
-         }
-      }
+      
    }
 }
 
@@ -3741,7 +3722,7 @@ static void change (GtkWidget *widget, gpointer data) {
       par.constWindTwd = atof (gtk_entry_get_text(GTK_ENTRY(entry_wind_twd)));
       par.constWindTws = atof (gtk_entry_get_text(GTK_ENTRY(entry_wind_tws)));
       if (par.constWindTws != 0)
-	      initConst (&zone);
+	      initZone (&zone);
       par.constCurrentD = atof (gtk_entry_get_text(GTK_ENTRY(entry_current_twd)));
       par.constCurrentS = atof (gtk_entry_get_text(GTK_ENTRY(entry_current_tws)));
       par.penalty0 = atof (gtk_entry_get_text(GTK_ENTRY(entry_penalty0)));
@@ -4089,7 +4070,12 @@ static gboolean on_toolbar_key_press(GtkWidget *widget, GdkEventKey *event, gpoi
 
 /*! Translate screen on key arrow pressed */
 static gboolean on_key_press(GtkWidget *widget, GdkEventKey *event, gpointer user_data) {
+   char buffer [MAX_SIZE_BUFFER];
    switch (event->keyval) {
+   case GDK_KEY_F1:
+      checkGribToStr (buffer);
+      displayText (buffer, "Grib Wind Check");
+      break;
    case GDK_KEY_Escape:
       exit (EXIT_SUCCESS); // exit if ESC key pressed
    case GDK_KEY_Up:
@@ -4115,15 +4101,15 @@ static gboolean on_key_press(GtkWidget *widget, GdkEventKey *event, gpointer use
 static void on_meteogram_event (GtkWidget *widget, cairo_t *cr, gpointer user_data) {
    int width, height, x, y;
    double u, v, g = 0, w, twd, tws, head_x, maxTws = 0, maxG = 0, maxMax = 0, maxWave = 0;
-   double uCurr, vCurr, currTwd, currTws, maxCurrTws = 0, bidon; // current
+   double uCurr, vCurr, currTwd, currTws, maxCurrTws = 0;// current
    long tMax = zone.timeStamp [zone.nTimeStamp -1];
    double tDeltaCurrent = zoneTimeDiff (currentZone, zone);
-   double tDeltaNow = 0; // time between beginning og grib and now in hours
+   double tDeltaNow = 0; // time between beginning of grib and now in hours
    Pp pt;
    memset (&pt, 0, sizeof (Pp));
    char totalDate [MAX_SIZE_DATE], oldDay [MAX_SIZE_DATE] = ""; 
    char *pDate = &totalDate [0], *pOldDay = &oldDay [0];
-   int timeMeteo;
+   int timeMeteo, initTimeMeteo;
    pt.lat = yToLat (whereIsMouse.y);
    pt.lon = xToLon (whereIsMouse.x);
 
@@ -4177,12 +4163,8 @@ static void on_meteogram_event (GtkWidget *widget, cairo_t *cr, gpointer user_da
 
    // find max Tws max gust max waves max current and draw twa arrows
    for (int i = 0; i < tMax; i += 1) {
-      findFlow (pt, i, &u, &v, &g, &w, zone, tGribData [WIND]);
-	   findFlow (pt, i - tDeltaCurrent, &uCurr, &vCurr, &bidon, &bidon, currentZone, tGribData [CURRENT]);
-      tws = fTws (u, v);
-      twd = fTwd (u, v);
-      currTws = fTws (uCurr, vCurr);
-      currTwd = fTwd (uCurr, vCurr);
+      findWind (pt, i, &u, &v, &g, &w, &twd, &tws);
+	   findCurrent (pt, i- tDeltaCurrent, &uCurr, &vCurr, &currTwd, &currTws);
 
       head_x = X_LEFT + XK * i;
       if ((i % (tMax / 24)) == 0) {
@@ -4200,17 +4182,17 @@ static void on_meteogram_event (GtkWidget *widget, cairo_t *cr, gpointer user_da
    // Dessiner les libelles temps et lignes verticales
    cairo_select_font_face (cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
    cairo_set_font_size (cr, 10);
-   
+   CAIRO_SET_SOURCE_RGB_BLACK(cr);
+   initTimeMeteo = zone.dataTime [0]/100; 
    for (int i = 0; i <= tMax; i+= (par.gribTimeMax <= 120) ? 6 : 12) {
       timeMeteo = (zone.dataTime [0]/100) + i;
-      if ((par.gribTimeMax > 240) && (timeMeteo % 24) != 0) continue;
       x = X_LEFT + XK * i;
       cairo_move_to (cr, x, Y_BOTTOM + 10);
       newDate (zone.dataDate [0], timeMeteo, pDate);
-      cairo_show_text (cr, g_strdup_printf("%s", strrchr (pDate, ' ') + 1));
-      if ((timeMeteo % ((par.gribTimeMax <= 240) ? 24 : 48)) == 0) { // only year month day considered
+      cairo_show_text (cr, g_strdup_printf("%s", strrchr (pDate, ' ') + 1)); // hour is after space
+      if ((timeMeteo % ((par.gribTimeMax <= 240) ? 24 : 48)) == initTimeMeteo) { // only year month day considered
          cairo_move_to (cr, x, Y_BOTTOM + 20);
-         pDate [DAY_LG] = '\0'; 
+         pDate [DAY_LG] = '\0'; // date
          cairo_show_text (cr, g_strdup_printf("%s", pDate));
          strcpy (pOldDay, pDate);
          CAIRO_SET_SOURCE_RGB_ULTRA_LIGHT_GRAY(cr);
@@ -4243,8 +4225,7 @@ static void on_meteogram_event (GtkWidget *widget, cairo_t *cr, gpointer user_da
    CAIRO_SET_SOURCE_RGB_BLUE(cr);
    // draw tws 
    for (int i = 0; i < tMax; i += 1) {
-      findFlow (pt, i, &u, &v, &g, &w, zone, tGribData [WIND]);
-      tws = fTws (u,v);
+      findWind (pt, i, &u, &v, &g, &w, &twd, &tws);
       x = X_LEFT + XK * i;
       y = Y_BOTTOM - YK * tws;
       if (i == 0) cairo_move_to (cr, x, y);
@@ -4256,7 +4237,7 @@ static void on_meteogram_event (GtkWidget *widget, cairo_t *cr, gpointer user_da
    if (maxG > 0) { 
       CAIRO_SET_SOURCE_RGB_RED(cr);
       for (int i = 0; i < tMax; i += 1) {
-         findFlow (pt, i, &u, &v, &g, &w, zone, tGribData [WIND]);
+         findWind (pt, i, &u, &v, &g, &w, &twd, &tws);
          x = X_LEFT + XK * i;
          y = Y_BOTTOM - YK * g * MS_TO_KN;
          if (i == 0) cairo_move_to (cr, x, y);
@@ -4269,7 +4250,7 @@ static void on_meteogram_event (GtkWidget *widget, cairo_t *cr, gpointer user_da
    if (maxWave > 0) { 
       CAIRO_SET_SOURCE_RGB_GREEN(cr);
       for (int i = 0; i < tMax; i += 1) {
-         findFlow (pt, i, &u, &v, &g, &w, zone, tGribData [WIND]);
+         findWind (pt, i, &u, &v, &g, &w, &twd, &tws);
          x = X_LEFT + XK * i;
          y = Y_BOTTOM - YK * w;
          if (i == 0) cairo_move_to (cr, x, y);
@@ -4281,8 +4262,7 @@ static void on_meteogram_event (GtkWidget *widget, cairo_t *cr, gpointer user_da
    if (maxCurrTws > 0) {
       CAIRO_SET_SOURCE_RGB_ORANGE(cr);
       for (int i = 0; i < tMax; i += 1) {
-	      findFlow (pt, i - tDeltaCurrent, &uCurr, &vCurr, &bidon, &bidon, currentZone, tGribData [CURRENT]);
-         currTws = fTws (uCurr, vCurr);
+	      findCurrent (pt, i - tDeltaCurrent, &uCurr, &vCurr, &currTwd, &currTws);
          x = X_LEFT + XK * i;
          y = Y_BOTTOM - YK * currTws;
          if (i == 0) cairo_move_to (cr, x, y);
@@ -4313,7 +4293,7 @@ static void meteogram () {
    GtkWidget *dialog = gtk_dialog_new_with_buttons (line, NULL, GTK_DIALOG_DESTROY_WITH_PARENT,
                           NULL, NULL, NULL, NULL, NULL);
 
-   gtk_widget_set_size_request(dialog, 1200, 400);
+   gtk_widget_set_size_request(dialog, 1400, 400);
    GtkWidget *meteogram_drawing_area = gtk_dialog_get_content_area (GTK_DIALOG(dialog));
 
    g_signal_connect(G_OBJECT(meteogram_drawing_area), "draw", G_CALLBACK(on_meteogram_event), NULL);
@@ -4798,7 +4778,7 @@ int main (int argc, char *argv[]) {
    printf ("Spreadsheet    : %s\n", par.spreadsheet); 
    printf ("Working dir    : %s\n", par.workingDir); 
    printf ("nPoi           : %d\n", nPoi);
-   initConst (&zone);
+   initZone (&zone);
    initDispZone ();
    
    if (par.gribFileName [0] == '\0') { // no grib file found in .par file

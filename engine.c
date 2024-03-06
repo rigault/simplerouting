@@ -155,68 +155,39 @@ static inline int optimize (int nIsoc, int algo, Isoc isoList, int isoLen, Isoc 
 /*! build the new list describing the next isochrone, starting from isoList 
   returns length of the newlist built or -1 if error*/
 static int buildNextIsochrone (Isoc isoList, int isoLen, Pp pDest, double t, double dt, Isoc newList, double *bestVmg) {
-   double vMaxSpeedInPolarAt;           // memorise result of last call to maxSpeedinPolarAt
-   int lenNewL = 0;
-   double u, v, gust, w, twa, sog, uCurr, vCurr, bidon;
-   double vDirectCap;
-   int directCog;
-   double dLat, dLon;
-   double penalty;
    Pp newPt;
-   double twd = par.constWindTwd;
-   double tws = par.constWindTws;
    bool motor = false;
-   double efficiency = par.efficiency;
+   int lenNewL = 0, directCog;
+   double u, v, gust, w, twa, sog, uCurr, vCurr, currTwd, currTws, vDirectCap;
+   double dLat, dLon, penalty;
+   double twd = par.constWindTwd, tws = par.constWindTws;
    double waveCorrection = 1.0;
    *bestVmg = 0;
    
    for (int k = 0; k < isoLen; k++) {
-      uCurr = 0; vCurr = 0; w = 0;
-      if (par.constWindTws == 0) {
-         findFlow (isoList [k], t, &u, &v, &gust, &w, zone, tGribData [WIND]);
-         //printf ("u: %.2lf v:%.2lf\n", u, v);
-         twd = fTwd (u, v);
-         tws = fTws (u, v);
-      } 
-      // printf ("twd: %.2lf tws:%.2lf\n", twd, tws);
-      if (par.constWave != 0) w = par.constWave;
-
-      if (par.constCurrentS != 0) {
-         uCurr = -KN_TO_MS * par.constCurrentS * sin (DEG_TO_RAD * par.constCurrentD);
-         vCurr = -KN_TO_MS * par.constCurrentS * cos (DEG_TO_RAD * par.constCurrentD);
-      }
-      else findFlow (isoList [k], t - tDeltaCurrent, &uCurr, &vCurr, &gust, &bidon, currentZone, tGribData [CURRENT]);
+      findWind (isoList [k], t, &u, &v, &gust, &w, &twd, &tws);
+      findCurrent (isoList [k], t - tDeltaCurrent, &uCurr, &vCurr, &currTwd, &currTws);
       vDirectCap = orthoCap (isoList [k].lat, isoList [k].lon, pDest.lat, pDest.lon);
       directCog = ((int)(vDirectCap / par.cogStep)) * par.cogStep;
-      sog = par.motorSpeed;
-      vMaxSpeedInPolarAt = maxSpeedInPolarAt (tws, polMat); // store in global variable for future use
-      motor =  (vMaxSpeedInPolarAt < par.threshold) && (par.motorSpeed > 0);
-      if (motor) {
-         efficiency = 1.0;
-         vMaxSpeedInPolarAt = par.motorSpeed;
-      }
-      //printf ("vMaxSpeedInPolarAt: %.2lf\n", vMaxSpeedInPolarAt); 
+      motor = (maxSpeedInPolarAt (tws, polMat) < par.threshold) && (par.motorSpeed > 0);
+
       for (int cog = (directCog - par.rangeCog); cog < (directCog + par.rangeCog + 1); cog+=par.cogStep) {
          twa = (cog > twd) ? cog - twd : cog - twd + 360;   //angle of the boat with the wind
-         
          if (twa > 360) twa -= 360; 
-         if (! motor) sog = findPolar (twa, tws, polMat); //speed of the boat considering twa and wind speed (tws) in polar
-         else sog = par.motorSpeed;
-         // printf ("twa : %.2lf, tws: %.2lf, sog: %.2lf\n", twa, tws, sog);
-	      // if (sog > 7) printf ("bUilN sog %lf twa %lf twd %lf\n", sog, twa, tws);
+         sog = (motor) ? par.motorSpeed : par.efficiency * findPolar (twa, tws, polMat); //speed of the boat considering twa and wind speed (tws) in polar
          newPt.amure = (cog > twd) ? BABORD : TRIBORD;
          if ((waveCorrection = findPolar (twa, w, wavePolMat)) > 0) {
             sog = sog * (waveCorrection / 100.0);
          }
-            
-         sog *= efficiency;
-         if ((!motor) && (newPt.amure != isoList [k].amure)) {                   // changement amure
-            if ((twa > 90) && (twa < 270)) penalty = par.penalty1;    // empannage
-            else penalty = par.penalty0;                           // virement de bord
+         if ((!motor) && (newPt.amure != isoList [k].amure)) {       // changement amure
+            if (fabs (twa) < 90) penalty = par.penalty0;             // virement de bord
+            else penalty = par.penalty1;                             // empannage
          }
          else penalty = 0;
          dLat = sog * (dt - penalty) * cos (DEG_TO_RAD * cog);            // nautical miles in N S direction
          dLon = sog * (dt - penalty) * sin (DEG_TO_RAD * cog) / cos (DEG_TO_RAD * isoList [k].lat);  // nautical miles in E W direction
+         
+         // printf ("vcurr : %.2lf, vcurr : %.2lf\n", vCurr, uCurr);
          dLat += MS_TO_KN * vCurr * dt;                   // correction for current
          dLon += MS_TO_KN * uCurr * dt / cos (DEG_TO_RAD * isoList [k].lat);
  
@@ -233,8 +204,9 @@ static int buildNextIsochrone (Isoc isoList, int isoLen, Pp pDest, double t, dou
          
             newPt.vmc = orthoDist (newPt.lat, newPt.lon, par.pOr.lat, par.pOr.lon) * cos (DEG_TO_RAD * alpha);
             if (newPt.vmc > *bestVmg) *bestVmg = newPt.vmc;
-            if (lenNewL < MAX_SIZE_ISOC)
+            if (lenNewL < MAX_SIZE_ISOC) {
                newList [lenNewL++] = newPt;                      // new point added to the isochrone
+            }
             else {
                fprintf (stderr, "Routing Error in buildNextIsochrone, limit of MAX_SIZE_ISOC: %d\n", MAX_SIZE_ISOC);
                return -1;
@@ -433,51 +405,27 @@ void routeToStr (SailRoute route, char *str) {
 /*! return true if pDest can be reached from pFrom in less time than dt
    bestTime give the time to get from pFrom to pDest */
 static inline bool goalP (Pp pFrom, Pp pDest, double t, double dt, double *timeTo, double *distance) {
-   double u, v, gust, w, twd, tws, twa, sog, uCurr, vCurr, bidon;
+   double u, v, gust, w, twd, tws, twa, sog;
    double coeffLat = cos (DEG_TO_RAD * (pFrom.lat + pDest.lat)/2);
    double dLat = pDest.lat - pFrom.lat;
    double dLon = pDest.lon - pFrom.lon;
    double cog = RAD_TO_DEG * atan2 (dLon * coeffLat, dLat);
    double penalty;
    bool motor = false;
-   double efficiency;
    double waveCorrection = 1.0;
+   
    *distance = orthoDist (pDest.lat, pDest.lon, pFrom.lat, pFrom.lon);
-   if (par.constWindTws != 0) {
-      twd = par.constWindTwd;
-      tws = par.constWindTws;
-      w = 0;
-   }
-   else {
-      findFlow (pFrom, t, &u, &v, &gust, &w, zone, tGribData [WIND]);
-      twd = fTwd (u, v);
-      tws = fTws (u, v);
-   }
-   if (par.constWave != 0) w = par.constWave;
-
-   if (par.constCurrentS != 0) {
-      uCurr = -KN_TO_MS * par.constCurrentS * sin (DEG_TO_RAD * par.constCurrentD);
-      vCurr = -KN_TO_MS * par.constCurrentS * cos (DEG_TO_RAD * par.constCurrentD);
-   }
-   else findFlow (pFrom, t - tDeltaCurrent, &uCurr, &vCurr, &gust, &bidon, currentZone, tGribData [CURRENT]);
+   findWind (pFrom, t, &u, &v, &gust, &w, &twd, &tws);
+   // findCurrent (pFrom, t - tDeltaCurrent, &uCurr, &vCurr, &currTwd, &currTws);
    // ATTENTION Courant non pris en compte dans la suite !!!
    twa = (cog > twd) ? cog - twd : cog - twd + 360;      // angle of the boat with the wind
    motor =  ((maxSpeedInPolarAt (tws, polMat) < par.threshold) && (par.motorSpeed > 0));
    // printf ("maxSpeedinPolar: %.2lf\n", maxSpeedInPolarAt (tws, polMat));
-   if (motor) {
-      sog = par.motorSpeed;
-      efficiency = 1.0;
-   }
-   else {
-      efficiency = par.efficiency;
-      sog = findPolar (twa, tws, polMat);  //speed of the boat considering twa and wind speed (tws) in polar
-   }
+   sog = (motor) ? par.motorSpeed : par.efficiency * findPolar (twa, tws, polMat);
    if ((waveCorrection = findPolar (twa, w, wavePolMat)) > 0) { 
       sog = sog * (waveCorrection / 100.0);
    }
-   sog *= efficiency;
    *timeTo = *distance/sog;
-   //if ((sog * dt) > distance) printf ("goal sog %lf dt %lf distance %lf\n", sog, dt, distance);
    if ((!motor) && (pDest.amure != pFrom.amure)) {    // changement amure
       if (fabs (twa) < 90) penalty = par.penalty0;    // virement de bord
       else penalty = par.penalty1;                    // empannage Jibe
@@ -499,11 +447,12 @@ static inline bool goal (int nIsoc, Isoc isoList, int len, double t, double dt, 
          if (goalP (isoList [k], par.pDest, t, dt, &time, &distance))
             destinationReached = true;
          // printf ("k, time destinationReached: %d %lf %d\n",  k, time, destinationReached);
-         if (destinationReached)
-            par.pDest.father = isoList [k].id; // ATTENTION !!!!
+         //if (destinationReached)
+         //   par.pDest.father = isoList [k].id; // ATTENTION !!!!
          if (time < bestTime) {
-            if (destinationReached) par.pDest.father = isoList [k].id; // ATTENTION !!!!
             bestTime = time;
+            if (destinationReached) 
+               par.pDest.father = isoList [k].id; // ATTENTION !!!!
          }
          if (distance < isoDesc [nIsoc].distance) {
             isoDesc [nIsoc].distance = distance;
@@ -578,7 +527,9 @@ static int routing (double t, double dt, double *lastStepDuration) {
    isoDesc [0].closest = index; 
    
    nIsoc = 1;
-   while (t < (zone.timeStamp [zone.nTimeStamp-1]/* + par.tStep*/) && (nIsoc < par.maxIso)) {
+   printf ("Routing t = %.2lf, zone: %.2ld", t, zone.timeStamp [zone.nTimeStamp-1]);
+   if (t < zone.timeStamp [zone.nTimeStamp-1]) printf ("Routing 2\n");
+   while (t < (zone.timeStamp [zone.nTimeStamp-1]/* + par.tStep*/) /*&& (nIsoc < par.maxIso)*/) {
       t += dt;
       if (goal (nIsoc-1, isocArray [nIsoc -1], isoDesc[nIsoc - 1].size, t, dt, &timeLastStep)) {
          isoDesc [nIsoc].size = optimize (nIsoc, par.opt, tempList, lTempList, isocArray [nIsoc]);
@@ -644,7 +595,7 @@ void *routingLaunch () {
    return NULL;
 }
 
-/*! choose best time de reach pDest in minimum time */
+/*! choose best time to reach pDest in minimum time */
 void *bestTimeDeparture () {
    int n;
    double lastStep, duration, minDuration = DBL_MAX, maxDuration = 0;
@@ -683,5 +634,4 @@ void *bestTimeDeparture () {
    else chooseDeparture.ret = NO_SOLUTION; // no solution
    return NULL;
 }
-      
 

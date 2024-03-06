@@ -15,9 +15,9 @@
 #define PARAMETERS_FILE       WORKING_DIR"par/routing.par" // default parameter file
 #define TEMP_FILE_NAME        "routing.tmp"  
 #define PROG_LOGO             "routing.png"  
-#define MIN_SPEED_FOR_TARGET  5                // knots. Difficult to explain. See engine.c, optimize()..
-#define MISSING               (-999999)        // for grib file missing values
-//#define MISSING               0              // for grib file missing values
+#define MIN_SPEED_FOR_TARGET  5                 // knots. Difficult to explain. See engine.c, optimize()..
+//#define MISSING               (-999999)       // for grib file missing values
+#define MISSING               (0.001)           // for grib file missing values
 #define MS_TO_KN              (3600.0/1852.0)
 #define KN_TO_MS              (1852.0/3600.0)
 #define RAD_TO_DEG            (180.0/M_PI)
@@ -126,6 +126,19 @@ typedef struct {
    int    nSHPType;
    int    index [MAX_INDEX_ENTITY];
 } Entity;
+
+/*! Check grib structure */
+typedef struct {
+   int uMissing;
+   int vMissing;
+   int gMissing;
+   int wMissing;
+   int uStrange;
+   int vStrange;
+   int gStrange;
+   int wStrange;
+   int outZone;
+} CheckGrib;
 
 /*! Wind point */
 typedef struct {
@@ -295,7 +308,7 @@ typedef struct {
    double threshold;                         // threshold for motor use
    double efficiency;                        // efficiency of team 
    char editor [MAX_SIZE_NAME];              // name of text file editor
-   char spreadsheet [MAX_SIZE_NAME];         // name of text file editor
+   char spreadsheet [MAX_SIZE_NAME];         // name of spreadshhet application
    char mailPw [MAX_SIZE_NAME];              // password for smtp and imap
    int nForbidZone;                          // number of forbidden zones
    char forbidZone [MAX_N_FORBID_ZONE][MAX_SIZE_LINE]; // array of forbid zones
