@@ -152,6 +152,7 @@ typedef struct {
 
 /*! zone description */
 typedef struct {
+   bool   allTimeStepOK;
    bool   wellDefined;
    long   centreId;
    int    nMessage;

@@ -660,7 +660,7 @@ void printGrib (Zone zone, FlowP *gribData) {
 }
 
 /* true if all value seem OK */
-bool checkGrib (Zone *zone, int iFlow, CheckGrib *check) {
+static bool checkGrib (Zone *zone, int iFlow, CheckGrib *check) {
    const int MAX_UV = 100;
    const int MAX_W = 20;
    memset (check, 0, sizeof (CheckGrib));
@@ -685,7 +685,7 @@ bool checkGrib (Zone *zone, int iFlow, CheckGrib *check) {
 }
 
 /*! true if (wind) zone and currentZone intersect in geography */
-bool geoIntersectGrib (Zone *zone1, Zone *zone2) {
+static bool geoIntersectGrib (Zone *zone1, Zone *zone2) {
 	return 
 	  ((zone2->latMin < zone1 -> latMax) &&
 	   (zone2->latMax > zone1 -> latMin) &&
@@ -694,7 +694,7 @@ bool geoIntersectGrib (Zone *zone1, Zone *zone2) {
 }
 
 /*! true if (wind) zone and zone 2 intersect in time */
-bool timeIntersectGrib (Zone *zone1, Zone *zone2) {
+static bool timeIntersectGrib (Zone *zone1, Zone *zone2) {
 	time_t timeMin1 = dateToTime_t (zone1->dataDate [0]) + 3600 * (zone1->dataTime [0] / 100);
 	time_t timeMin2 = dateToTime_t (zone2->dataDate [0]) + 3600 * (zone2->dataTime [0] / 100);
 	time_t timeMax1 = timeMin1 + 3600 * (zone1-> timeStamp [zone1 -> nTimeStamp -1]);
@@ -704,7 +704,7 @@ bool timeIntersectGrib (Zone *zone1, Zone *zone2) {
 }
 
 /*! check if time steps are regular */
-bool timeStepRegularGrib (Zone *zone) {
+static bool timeStepRegularGrib (Zone *zone) {
    if (zone->nTimeStamp  < 2) return true;
    long timeStep = zone->timeStamp [1] - zone->timeStamp [0];
    for (size_t i = 1; i < zone->nTimeStamp - 1; i++) {
@@ -716,7 +716,7 @@ bool timeStepRegularGrib (Zone *zone) {
 }
 
 /*! true if u and v (or uCurr, vCurr) are in zone */
-bool uvPresentGrib (Zone *zone) {
+static bool uvPresentGrib (Zone *zone) {
    bool uPresent = false, vPresent = false;
    for (size_t i = 0; i < zone->nShortName; i++) {
       if ((strcmp (zone->shortName [i], "10u") == 0) || (strcmp (zone->shortName [i], "u") == 0) ||
@@ -731,7 +731,7 @@ bool uvPresentGrib (Zone *zone) {
 
 /*! check lat, lon are consistent with indice 
 	return number of values */
-int consistentGrib (Zone *zone, int iFlow, double epsilon, int *nLatSuspects, int *nLonSuspects) {
+static int consistentGrib (Zone *zone, int iFlow, double epsilon, int *nLatSuspects, int *nLonSuspects) {
    int n = 0, iGrib;
    double lat, lon;
    *nLatSuspects = 0;
@@ -773,9 +773,13 @@ bool checkGribToStr (char *buffer) {
       strncat (buffer, str, MAX_SIZE_LINE);
    }
    sprintf (buffer, "n Wind Values           : %10d\n", nWind); // at least this line
+   sprintf (str, "%s\n", (zone.wellDefined) ? (zone.allTimeStepOK) ? "Wind Zone Well defined" : "All Wind Zone TimeSteps are not defined" : "Wind Zone Undefined");
+   strncat (buffer, str, MAX_SIZE_LINE);
    
    nCurr = consistentGrib (&currentZone, CURRENT, LOC_EPSILON, &nLatSuspects, &nLonSuspects);
    sprintf (str, "n Current Values        : %10d\n", nCurr); // at least this line also 
+   strncat (buffer, str, MAX_SIZE_LINE);
+   sprintf (str, "%s\n", (currentZone.wellDefined) ? (currentZone.allTimeStepOK) ? "Current Well defined" : "All Current TimeSteps are not defined" : "Current Zone Undefined");
    strncat (buffer, str, MAX_SIZE_LINE);
    
    if ((nLatSuspects > 0) || (nLonSuspects > 0)) {
@@ -1203,11 +1207,12 @@ static inline int indexOf (int timeStep, double lat, double lon, Zone zone) {
 bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
    FILE* f = NULL;
    int err = 0, iGrib = 0;
-   long bitmapPresent  = 0, timeStep;
+   long bitmapPresent  = 0, timeStep, oldTimeStep;
    double lat, lon, val, indicatorOfParameter;
    char shortName [MAX_SIZE_SHORT_NAME];
    size_t lenName = MAX_SIZE_SHORT_NAME;
    const long GUST_GFS = 180;
+   long timeInterval = 0;
    
    //memset (zone, 0,  sizeof (Zone));
    zone->wellDefined = false;
@@ -1221,6 +1226,9 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
       fprintf (stderr, "readGrib ShortName not presents in: %s\n", fileName);
       return false;
    }
+   if (zone->nTimeStamp > 1)
+      timeInterval = zone->timeStamp [1] - zone->timeStamp [0]; 
+
    if (tGribData [iFlow] != NULL) free (tGribData [iFlow]); 
    if ((tGribData [iFlow] = calloc (sizeof(FlowP),  zone->nTimeStamp * zone->nbLat * zone->nbLon)) == NULL) {
       fprintf (stderr, "readGrib Error, calloc tGribData [iFlow]\n");
@@ -1237,7 +1245,10 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
        return false;
    }
    zone->nMessage = 0;
- 
+   zone->allTimeStepOK = true;
+   timeStep = zone->timeStamp [0];
+   oldTimeStep = timeStep;
+
    // Loop on all the messages in a file
    while ((h = codes_handle_new_from_file(0, f, PRODUCT_GRIB, &err)) != NULL) {
       if (err != CODES_SUCCESS) CODES_CHECK (err, 0);
@@ -1251,6 +1262,12 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
       lenName = MAX_SIZE_SHORT_NAME;
       CODES_CHECK(codes_get_string(h, "shortName", shortName, &lenName), 0);
       CODES_CHECK(codes_get_long(h, "step", &timeStep), 0);
+
+      // check timeStep progress well 
+      if ((timeStep != 0) && (timeStep != oldTimeStep) && ((timeStep - oldTimeStep) != timeInterval)) // check timeStep progress well 
+         zone->allTimeStepOK = false;
+      oldTimeStep = timeStep;
+
       err = codes_get_double(h, "indicatorOfParameter", &indicatorOfParameter);
       if (err != CODES_SUCCESS) 
          indicatorOfParameter = -1;

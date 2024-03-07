@@ -710,17 +710,17 @@ static void niceWayPointReport () {
    gtk_grid_attach (GTK_GRID (grid), strToLabelBold("Ortho Dist."),4, 0, 1, 1);
    gtk_grid_attach (GTK_GRID (grid), strToLabelBold("Loxo Cap."),  5, 0, 1, 1);
    gtk_grid_attach (GTK_GRID (grid), strToLabelBold("Loxo Dist."), 6, 0, 1, 1);
-   gtk_grid_attach(GTK_GRID(grid), separator,                                                     0, 1, 7, 1);
+   gtk_grid_attach(GTK_GRID(grid), separator,                      0, 1, 7, 1);
   
    int i;
    for (i = -1; i <  wayRoute.n; i++) {
       if (i == -1) {
-         gtk_grid_attach (GTK_GRID (grid), strToLabel("Origin", -1),                                       0, 2, 1, 1);
+         gtk_grid_attach (GTK_GRID (grid), strToLabel("Origin", -1),                                    0, 2, 1, 1);
          gtk_grid_attach (GTK_GRID (grid), strToLabel(latToStr (par.pOr.lat, par.dispDms, strLat), -1), 1, 2, 1, 1);
          gtk_grid_attach (GTK_GRID (grid), strToLabel(lonToStr (par.pOr.lon, par.dispDms, strLon), -1), 2, 2, 1, 1);
       }
       else {
-         gtk_grid_attach (GTK_GRID (grid), strToLabel("Waypoint", i),                                               0, i+3, 1, 1);
+         gtk_grid_attach (GTK_GRID (grid), strToLabel("Waypoint", i),                                         0, i+3, 1, 1);
          gtk_grid_attach (GTK_GRID (grid), strToLabel(latToStr (wayRoute.t[i].lat, par.dispDms, strLat), -1), 1, i+3, 1, 1);
          gtk_grid_attach (GTK_GRID (grid), strToLabel(lonToStr (wayRoute.t[i].lon, par.dispDms, strLon), -1), 2, i+3, 1, 1);
       }
@@ -729,7 +729,7 @@ static void niceWayPointReport () {
       gtk_grid_attach (GTK_GRID (grid), doubleToLabel (wayRoute.t [i+1].lCap),                                5, i+3, 1, 1);
       gtk_grid_attach (GTK_GRID (grid), doubleToLabel (wayRoute.t [i+1].ld),                                  6, i+3, 1, 1);
    }
-   gtk_grid_attach (GTK_GRID (grid), strToLabel("Destination", -1),                                       0, i+3, 1, 1);
+   gtk_grid_attach (GTK_GRID (grid), strToLabel("Destination", -1),                                 0, i+3, 1, 1);
    gtk_grid_attach (GTK_GRID (grid), strToLabel(latToStr (par.pDest.lat, par.dispDms, strLat), -1), 1, i+3, 1, 1);
    gtk_grid_attach (GTK_GRID (grid), strToLabel(lonToStr (par.pDest.lon, par.dispDms, strLon), -1), 2, i+3, 1, 1);
    
@@ -2006,7 +2006,7 @@ static gboolean routingCheck (gpointer data) {
       return TRUE;
    }
    g_source_remove (routingTimeout); // timer stopped
-   gtk_widget_destroy (spinner_window);
+   if (spinner_window != NULL) gtk_widget_destroy (spinner_window);
    if (route.ret == -1) {
       infoMessage ("Stopped", GTK_MESSAGE_ERROR);
       return TRUE;
@@ -2654,13 +2654,13 @@ static bool urlChange (char *url) {
 /*! check if readGrib is terminated (wind) */
 static gboolean readGribCheck (gpointer data) {
    statusBarUpdate ();
-   // printf ("readGribCheck: %d\n", readGribRet);
+   printf ("readGribCheck: %d\n", readGribRet);
    if (readGribRet == -1) { // not terminated
       return TRUE;
    }
    
    g_source_remove (gribReadTimeout); // timer stopped
-   gtk_widget_destroy (spinner_window);
+   if (spinner_window != NULL) gtk_widget_destroy (spinner_window);
    if (readGribRet == 0) {
       infoMessage ("Error in readGribCheck (wind)", GTK_MESSAGE_ERROR);
    }
@@ -2696,15 +2696,15 @@ static void loadGribFile (int type, char *fileName) {
       strncpy (par.gribFileName, fileName, MAX_SIZE_FILE_NAME - 1);
       readGribRet = -1; // Global variable
       g_thread_new("readGribThread", readGrib, &iFlow);
-      gribReadTimeout = g_timeout_add (READ_GRIB_TIME_OUT, readGribCheck, NULL);
       spinner ("Grib File decoding", " ");
+      gribReadTimeout = g_timeout_add (READ_GRIB_TIME_OUT, readGribCheck, NULL);
    }
    else {                 
       strncpy (par.currentGribFileName, fileName, MAX_SIZE_FILE_NAME - 1);
       readCurrentGribRet = -1; // Global variable
       g_thread_new("readCurrentGribThread", readGrib, &iFlow);
-      currentGribReadTimeout = g_timeout_add (READ_GRIB_TIME_OUT, readCurrentGribCheck, NULL);
       spinner ("Current Grib File decoding", " ");
+      currentGribReadTimeout = g_timeout_add (READ_GRIB_TIME_OUT, readCurrentGribCheck, NULL);
    }
 }
 
@@ -3030,7 +3030,7 @@ static void gribInfoDisplay (const char *fileName, Zone zone) {
    }
    lineReport (grid, l+=2, "non-starred-symbolic", "ShortName List", line);
 
-   sprintf (line, "%s\n", (zone.wellDefined) ? "Well defined" : "Undefined");
+   sprintf (line, "%s\n", (zone.wellDefined) ? (zone.allTimeStepOK) ? "Well defined" : "All TimeSteps are not defined" : "Undefined");
    lineReport (grid, l+=2 , (zone.wellDefined) ? "weather-clear" : "weather-showers", "Zone is", line);
    
    lineReport (grid, l+=2 , "mail-attachment-symbolic", "Grib File Name", fileName);
