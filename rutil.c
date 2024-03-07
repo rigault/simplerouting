@@ -705,6 +705,7 @@ bool timeIntersectGrib (Zone *zone1, Zone *zone2) {
 
 /*! check if time steps are regular */
 bool timeStepRegularGrib (Zone *zone) {
+   if (zone->nTimeStamp  < 2) return true;
    long timeStep = zone->timeStamp [1] - zone->timeStamp [0];
    for (size_t i = 1; i < zone->nTimeStamp - 1; i++) {
       if ((zone->timeStamp [i] - zone->timeStamp [i-1]) != timeStep) {
@@ -1643,7 +1644,7 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "RANGE_COG:%d", &par.rangeCog) > 0);
       else if (sscanf (pLine, "COG_STEP:%d", &par.cogStep) > 0);
       else if (sscanf (pLine, "MAX_ISO:%d", &par.maxIso) > 0);
-      else if (sscanf (pLine, "VERBOSE:%d", &par.verbose) > 0);
+      else if (sscanf (pLine, "SPECIAL:%d", &par.special) > 0);
       else if (sscanf (pLine, "MOTOR_S:%lf", &par.motorSpeed) > 0);
       else if (sscanf (pLine, "THRESHOLD:%lf", &par.threshold) > 0);
       else if (sscanf (pLine, "EFFICIENCY:%lf", &par.efficiency) > 0);
@@ -1738,7 +1739,7 @@ bool writeParam (const char *fileName, bool header) {
    fprintf (f, "RANGE_COG:       %d\n", par.rangeCog);
    fprintf (f, "COG_STEP:        %d\n", par.cogStep);
    fprintf (f, "MAX_ISO:         %d\n", par.maxIso);
-   fprintf (f, "VERBOSE:         %d\n", par.verbose);
+   fprintf (f, "SPECIAL:         %d\n", par.special);
    fprintf (f, "PENALTY0:        %.2lf\n", par.penalty0);
    fprintf (f, "PENALTY1:        %.2lf\n", par.penalty1);
    fprintf (f, "MOTOR_S:         %.2lf\n", par.motorSpeed);

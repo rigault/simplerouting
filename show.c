@@ -46,6 +46,7 @@
 #define DISP_NB_LAT_STEP      10
 #define DISP_NB_LON_STEP      10
 #define ANIMATION_TEMPO       100
+#define QUIT_TIME_OUT         1000
 #define ROUTING_TIME_OUT      1000
 #define GRIB_TIME_OUT         2000
 #define READ_GRIB_TIME_OUT    200
@@ -102,14 +103,14 @@ int    segmentOrBezier = SEGMENT;
 int    selectedPointInLastIsochrone = 0;
 int    iFlow = WIND;
 
-GtkWidget *statusbar;
-GtkWidget *window; 
-GtkWidget *polar_drawing_area;   // polar
-GtkWidget *spinner_window; 
-GtkListStore *filter_store;
-GtkWidget *filter_combo;
-GtkWidget *drawing_area;
-GtkWidget *tab_display;
+GtkWidget *statusbar = NULL;
+GtkWidget *window = NULL; 
+GtkWidget *polar_drawing_area = NULL;// polar
+GtkWidget *spinner_window = NULL; 
+GtkListStore *filter_store = NULL;
+GtkWidget *filter_combo = NULL;
+GtkWidget *drawing_area = NULL;      // main window
+GtkWidget *tab_display = NULL;
 GtkWidget *dialog = NULL;
 GtkWidget *spin_button_time_max = NULL;
 GtkWidget *val_size_eval = NULL; 
@@ -142,6 +143,7 @@ struct {
 } memo;
 
 static void meteogram ();
+static void on_run_button_clicked ();
 
 /*! destroy spînner window */
 static void stopSpinner (GtkComboBox *widget, gpointer user_data) {
@@ -1293,6 +1295,12 @@ static void drawScale (cairo_t *cr, bool vertical, guint scaleX, guint scaleY, i
    cairo_stroke(cr);
 }
 
+/*! exit when timeout expire */
+static gboolean exitOnTimeOut (gpointer data) {
+   printf ("exit in time out\n");
+   exit (EXIT_SUCCESS);
+}
+
 /*! draw the main window */
 static gboolean drawGribCallback (GtkWidget *widget, cairo_t *cr, gpointer data) {
    if (widget == NULL) return FALSE;
@@ -1404,7 +1412,10 @@ static gboolean drawGribCallback (GtkWidget *widget, cairo_t *cr, gpointer data)
    }
    drawForbidArea (cr);
    statusBarUpdate ();
-   if (par.verbose) exit (EXIT_SUCCESS); // For endurance testing
+   if (par.special) {
+      on_run_button_clicked ();
+      g_timeout_add (QUIT_TIME_OUT, exitOnTimeOut, NULL);
+   }
    return FALSE;
 }
 
@@ -2010,7 +2021,7 @@ static gboolean routingCheck (gpointer data) {
 }
 
 /*! launch routing */
-static void on_run_button_clicked (GtkWidget *widget, gpointer data) {
+static void on_run_button_clicked () {
    if (! isInZone (par.pOr, zone)) {
      infoMessage ("Origin point not in wind zone", GTK_MESSAGE_WARNING);
      return;
@@ -2020,7 +2031,8 @@ static void on_run_button_clicked (GtkWidget *widget, gpointer data) {
      return;
    }
    initStart (start);
-   if (!fcalendar (start)) return;
+   if (par.special == 0) 
+      if (!fcalendar (start)) return;
    par.startTimeInHours = getDepartureTimeInHour (start); 
    printf ("start:%.2lf\n", par.startTimeInHours);
    if ((par.startTimeInHours < 0) || (par.startTimeInHours > zone.timeStamp [zone.nTimeStamp -1])) {
@@ -4077,6 +4089,7 @@ static gboolean on_key_press(GtkWidget *widget, GdkEventKey *event, gpointer use
       displayText (buffer, "Grib Wind Check");
       break;
    case GDK_KEY_Escape:
+      printf ("Exit success\n");
       exit (EXIT_SUCCESS); // exit if ESC key pressed
    case GDK_KEY_Up:
 	   dispTranslate (1.0, 0);

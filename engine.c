@@ -42,7 +42,6 @@ double   tDeltaCurrent = 0.0;                   // delta time in hours between W
 double   lastClosestDist;                       // closest distance to destination in last isochrone computed
 double   lastBestVmg = 0;                       // best VMG found up to now
 
-
 /*! return max speed of boat at tws for all twa */
 static inline double maxSpeedInPolarAt (double tws, PolMat mat) {
    double max = 0.0;
@@ -82,7 +81,6 @@ static inline void initSector (int nIsoc, int nMax) {
 
 /*! reduce the size of Isolist 
    note influence of parameters par.nSector, par.jFactor and par.kFactor */
-
 static inline int forwardSectorOptimize (int nIsoc, Isoc isoList, int isoLen, Isoc optIsoc) {
    int iSector, k;
    double alpha, theta;
@@ -135,18 +133,10 @@ static inline int forwardSectorOptimize (int nIsoc, Isoc isoList, int isoLen, Is
 	return k; 
 }
 
-/*! do nothing. Just copy. For testing. */
-static inline int isocCpy (const Isoc isoList, int isoLen, Isoc optIsoc) {
-   for (int i = 0; i < isoLen; i++) {
-       optIsoc [i] = isoList [i];
-   }
-   return isoLen;
-}
-
 /*! choice of algorithm used to reduce the size of Isolist */
 static inline int optimize (int nIsoc, int algo, Isoc isoList, int isoLen, Isoc optIsoc) {
    switch (algo) {
-      case 0: return isocCpy (isoList, isoLen, optIsoc);
+      case 0: memcpy (optIsoc, isoList, isoLen * sizeof (Pp)); return isoLen;
       case 1: return forwardSectorOptimize (nIsoc, isoList, isoLen, optIsoc);
    } 
    return 0;
@@ -446,9 +436,7 @@ static inline bool goal (int nIsoc, Isoc isoList, int len, double t, double dt, 
       if (isSea (isoList [k].lon, isoList [k].lat)) { 
          if (goalP (isoList [k], par.pDest, t, dt, &time, &distance))
             destinationReached = true;
-         // printf ("k, time destinationReached: %d %lf %d\n",  k, time, destinationReached);
-         //if (destinationReached)
-         //   par.pDest.father = isoList [k].id; // ATTENTION !!!!
+
          if (time < bestTime) {
             bestTime = time;
             if (destinationReached) 
@@ -525,17 +513,20 @@ static int routing (double t, double dt, double *lastStepDuration) {
    isoDesc [0].first = 0; 
    lastClosest = closest (isocArray [0], isoDesc[0].size, par.pDest, &index);
    isoDesc [0].closest = index; 
+   if (isoDesc [0].size == 0) { // no wind at the beginning. 
+      isoDesc [0].size = 1;
+      isocArray [0][0] = par.pOr;
+   }
    
    nIsoc = 1;
-   printf ("Routing t = %.2lf, zone: %.2ld", t, zone.timeStamp [zone.nTimeStamp-1]);
-   if (t < zone.timeStamp [zone.nTimeStamp-1]) printf ("Routing 2\n");
+   //printf ("Routing t = %.2lf, zone: %.2ld\n", t, zone.timeStamp [zone.nTimeStamp-1]);
    while (t < (zone.timeStamp [zone.nTimeStamp-1]/* + par.tStep*/) /*&& (nIsoc < par.maxIso)*/) {
       t += dt;
       if (goal (nIsoc-1, isocArray [nIsoc -1], isoDesc[nIsoc - 1].size, t, dt, &timeLastStep)) {
          isoDesc [nIsoc].size = optimize (nIsoc, par.opt, tempList, lTempList, isocArray [nIsoc]);
          if (isoDesc [nIsoc].size == 0) { // no Wind ... we copy
             isoDesc  [nIsoc].size = isoDesc [nIsoc -1].size;
-            isocCpy (isocArray [nIsoc -1], isoDesc [nIsoc-1].size, isocArray [nIsoc]);
+            memcpy (isocArray [nIsoc], isocArray [nIsoc-1], isoDesc [nIsoc-1].size * sizeof (Pp));
          }
          isoDesc [nIsoc].first = findFirst (nIsoc);
          lastClosest = closest (isocArray [nIsoc], isoDesc[nIsoc].size, par.pDest, &index);
@@ -549,8 +540,8 @@ static int routing (double t, double dt, double *lastStepDuration) {
       isoDesc [nIsoc].bestVmg = bestVmg;
       isoDesc [nIsoc].size = optimize (nIsoc, par.opt, tempList, lTempList, isocArray [nIsoc]);
       if (isoDesc [nIsoc].size == 0) { // no Wind ... we copy
-         isoDesc [nIsoc] = isoDesc [nIsoc - 1];
-         isocCpy (isocArray [nIsoc -1], isoDesc [nIsoc-1].size, isocArray [nIsoc]);
+         memcpy (&isoDesc [nIsoc], &isoDesc [nIsoc -1], sizeof (IsoDesc));
+         memcpy (isocArray [nIsoc], isocArray [nIsoc-1], isoDesc [nIsoc-1].size * sizeof (Pp));
       }
       //printf ("Isoc: %d Biglist length: %d optimized size: %d\n", nIsoc, lTempList, isoDesc [nIsoc].size);
       else {

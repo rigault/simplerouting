@@ -257,7 +257,7 @@ typedef struct {
    int cogStep;                              // step of cog in degrees
    int rangeCog;                             // range of cog from x - RANGE_GOG, x + RAGE_COG+1
    int maxIso;                               // max number of isochrones
-   int verbose;                              // verbose level of display
+   int special;                              // special puropose
    double constWindTws;                      // if not equal 0, constant wind used in place of grib file
    double constWindTwd;                      // the direction of constant wind if used
    double constWave;                         // constant wave height if used
