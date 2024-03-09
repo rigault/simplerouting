@@ -136,8 +136,11 @@ static inline int forwardSectorOptimize (int nIsoc, Isoc isoList, int isoLen, Is
 /*! choice of algorithm used to reduce the size of Isolist */
 static inline int optimize (int nIsoc, int algo, Isoc isoList, int isoLen, Isoc optIsoc) {
    switch (algo) {
-      case 0: memcpy (optIsoc, isoList, isoLen * sizeof (Pp)); return isoLen;
-      case 1: return forwardSectorOptimize (nIsoc, isoList, isoLen, optIsoc);
+      case 0: 
+         memcpy (optIsoc, isoList, isoLen * sizeof (Pp)); 
+         return isoLen;
+      case 1: 
+         return forwardSectorOptimize (nIsoc, isoList, isoLen, optIsoc);
    } 
    return 0;
 }

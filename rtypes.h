@@ -46,6 +46,7 @@
 #define MAX_N_GRIB_LON        2048
 #define MAX_SIZE_SHORT_NAME   16
 #define MAX_SIZE_NAME         64
+#define MAX_SIZE_NUMBER       64                // max size of string represnting a number
 #define MAX_SIZE_FILE_NAME    128               // max size of pLine in text files
 #define MAX_SIZE_DIR_NAME     192               // max size of directory name
 #define MAX_N_SHP_FILES       4                 // max number of shape file

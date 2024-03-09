@@ -1,4 +1,5 @@
 /*! compilation gcc -Wall -c option.c */
+#include <glib.h>
 #include <stdbool.h>
 #include <string.h>
 #include <stdio.h>
@@ -122,10 +123,8 @@ void optionManage (char option) {
       printf ("Time now minus Time0 Grib in hours %.2lf\n", diffNowGribTime0 (zone)/3600.0);
       break;
    case 'z': //
-      printf ("str: ");
-      scanf ("%10s", str);
-      strClean (str);
-      printf ("%s\n", str);
+      while (true) {
+      }   
       break;
    default:
       printf ("Option unknown: -%c\n", option);

@@ -133,10 +133,13 @@ bool initSHP (char* nameFile) {
       }
    }
    else {
-      if ((entities = (Entity *) realloc (entities,  sizeof (Entity) * (nEntities + nTotEntities))) == NULL) {
-         fprintf (stderr, "In initSHP, realloc failed\n");
+      Entity *temp = (Entity *)realloc(entities, sizeof(Entity) * (nEntities + nTotEntities));
+      if (temp == NULL) {
          free (entities);
+         fprintf (stderr, "In initSHP, realloc failed\n");
          return false;
+      } else {
+         entities = temp;
       }
    }
  
@@ -221,7 +224,7 @@ bool mostRecentFile (const char *directory, const char *pattern, char *name) {
    return (latestTime > 0);
 }
 
-/*! format big number with thousand sep */
+/*! format big number with thousand sep. Example 1000000 formated as 1 000 000 */
 char *formatThousandSep (char *buffer, long value) {
    char str [MAX_SIZE_LINE];
    sprintf (str, "%ld", value);
@@ -467,17 +470,17 @@ int readPoi (const char *fileName) {
          first = false;
          continue;
       }
-      if ((latToken = strtok (pLine, CSV_SEP)) != NULL) {            // lat
-         if ((lonToken = strtok (NULL, CSV_SEP)) != NULL) {          // lon
-            if ((typeToken = strtok (NULL, CSV_SEP))!= NULL ) {         // Name
-               if ((levelToken = strtok (NULL, CSV_SEP))!= NULL ) {         // Name
-                  if ((vToken = strtok (NULL, CSV_SEP))!= NULL ) {         // Name
+      if ((latToken = strtok (pLine, CSV_SEP)) != NULL) {            // Lat
+         if ((lonToken = strtok (NULL, CSV_SEP)) != NULL) {          // Lon
+            if ((typeToken = strtok (NULL, CSV_SEP))!= NULL ) {      // Type
+               if ((levelToken = strtok (NULL, CSV_SEP))!= NULL ) {  // Level
+                  if ((vToken = strtok (NULL, CSV_SEP))!= NULL ) {   // Name
                      tPoi [i].lat = getCoord (latToken);
                      tPoi [i].lon = getCoord (lonToken);
                      tPoi [i].type = atoi (typeToken);
                      tPoi [i].level = atoi (levelToken);
-                     while (isspace (*vToken)) vToken++;                   // delete space beginning
-                        if ((last = strrchr (vToken, '\n')) != NULL)          // delete CR ending
+                     while (isspace (*vToken)) vToken++;             // delete space beginning
+                        if ((last = strrchr (vToken, '\n')) != NULL) // delete CR ending
                         *last = '\0';
                      strncpy (tPoi [i].name, vToken, MAX_SIZE_POI_NAME);
                   }
@@ -538,7 +541,7 @@ int findPoiByName (const char *name, double *lat, double *lon) {
    return -1;
 }
 
-/*! printf poi table into a string 
+/*! printf poi table 
 static void poiPrint () {
    char strLat [MAX_SIZE_LINE] = "";
    char strLon [MAX_SIZE_LINE] = "";
@@ -637,7 +640,7 @@ time_t diffNowGribTime0 (Zone zone) {
    return time (&now) - (dateToTime_t (zone.dataDate [0]) + 3600 * (zone.dataTime [0] / 100));
 }
 
-/*! print Grib information */
+/*! print Grib u v for all lat lon time information */
 void printGrib (Zone zone, FlowP *gribData) {
    double t;
    int iGrib;
