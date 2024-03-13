@@ -6,9 +6,9 @@ extern Pp        lastClosest;                   // closest point to destination 
 extern ChooseDeparture chooseDeparture;           // for choice of departure time
 
 extern void    storeRoute (Pp pDest, double lastStepDuration);
-extern void    allIsocToStr (char *str);
+extern bool    allIsocToStr (char *str, size_t maxLength);
 extern bool    isoDescToStr (char *str, size_t maxLength);
-extern void    routeToStr (SailRoute route, char *str);
+extern bool    routeToStr (SailRoute route, char *str, size_t maxLength);
 extern bool    dumpAllIsoc (const char *fileName);
 extern bool    dumpRoute (const char *fileName, Pp dest);
 extern void    *routingLaunch ();

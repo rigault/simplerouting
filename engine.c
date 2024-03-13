@@ -201,7 +201,7 @@ static int buildNextIsochrone (Isoc isoList, int isoLen, Pp pDest, double t, dou
                newList [lenNewL++] = newPt;                      // new point added to the isochrone
             }
             else {
-               fprintf (stderr, "Routing Error in buildNextIsochrone, limit of MAX_SIZE_ISOC: %d\n", MAX_SIZE_ISOC);
+               fprintf (stderr, "Error in buildNextIsochrone: Limit of MAX_SIZE_ISOC reached: %d\n", MAX_SIZE_ISOC);
                return -1;
             }
             pId += 1;
@@ -217,7 +217,7 @@ static int findFather (int ptId, Isoc isoc, int lIsoc) {
       if (isoc [k].id == ptId)
          return k;
    }
-   // fprintf (stderr, "Error in father ptId not found;%d\n", ptId);
+   fprintf (stderr, "Error in father: ptId not found: %d\n", ptId);
    return -1;
 }
 
@@ -229,34 +229,39 @@ bool isoDescToStr (char *str, size_t maxLength) {
    char strLon [MAX_SIZE_LINE];
    const int DIST_MAX = 100000;
    double distance;
-   sprintf (str, "No  Size First Closest Distance VMC      FocalLat  FocalLon\n");
+   strcpy (str, "No  Size First Closest Distance VMC      FocalLat  FocalLon\n");
    for (int i = 0; i < nIsoc; i++) {
       distance = isoDesc [i].distance;
       if (distance > DIST_MAX) distance = -1;
       snprintf (line, MAX_SIZE_LINE, "%03d %03d  %03d   %03d     %07.2lf  %07.2lf  %s  %s\n", i, isoDesc[i].size, isoDesc[i].first, 
          isoDesc[i].closest, distance, isoDesc[i].bestVmg, 
          latToStr (isoDesc [i].focalLat, par.dispDms, strLat), lonToStr (isoDesc [i].focalLon, par.dispDms, strLon));
-      if ((strlen (str) + strlen (line)) > maxLength) return false;
-      strncat (str, line, MAX_SIZE_LINE); 
+      if ((strlen (str) + strlen (line)) > maxLength) 
+         return false;
+      strncat (str, line, maxLength - strlen (str)); 
    }
    return true;
 }
 
-/*! copy all isoc in a string */
-void allIsocToStr (char *str) {
+/*! copy all isoc in a string 
+   true if enough space, false if truncated */
+bool allIsocToStr (char *str, size_t maxLength) {
    char line [MAX_SIZE_LINE];
    char strLat [MAX_SIZE_LINE];
    char strLon [MAX_SIZE_LINE];
    Pp pt;
-   sprintf (str, "No  Lat         Lon             Id Father  Amure\n");
+   strcpy (str, "No  Lat         Lon             Id Father  Amure\n");
    for (int i = 0; i < nIsoc; i++) {
       for (int k = 0; k < isoDesc [i].size; k++) {
          pt = isocArray [i][k];
          snprintf (line, MAX_SIZE_LINE, "%03d %-12s %-12s %6d %6d %6d\n", i, latToStr (pt.lat, par.dispDms, strLat),\
             lonToStr (pt.lon, par.dispDms, strLon), pt.id, pt.father, pt.amure);
-         strncat (str, line, MAX_SIZE_LINE);
+         if ((strlen (str) + strlen (line)) > maxLength) 
+            return false;
+         strncat (str, line, maxLength - strlen (str));
       }
    }
+   return true;
 }
    
 /*! write in CSV file Isochrones */
@@ -264,7 +269,7 @@ bool dumpAllIsoc (const char *fileName) {
    FILE *f;
    Pp pt;
    if ((f = fopen (fileName, "w")) == NULL) {
-      fprintf (stderr, "Routing Error in dumpAllIsoc, cannot write isoc: %s\n", fileName);
+      fprintf (stderr, "Error in dumpAllIsoc: Cannot write isoc: %s\n", fileName);
       return false;
    }
    fprintf (f, "n;     Lat;   Lon;      Id; Father;  Amure\n");
@@ -287,7 +292,7 @@ bool dumpRoute (const char *fileName, Pp dest) {
    int dep = (dest.id == 0) ? nIsoc : nIsoc - 1;
    Pp pt = dest;
    if ((f = fopen (fileName, "w")) == NULL) {
-      fprintf (stderr, "Routing Error in dumpRoute, Cannot write route: %s\n", fileName);
+      fprintf (stderr, "Error in dumpRoute: Cannot write route: %s\n", fileName);
       return false;
    }
    fprintf (f, "%4d; %06.2f; %06.2f; %4d; %4d\n", dep, pt.lat, pt.lon, pt.id, pt.father);
@@ -361,17 +366,20 @@ void storeRoute (Pp pDest, double lastStepDuration) {
    route.duration = par.tStep * nIsoc + lastStepDuration; // hours
 }
 
-/*! copy route in a string */
-void routeToStr (SailRoute route, char *str) {
+/*! copy route in a string
+   true if enough space, false if truncated */
+bool routeToStr (SailRoute route, char *str, size_t maxLength) {
    char line [MAX_SIZE_LINE];
    char strLat [MAX_SIZE_LINE];
    char strLon [MAX_SIZE_LINE];
-   sprintf (str, " No       Lat        Lon             Id Father     Cap        Dist\n");
+   strcpy (str, " No       Lat        Lon             Id Father     Cap        Dist\n");
    snprintf (line, MAX_SIZE_LINE, " pOr:     %-12s%-12s %6d %6d %7.2f°   %7.2lf\n", \
       latToStr (route.t[0].lat, par.dispDms, strLat), lonToStr (route.t[0].lon, par.dispDms, strLon), \
       route.t[0].id, route.t[0].father, route.t[0].lCap, route.t[0].ld);
-   
-   strncat (str, line, MAX_SIZE_LINE);
+
+   if ((strlen (str) + strlen (line)) > maxLength)
+      return false;
+   strncat (str, line, maxLength - strlen (str));
    for (int i = 1; i < route.n-1; i++) {
       if ((fabs(route.t[i].lon) > 180.0) || (fabs (route.t[i].lat) > 90.0))
          snprintf (line, MAX_SIZE_LINE, " Isoc %2d: Erreur sur latitude ou longitude\n", i-1);   
@@ -380,7 +388,9 @@ void routeToStr (SailRoute route, char *str) {
             i-1, latToStr (route.t[i].lat, par.dispDms, strLat), lonToStr (route.t[i].lon, par.dispDms, strLon), \
             route.t[i].id, route.t[i].father, \
             route.t[i].lCap, route.t[i].ld); 
-      strncat (str, line, MAX_SIZE_LINE);
+      if ((strlen (str) + strlen (line)) > maxLength)
+         return false;
+      strncat (str, line, maxLength - strlen (str));
    }
    if (route.destinationReached)
       snprintf (line, MAX_SIZE_LINE, " Dest:    %-12s%-12s %6d %6d \n", latToStr (route.t[route.n-1].lat, par.dispDms, strLat),\
@@ -390,9 +400,14 @@ void routeToStr (SailRoute route, char *str) {
       snprintf (line, MAX_SIZE_LINE, " Isoc %2d: %-12s%-12s %6d %6d \n", nIsoc -1, latToStr (route.t[route.n-1].lat, par.dispDms, strLat),\
          lonToStr (route.t[route.n-1].lon, par.dispDms, strLon),\
          route.t[route.n-1].id, route.t[route.n-1].father);
-   strncat (str, line, MAX_SIZE_LINE);
+   if ((strlen (str) + strlen (line)) > maxLength)
+      return false;
+   strncat (str, line, maxLength - strlen (str));
    snprintf (line, MAX_SIZE_LINE, " Total distance: %.2f NM", route.totDist);
-   strncat (str, line, MAX_SIZE_LINE);
+   if ((strlen (str) + strlen (line)) > maxLength)
+      return false;
+   strncat (str, line, maxLength - strlen (str));
+   return true;
 }
 
 /*! return true if pDest can be reached from pFrom in less time than dt
@@ -571,7 +586,7 @@ void *routingLaunch () {
 
    //Launch routing !
    route.ret = routing (par.startTimeInHours, par.tStep, &lastStepDuration);
-   printf ("After routingLaunch:  ret = %d\n", route.ret);
+   // printf ("After routingLaunch:  ret = %d\n", route.ret);
 
    gettimeofday (&t1, NULL);
    ut1 = t1.tv_sec * MILLION + t1.tv_usec;

@@ -56,7 +56,7 @@
 #define MAX_SIZE_FORBID_ZONE  100               // max size per forbidden zone
 #define MAX_N_FORBID_ZONE     10                // max nummber of forbidden zones
 #define N_PROVIDERS           8                 // for DictProvider dictTab size
-#define MAX_INDEX_ENTITY      32                // for shp. Index.
+#define MAX_INDEX_ENTITY      512               // for shp. Index.
 
 enum {WIND, CURRENT};                           // for grib information, either WIND or CURRENT
 enum {POLAR, WAVE_POLAR};                       // for polar information, either POLAR or WAVE
@@ -125,7 +125,8 @@ typedef struct {
    double lonMax;
    int    numPoints;
    int    nSHPType;
-   int    index [MAX_INDEX_ENTITY];
+   int    index [MAX_INDEX_ENTITY]; 
+   int    maxIndex;
 } Entity;
 
 /*! Check grib structure */

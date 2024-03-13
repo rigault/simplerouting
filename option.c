@@ -32,28 +32,28 @@ void optionManage (char option) {
    case 'g': // grib
       printf ("grib read: %s\n", par.gribFileName);
       readGribAll (par.gribFileName, &zone, WIND);
-      gribToStr (buffer, zone);
+      gribToStr (buffer, zone, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       printf ("grib print...\n");
       printGrib (zone, tGribData [WIND]);
       printf ("\n\nFollowing lines are suspects info...\n");
-      checkGribToStr (buffer);
+      checkGribToStr (buffer, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       break;
    case 'G': // grib
       printf ("grib current read: %s\n", par.currentGribFileName);
       readGribAll (par.currentGribFileName, &currentZone, CURRENT);
-      gribToStr (buffer, currentZone);
+      gribToStr (buffer, currentZone, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       printf ("grib print...\n");
       printGrib (currentZone, tGribData [CURRENT]);
       printf ("\n\nFollowing lines are suspects info...\n");
-      checkGribToStr (buffer);
+      checkGribToStr (buffer, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       break;
    case 'h': // help
 	   if ((f = fopen (par.cliHelpFileName, "r")) == NULL) {
-		   fprintf (stderr, "Error in option help: impossible to read: %s\n", par.cliHelpFileName);
+		   fprintf (stderr, "Error in option help: Impossible to read: %s\n", par.cliHelpFileName);
 		   break;
 	   }
       while ((fgets (str, MAX_SIZE_LINE, f) != NULL ))
@@ -67,7 +67,7 @@ void optionManage (char option) {
       break;
    case 'p': //polar
       readPolar (par.polarFileName, &polMat);
-      polToStr (buffer, polMat);
+      polToStr (buffer, polMat, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       while (true) {
          printf ("twa true wind angle = ");
@@ -79,7 +79,7 @@ void optionManage (char option) {
       break;
    case 'P': // Wave polar
       readPolar (par.wavePolFileName, &wavePolMat);
-      polToStr (buffer, wavePolMat);
+      polToStr (buffer, wavePolMat, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       while (true) {
          printf ("angle = " );
@@ -123,6 +123,7 @@ void optionManage (char option) {
       printf ("Time now minus Time0 Grib in hours %.2lf\n", diffNowGribTime0 (zone)/3600.0);
       break;
    case 'z': //
+      printf ("size of buffer %ld\n", sizeof (buffer));
       while (true) {
       }   
       break;
