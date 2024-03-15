@@ -124,8 +124,8 @@ bool initSHP (char* nameFile) {
    }
 
    SHPGetInfo(hSHP, &nEntities, &nShapeType, minBound, maxBound);
-   printf ("In initSHP, nEntities: %d, nShapeType: %d\n", nEntities, nShapeType);
-   printf("Geo limits: %.2lf, %.2lf, %.2lf, %.2lf\n", minBound[0], minBound[1], maxBound[0], maxBound[1]);
+   printf ("Geo nEntities  : %d, nShapeType: %d\n", nEntities, nShapeType);
+   printf ("Geo limits     : %.2lf, %.2lf, %.2lf, %.2lf\n", minBound[0], minBound[1], maxBound[0], maxBound[1]);
 
    if (nTotEntities == 0) {
       if ((entities = (Entity *) malloc (sizeof(Entity) * nEntities)) == NULL) {
@@ -190,7 +190,7 @@ bool initSHP (char* nameFile) {
    }
    SHPClose(hSHP);
    nTotEntities += nEntities;
-   printf ("nMaxPart = %d\n", nMaxPart);
+   // printf ("nMaxPart = %d\n", nMaxPart);
    return true;
 }
 
@@ -225,7 +225,7 @@ bool mostRecentFile (const char *directory, const char *pattern, char *name) {
          if (strlen (entry->d_name) < MAX_SIZE_FILE_NAME)
             strncpy (name, entry->d_name, MAX_SIZE_FILE_NAME);
          else {
-            fprintf (stderr, "Error in mostRecentFile: File name size is: %lu and exceed MAX_SIZE_FILE_NAME: %d\n", strlen (entry->d_name), MAX_SIZE_FILE_NAME);
+            fprintf (stderr, "Error in mostRecentFile: File name size is: %zu and exceed MAX_SIZE_FILE_NAME: %d\n", strlen (entry->d_name), MAX_SIZE_FILE_NAME);
             break;
          }
       }
@@ -490,7 +490,7 @@ int readPoi (const char *fileName) {
                      tPoi [i].type = atoi (typeToken);
                      tPoi [i].level = atoi (levelToken);
                      while (isspace (*vToken)) vToken++;             // delete space beginning
-                        if ((last = strrchr (vToken, '\n')) != NULL) // delete CR ending
+                     if ((last = strrchr (vToken, '\n')) != NULL) // delete CR ending
                         *last = '\0';
                      strncpy (tPoi [i].name, vToken, MAX_SIZE_POI_NAME);
                   }
@@ -605,7 +605,7 @@ bool readIsSea (const char *fileName) {
       i += 1;
    }
    fclose (f);
-   printf ("nSea: %d size: %d proportion sea: %lf\n", nSea, i, (double) nSea/ (double) i); 
+   printf ("isSea file     : %s, Size: %d, nIsea: %d, Proportion sea: %lf\n", fileName, i, nSea, (double) nSea/ (double) i); 
    return true;
 } 
 
@@ -652,11 +652,10 @@ time_t diffNowGribTime0 (Zone zone) {
 
 /*! print Grib u v for all lat lon time information */
 void printGrib (Zone zone, FlowP *gribData) {
-   double t;
    int iGrib;
    printf ("printGrib\n");
    for (size_t  k = 0; k < zone.nTimeStamp; k++) {
-      t = zone.timeStamp [k];
+      double t = zone.timeStamp [k];
       printf ("Time: %.0lf\n", t);
       for (int i = 0; i < zone.nbLat; i++) {
          for (int j = 0; j < zone.nbLon; j++) {
@@ -1226,7 +1225,6 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
    size_t lenName = MAX_SIZE_SHORT_NAME;
    const long GUST_GFS = 180;
    long timeInterval = 0;
-   
    memset (zone, 0,  sizeof (Zone));
    zone->wellDefined = false;
    if (! readGribLists (fileName, zone)) {
@@ -1247,7 +1245,7 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
       fprintf (stderr, "Error in readGribAll: calloc tGribData [iFlow]\n");
       return false;
    }
-   printf ("In readGrib    : %lu allocated\n", sizeof(FlowP) * zone->nTimeStamp * zone->nbLat * zone->nbLon);
+   printf ("In readGribAll : %zu allocated\n", sizeof(FlowP) * zone->nTimeStamp * zone->nbLat * zone->nbLon);
    
    // Message handle. Required in all the ecCodes calls acting on a message.
    codes_handle* h = NULL;
@@ -1326,7 +1324,6 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
 /*! launch readGribAll wih Wind or current  parameters */   
 void *readGrib (void *data) {
    int *iFlow = (int *) (data);
-   printf ("in ReadGrib: flow: %d\n", *iFlow);
    if ((*iFlow == WIND) && (par.gribFileName [0] != '\0')) {
       if (readGribAll (par.gribFileName, &zone, WIND))
          readGribRet = 1;
@@ -1337,7 +1334,6 @@ void *readGrib (void *data) {
          readCurrentGribRet = 1;
       else readCurrentGribRet = 0;
    }
-   printf ("End readGrib ()\n");
    return NULL;
 }
 
@@ -1365,7 +1361,7 @@ char *gribToStr (char *str, Zone zone, size_t maxLength) {
    snprintf (line, MAX_SIZE_LINE, "Nb Lat   : %ld      Nb Lon : %ld\n", zone.nbLat, zone.nbLon);
    strncat (str, line, maxLength - strlen (str));   
    if (zone.nTimeStamp < 8) {
-      snprintf (line, MAX_SIZE_LINE, "TimeStamp List of %lu : [ ", zone.nTimeStamp);
+      snprintf (line, MAX_SIZE_LINE, "TimeStamp List of %zu : [ ", zone.nTimeStamp);
       strncat (str, line, maxLength - strlen (str));   
       for (size_t k = 0; k < zone.nTimeStamp; k++) {
          snprintf (line, MAX_SIZE_LINE, "%ld ", zone.timeStamp [k]);
@@ -1374,7 +1370,7 @@ char *gribToStr (char *str, Zone zone, size_t maxLength) {
       strncat (str, "]\n", maxLength - strlen (str));
    }
    else {
-      snprintf (line, MAX_SIZE_LINE, "TimeStamp List of %lu : [%ld, %ld, ..%ld]\n", zone.nTimeStamp,\
+      snprintf (line, MAX_SIZE_LINE, "TimeStamp List of %zu : [%ld, %ld, ..%ld]\n", zone.nTimeStamp,\
          zone.timeStamp [0], zone.timeStamp [1], zone.timeStamp [zone.nTimeStamp - 1]);
       strncat (str, line, maxLength - strlen (str));   
    }
@@ -1387,7 +1383,7 @@ char *gribToStr (char *str, Zone zone, size_t maxLength) {
    }
    strncat (str, "]\n", maxLength - strlen (str));
    if ((zone.nDataDate > 1) || (zone.nDataTime > 1)) {
-      snprintf (line, MAX_SIZE_LINE, "Warning number of Date: %lu, number of Time: %lu\n", zone.nDataDate, zone.nDataTime);
+      snprintf (line, MAX_SIZE_LINE, "Warning number of Date: %zu, number of Time: %zu\n", zone.nDataDate, zone.nDataTime);
       strncat (str, line, maxLength - strlen (str));   
    }
    snprintf (line, MAX_SIZE_LINE, "Zone is       :  %s\n", (zone.wellDefined) ? "Well defined" : "Undefined");
@@ -1466,21 +1462,6 @@ char *polToStr (char * str, PolMat mat, size_t maxLength) {
    return str;
 }
 
-/*! copy a text file in a string */
-bool fileToStr (char* fileName, char *str, size_t maxLength) {
-   FILE *f = NULL;
-   char line [MAX_SIZE_LINE] = "";
-   if ((f = fopen (fileName, "r")) == NULL) {
-      fprintf (stderr, "Error in fileToStr: Cannot open: %s\n", fileName);
-      return (false);
-   }
-   while ((fgets (line, MAX_SIZE_LINE, f) != NULL ))
-      strncat (str, line, maxLength - strlen (str));
-   return str;
-   fclose (f);
-   return true;
-}
-
 /*! replace cIn  character by cOut */
 char *strchrReplace (const char *source, char cIn, char cOut, char *dest) {
    int i = 0;
@@ -1497,7 +1478,7 @@ void dollarReplace (char* str) {
    char res [MAX_SIZE_LINE] = "";
    size_t len = 0;
    if (str == NULL) return;
-   for (size_t i = 0; (str[i] != '\0') && (i < MAX_SIZE_LINE); ++i) {
+   for (size_t i = 0; (i < MAX_SIZE_LINE) && (str[i] != '\0'); ++i) {
       if (str[i] == '$') {
          res[len++] = '\\';
          res[len++] = '$';
@@ -1594,21 +1575,27 @@ bool readParam (const char *fileName) {
    char buffer [MAX_SIZE_BUFFER];
    char *pLine = &buffer [0];
    int poiIndex = -1;
-   if ((f = fopen (fileName, "r")) == NULL) {
-      fprintf (stderr, "Error in readParam: Cannot open: %s\n", fileName);
-      return false;
-   }
    memset (&par, 0, sizeof (Par));
    par.opt = 1;
-   par.tStep = 3;
+   par.tStep = 1;
    par.cogStep = 5;
    par.rangeCog = 90;
    par.maxIso = MAX_SIZE_ISOC;
    par.efficiency = 1;
-   par.kFactor = 20;
-   par.minPt = 2;
-   route.n = 0;
+   par.kFactor = 1;
+   par.jFactor = 300;
+   par.nSectors = 720;
+   par.style = 1;
+   par.showColors =2;
+   par.dispDms = 2;
+   par.windDisp =  1;
    nPoi = 0;
+   
+   if ((f = fopen (fileName, "r")) == NULL) {
+      fprintf (stderr, "Error in readParam: Cannot open: %s\n", fileName);
+      return false;
+   }
+
    while (fgets (pLine, MAX_SIZE_BUFFER, f) != NULL ) {
       str [0] = '\0';
       while (isspace (*pLine)) pLine++;
@@ -1861,7 +1848,7 @@ bool gpsToStr (char *buffer, size_t maxLength) {
 }
 
 /*! Fonction de lecture du GPS exécutée dans un thread */
-void *gps_thread_function(void *data) {
+void *gps_thread_function (void *data) {
    struct ThreadData *thread_data = (struct ThreadData *)data;
 
    while (true) {

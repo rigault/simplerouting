@@ -25,12 +25,11 @@ void optionManage (char option) {
       scanf ("%lf", &lon2);
       printf ("Lat2 = ");
       scanf ("%lf", &lat2);
-      printf ("cap1: %.2lf°,  cap2: %.2lf°\n", directCap (lat, lon, lat2, lon2), directCap (lat2, lon2, lat, lon));
-      printf ("orthodist1: %.2lf,  orthodist2: %.2lf\n", orthoDist (lat, lon, lat2, lon2), orthoDist (lat2, lon2, lat, lon));
-      printf ("loxodist1 : %.2lf,  loxodist2 : %.2lf\n", loxoDist(lat, lon, lat2, lon2), loxoDist (lat2, lon2, lat, lon));
+      printf ("Direct cap1: %.2lf°,  Direct cap2: %.2lf°\n", directCap (lat, lon, lat2, lon2), directCap (lat2, lon2, lat, lon));
+      printf ("Orthodist1 : %.2lf,   Orthodist2: %.2lf\n", orthoDist (lat, lon, lat2, lon2), orthoDist (lat2, lon2, lat, lon));
+      printf ("Loxodist1  : %.2lf,   Loxodist2 : %.2lf\n", loxoDist(lat, lon, lat2, lon2), loxoDist (lat2, lon2, lat, lon));
       break;
    case 'g': // grib
-      printf ("grib read: %s\n", par.gribFileName);
       readGribAll (par.gribFileName, &zone, WIND);
       gribToStr (buffer, zone, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
@@ -41,7 +40,6 @@ void optionManage (char option) {
       printf ("%s\n", buffer);
       break;
    case 'G': // grib
-      printf ("grib current read: %s\n", par.currentGribFileName);
       readGribAll (par.currentGribFileName, &currentZone, CURRENT);
       gribToStr (buffer, currentZone, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
@@ -123,7 +121,7 @@ void optionManage (char option) {
       printf ("Time now minus Time0 Grib in hours %.2lf\n", diffNowGribTime0 (zone)/3600.0);
       break;
    case 'z': //
-      printf ("size of buffer %ld\n", sizeof (buffer));
+      printf ("size of buffer %zu\n", sizeof (buffer));
       while (true) {
       }   
       break;
