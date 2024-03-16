@@ -536,10 +536,13 @@ static char* strToUpper (const char *name, char *upperName) {
 
 /*! give the point refered by its name. return index found, -1 if not found */
 int findPoiByName (const char *name, double *lat, double *lon) {
+   const int MIN_NAME_LENGTH = 3;
    char upperName [MAX_SIZE_NAME] = "";
    char upperPoi [MAX_SIZE_NAME] = "";
    strToUpper (name, upperName);
    g_strstrip (upperName);
+   if (strlen (upperName) <= MIN_NAME_LENGTH) 
+      return -1;
    for (int i = 0; i < nPoi; i++) {
       strToUpper (tPoi [i].name, upperPoi);
       if (strstr (upperPoi, upperName) != NULL) {
@@ -1442,6 +1445,20 @@ double maxValInPol (PolMat mat) {
    return max;
 }
 
+/*! return VMG: angle and speed at TWS */
+void bestVmg (double tws, PolMat mat, double *vmgAngle, double *vmgSpeed) {
+   *vmgSpeed = -1;
+   double vmg;
+   for (int i = 1; i < mat.nLine; i++) {
+      if (mat.t [i][0] > 90) break; // useless over 90°
+      vmg = findPolar (mat.t [i][0], tws, mat) * cos (DEG_TO_RAD * mat.t [i][0]);
+      if (vmg > *vmgSpeed) {
+         *vmgSpeed = vmg;
+         *vmgAngle = mat.t [i][0];
+      }
+   }
+}
+
 /*! write polar information in string */
 char *polToStr (char * str, PolMat mat, size_t maxLength) {
    char line [MAX_SIZE_LINE] = "";
@@ -1574,7 +1591,6 @@ bool readParam (const char *fileName) {
    char str [MAX_SIZE_LINE];
    char buffer [MAX_SIZE_BUFFER];
    char *pLine = &buffer [0];
-   int poiIndex = -1;
    memset (&par, 0, sizeof (Par));
    par.opt = 1;
    par.tStep = 1;
@@ -1589,7 +1605,6 @@ bool readParam (const char *fileName) {
    par.showColors =2;
    par.dispDms = 2;
    par.windDisp =  1;
-   nPoi = 0;
    
    if ((f = fopen (fileName, "r")) == NULL) {
       fprintf (stderr, "Error in readParam: Cannot open: %s\n", fileName);
@@ -1604,14 +1619,10 @@ bool readParam (const char *fileName) {
       if ((pt = strchr (pLine, '#')) != NULL) // comment elimination
          *pt = '\0';
       if (sscanf (pLine, "WD:%255s", par.workingDir) > 0);
-      else if (sscanf (pLine, "POI:%255s", str) > 0) {// POI should be analysed before POR: and PDEST
+      else if (sscanf (pLine, "POI:%255s", str) > 0) 
          buildRootName (str, par.poiFileName);
-         nPoi += readPoi (par.poiFileName);
-      }
-      else if (sscanf (pLine, "PORT:%255s", str) > 0) {// POI should be analysed before POR: and PDEST
+      else if (sscanf (pLine, "PORT:%255s", str) > 0)
          buildRootName (str, par.portFileName);
-         nPoi += readPoi (par.portFileName);
-      }
       else if (strstr (pLine, "POR:") != NULL) {
          analyseCoord (strchr (pLine, ':') + 1, par.pOrName, &par.pOr.lat, &par.pOr.lon);
          par.pOr.lon = lonCanonize (par.pOr.lon);
@@ -1624,16 +1635,8 @@ bool readParam (const char *fileName) {
          par.pDest.id = 0;
          par.pDest.father = 0;
       }
-      else if (sscanf (pLine, "POR_NAME:%255s", par.pOrName) > 0) {
-         if ((poiIndex = findPoiByName (par.pOrName, &par.pOr.lat, &par.pOr.lon)) != -1)
-            strncpy (par.pOrName, tPoi [poiIndex].name, sizeof (par.pOrName) - 1);
-         else par.pOrName [0] = '\0';
-      }
-      else if (sscanf (pLine, "PDEST_NAME:%255s", par.pDestName) > 0) {
-         if ((poiIndex = findPoiByName (par.pDestName, &par.pDest.lat, &par.pDest.lon)) != -1)
-            strncpy (par.pDestName, tPoi [poiIndex].name, sizeof (par.pDestName) - 1);
-         else par.pDestName [0] = '\0';
-      }
+      else if (sscanf (pLine, "POR_NAME:%255s", par.pOrName) > 0);
+      else if (sscanf (pLine, "PDEST_NAME:%255s", par.pDestName) > 0);
       else if (sscanf (pLine, "GRIB_RESOLUTION:%lf", &par.gribResolution) > 0);
       else if (sscanf (pLine, "GRIB_TIME_STEP:%d", &par.gribTimeStep) > 0);
       else if (sscanf (pLine, "GRIB_TIME_MAX:%d", &par.gribTimeMax) > 0);
@@ -1649,7 +1652,8 @@ bool readParam (const char *fileName) {
          buildRootName (str, par.isSeaFileName);
       else if (sscanf (pLine, "CLI_HELP:%255s", str) > 0)
          buildRootName (str, par.cliHelpFileName);
-      else if (sscanf (pLine, "HELP:%255s", par.helpFileName) > 0);
+      else if (sscanf (pLine, "HELP:%255s", par.helpFileName) > 0)
+         buildRootName (str, par.cliHelpFileName);
       else if (strstr (pLine, "SMTP_SCRIPT:") != NULL) {
          pLine = strchr (pLine, ':') + 1;
          g_strstrip (pLine);

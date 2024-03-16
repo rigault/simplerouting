@@ -1528,8 +1528,8 @@ static void getPolarXYbyCol (int type, int l, int c, double width, double height
 /*! Draw polar from polar matrix */
 static void drawPolarBySelectedTws (cairo_t *cr, int polarType, PolMat ptMat,
    double selectedTws, double width, double height, double radiusFactor) {
-   
-   double x, y, x1, x2, y1, y2;
+   char line [MAX_SIZE_LINE];
+   double x, y, x1, x2, y1, y2, vmgAngle, vmgSpeed;
    cairo_set_line_width (cr, 5);
    CAIRO_SET_SOURCE_RGBA_POLAR_TWS (cr);
    getPolarXYbyValue (polarType, 1, selectedTws, width, height, radiusFactor, &x, &y);
@@ -1539,7 +1539,7 @@ static void drawPolarBySelectedTws (cairo_t *cr, int polarType, PolMat ptMat,
    if (segmentOrBezier == SEGMENT) {
       for (int l = 2; l < ptMat.nLine; l += 1) {
          getPolarXYbyValue (polarType, l, selectedTws, width, height, radiusFactor, &x, &y);
-         cairo_line_to(cr, x, y);
+         cairo_line_to (cr, x, y);
       }
    }
    // Tracer la courbe de Bézier si nb de points suffisant
@@ -1554,12 +1554,27 @@ static void drawPolarBySelectedTws (cairo_t *cr, int polarType, PolMat ptMat,
       cairo_line_to(cr, x, y);
    }
    cairo_stroke(cr);
+
+   if (polarType == POLAR) {
+      bestVmg (selectedTws, polMat, &vmgAngle, &vmgSpeed);
+      double ceilSpeed = ceil (maxValInPol (polMat));
+      if (vmgSpeed > 0) {
+         cairo_set_line_width (cr, 0.5);
+         cairo_move_to (cr, width/2, height/2);
+         cairo_line_to (cr, width/2, height/2 - vmgSpeed * radiusFactor);
+         cairo_line_to (cr, width/2 + radiusFactor * ceilSpeed, height/2 - vmgSpeed * radiusFactor);
+         cairo_stroke(cr);
+
+         cairo_move_to (cr, width/2 + 50 + radiusFactor * ceilSpeed, height/2 - vmgSpeed * radiusFactor);
+         snprintf (line,  MAX_SIZE_LINE, "Best VMG at %3.0lf°: %5.2lf Kn", vmgAngle, vmgSpeed);
+         cairo_show_text (cr, line);
+      }
+   }
 }
 
 /*! Draw polar from polar matrix */
 static void drawPolarAll (cairo_t *cr, int polarType, PolMat ptMat, 
    double width, double height, double radiusFactor) {
-
    double x, y, x1, x2, y1, y2;
    cairo_set_line_width (cr, 1);
    int minCol = (selectedPol == 0) ? 1 : selectedPol;
@@ -1781,6 +1796,7 @@ static void polarDraw (int type) {
    int maxScale = ptMat->t[0][ptMat->nCol-1]; // max value of wind or waves
    GtkWidget *scale = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL, 0, maxScale, 1);
    gtk_scale_set_value_pos(GTK_SCALE(scale), GTK_POS_TOP);
+   gtk_range_set_value(GTK_RANGE(scale), selectedTws);
    gtk_widget_set_size_request (scale, 300, -1);  // Ajuster la largeur du GtkScale
    g_signal_connect(scale, "value-changed", G_CALLBACK(on_scale_value_changed), NULL);
   
@@ -2669,7 +2685,7 @@ static bool urlChange (char *url) {
 
 /*! check if readGrib is terminated (wind) */
 static gboolean readGribCheck (gpointer data) {
-   printf ("readGribCheck\n");
+   // printf ("readGribCheck\n");
    statusBarUpdate ();
    if (readGribRet == -1) { // not terminated
       return TRUE;
@@ -2869,6 +2885,7 @@ static void saveScenario (GtkWidget *widget, gpointer data) {
 
 /*! Make initialization following parameter file load */
 static void initScenario () {
+   int poiIndex = -1;
    if (par.gribFileName [0] != '\0') {
       iFlow = WIND;
       readGrib (&iFlow);
@@ -2892,6 +2909,19 @@ static void initScenario () {
       
    if (readPolar (par.wavePolFileName, &wavePolMat))
       printf ("Polar loaded   : %s\n", par.wavePolFileName);
+   
+   nPoi = 0;
+   if (par.poiFileName [0] != '\0')
+      nPoi += readPoi (par.poiFileName);
+   if (par.portFileName [0] != '\0')
+   nPoi += readPoi (par.portFileName);
+   
+   if ((poiIndex = findPoiByName (par.pOrName, &par.pOr.lat, &par.pOr.lon)) != -1)
+      strncpy (par.pOrName, tPoi [poiIndex].name, sizeof (par.pOrName) - 1);
+   else par.pOrName [0] = '\0';
+   if ((poiIndex = findPoiByName (par.pDestName, &par.pDest.lat, &par.pDest.lon)) != -1)
+      strncpy (par.pDestName, tPoi [poiIndex].name, sizeof (par.pDestName) - 1);
+   else par.pDestName [0] = '\0';
    
    nIsoc = 0;
    route.n = 0;

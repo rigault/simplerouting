@@ -75,6 +75,7 @@ extern void   findCurrent (Pp pt, double t, double *uCurr, double *vCurr, double
 extern char   *newDate (long intDate, double myTime, char *res);
 extern char   *gribToStr (char *str, Zone zone, size_t maxLength);
 extern double maxValInPol (PolMat mat);
+extern void   bestVmg (double tws, PolMat mat, double *vmgAngle, double *vmgSpeed);
 extern bool   fileToStr (char *fileName, char* str, size_t maxLength);
 extern bool   readParam (const char *fileName);
 extern bool   writeParam (const char *fileName, bool header);

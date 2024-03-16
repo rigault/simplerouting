@@ -129,8 +129,8 @@ static inline int forwardSectorOptimize (int nIsoc, Isoc isoList, int isoLen, Is
          optIsoc [k].sector = iSector;
 	      k += 1;
       }
-	}
-	return k; 
+   }
+   return k; 
 }
 
 /*! choice of algorithm used to reduce the size of Isolist */
