@@ -1,0 +1,15 @@
+#!/bin/bash
+gcc -Wall -Wextra -pedantic -O2 -c engine.c
+gcc -Wall -Wextra -pedantic  -c option.c `pkg-config --cflags --libs glib-2.0`
+gcc -Wall -Wextra -pedantic -O2 -c rutil.c `pkg-config --cflags --libs glib-2.0` 
+#gcc -c show.c `pkg-config --cflags gtk4`  `pkg-config --libs gtk4` $(pkg-config --cflags webkit2gtk-4.1)
+gcc -c show4.c `pkg-config --cflags gtk4`
+
+#gcc show.o option.o rutil.o engine.o -o routing -lcurl -pthread -lgps -lshp -leccodes -lm $(pkg-config --cflags --libs webkit2gtk-4.1) `pkg-config --cflags --libs gtk4`
+gcc show4.o option.o rutil.o engine.o -o routing -lcurl -pthread -lgps -lshp -leccodes -lm `pkg-config --cflags --libs gtk4`
+
+rm -f *.o
+mv routing ../.
+
+
+

@@ -303,6 +303,7 @@ typedef struct {
    int windDisp;                             // display wind nothing or barbule or arrow
    int currentDisp;                          // display current
    int waveDisp;                             // display wave height
+   int averageOrGustDisp;                    // display wave height
    int closestDisp;                          // display closest point to pDest in isochrones
    int focalDisp;                            // display focal point 
    double penalty0;                          // penalty in hours when amure change front
@@ -311,6 +312,7 @@ typedef struct {
    double threshold;                         // threshold for motor use
    double efficiency;                        // efficiency of team 
    char editor [MAX_SIZE_NAME];              // name of text file editor
+   char webkit [MAX_SIZE_NAME];              // name of webkit application
    char spreadsheet [MAX_SIZE_NAME];         // name of spreadshhet application
    char mailPw [MAX_SIZE_NAME];              // password for smtp and imap
    int nForbidZone;                          // number of forbidden zones

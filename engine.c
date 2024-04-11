@@ -82,6 +82,7 @@ static inline void initSector (int nIsoc, int nMax) {
 /*! reduce the size of Isolist 
    note influence of parameters par.nSector, par.jFactor and par.kFactor */
 static inline int forwardSectorOptimize (int nIsoc, Isoc isoList, int isoLen, Isoc optIsoc) {
+   const double epsilon = 0.1;
    int iSector, k;
    double alpha, theta;
    double thetaStep = 360.0 / par.nSectors;
@@ -123,8 +124,10 @@ static inline int forwardSectorOptimize (int nIsoc, Isoc isoList, int isoLen, Is
          && (sector [nIsoc%2][iSector].vmc < par.pOr.dd * 1.1) 
          && ((par.kFactor == 0)
             || ((par.kFactor == 1) && (sector [nIsoc%2][iSector].vmc >= sector [(nIsoc-1)%2][iSector].vmc)) // Best !
-            || ((par.kFactor == 2) && (sector [nIsoc%2][iSector].dd < sector [(nIsoc-1)%2][iSector].dd))
-            || ((par.kFactor == 3) && (sector [nIsoc%2][iSector].vmc >= sector [(nIsoc-1)%2][iSector].vmc) && (sector [nIsoc%2][iSector].dd < sector [(nIsoc-1)%2][iSector].dd)))) {
+            || ((par.kFactor == 2) && (sector [nIsoc%2][iSector].dd <= sector [(nIsoc-1)%2][iSector].dd))
+            || ((par.kFactor == 3) && (sector [nIsoc%2][iSector].vmc >= sector [(nIsoc-1)%2][iSector].vmc) && (sector [nIsoc%2][iSector].dd <= sector [(nIsoc-1)%2][iSector].dd))
+            || (fabs (sector [nIsoc%2][iSector].dd - sector [(nIsoc-1)%2][iSector].dd) < epsilon)))        // no wind, no change, we keep
+      {
          optIsoc [k] = optIsoc [iSector];
          optIsoc [k].sector = iSector;
 	      k += 1;
@@ -139,7 +142,7 @@ static inline int optimize (int nIsoc, int algo, Isoc isoList, int isoLen, Isoc 
       case 0: 
          memcpy (optIsoc, isoList, isoLen * sizeof (Pp)); 
          return isoLen;
-      case 1: 
+      case 1:
          return forwardSectorOptimize (nIsoc, isoList, isoLen, optIsoc);
    } 
    return 0;
@@ -211,13 +214,13 @@ static int buildNextIsochrone (Isoc isoList, int isoLen, Pp pDest, double t, dou
    return lenNewL;
 }
 
-/*! find father of point in previous isochrone */
-static int findFather (int ptId, Isoc isoc, int lIsoc) {
+/*! find father of point in previous isochrone  */
+static int findFather (int ptId, int i, int lIsoc) {
    for (int k = 0; k < lIsoc; k++) {
-      if (isoc [k].id == ptId)
+      if (isocArray [i] [k].id == ptId)
          return k;
    }
-   fprintf (stderr, "Error in father: ptId not found: %d\n", ptId);
+   fprintf (stderr, "Error in father: ptId not found: %d, Isoc No:%d, Isoc Len: %d\n", ptId, i, lIsoc);
    return -1;
 }
 
@@ -298,7 +301,7 @@ bool dumpRoute (const char *fileName, Pp dest) {
    fprintf (f, "%4d; %06.2f; %06.2f; %4d; %4d\n", dep, pt.lat, pt.lon, pt.id, pt.father);
       
    for (i = dep - 1; i >= 0; i--) {
-      iFather = findFather (pt.father, isocArray [i], isoDesc[i].size);
+      iFather = findFather (pt.father, i, isoDesc[i].size);
       pt = isocArray [i][iFather];
       fprintf (f, "%4d; %06.2f; %06.2f; %4d; %4d\n", i, pt.lat, pt.lon, pt.id, pt.father);
    }
@@ -333,7 +336,7 @@ void storeRoute (Pp pDest, double lastStepDuration) {
    route.t [dep+1].od = 0;
 
    for (int i = dep - 1; i >= 0; i--) {
-      iFather = findFather (pt.father, isocArray [i], isoDesc[i].size);
+      iFather = findFather (pt.father, i, isoDesc[i].size);
       if (iFather == -1) continue;
       found = true;
       pt = isocArray [i][iFather];
@@ -487,6 +490,26 @@ static inline Pp closest (Isoc isoc, int n, Pp pDest, int *index) {
    return best;
 }
 
+/*! when no wind build nexi isochrone as a replica of previous isochrone */
+static void replicate (int n) {
+   int len = isoDesc [n - 1].size;
+   for (int i = 0; i < len; i++) {
+      isocArray [n][i].id = isocArray [n-1][i].id + len; 
+      isocArray [n][i].father = isocArray [n-1][i].id; 
+      isocArray [n][i].amure = isocArray [n-1][i].amure; 
+      isocArray [n][i].sector = isocArray [n-1][i].sector; 
+      isocArray [n][i].lat = isocArray [n-1][i].lat; 
+      isocArray [n][i].lon = isocArray [n-1][i].lon; 
+      isocArray [n][i].dd = isocArray [n-1][i].dd; 
+      isocArray [n][i].vmc = isocArray [n-1][i].vmc; 
+   }
+   isoDesc [n].distance = isoDesc [n-1].distance;
+   isoDesc [n].bestVmg = isoDesc [n-1].bestVmg;
+   isoDesc [n].size = isoDesc [n-1].size;
+   isoDesc [n].focalLat = isoDesc [n-1].focalLat;
+   isoDesc [n].focalLon = isoDesc [n-1].focalLon;
+}
+
 /*! find optimal routing from p0 to pDest using grib file and polar
     return number of steps to reach pDest, NIL if unreached, -1 if problem, 0 reserved for not terminated
     return also lastStepDuration if the duration of last step if destination reached (0 if unreached) */
@@ -538,7 +561,7 @@ static int routing (double t, double dt, double *lastStepDuration) {
    
    nIsoc = 1;
    //printf ("Routing t = %.2lf, zone: %.2ld\n", t, zone.timeStamp [zone.nTimeStamp-1]);
-   while (t < (zone.timeStamp [zone.nTimeStamp-1]/* + par.tStep*/) /*&& (nIsoc < par.maxIso)*/) {
+   while (t < (zone.timeStamp [zone.nTimeStamp-1]/* + par.tStep*/) && (nIsoc < par.maxIso)) {
       t += dt;
       if (goal (nIsoc-1, isocArray [nIsoc -1], isoDesc[nIsoc - 1].size, t, dt, &timeLastStep)) {
          isoDesc [nIsoc].size = optimize (nIsoc, par.opt, tempList, lTempList, isocArray [nIsoc]);
@@ -557,16 +580,13 @@ static int routing (double t, double dt, double *lastStepDuration) {
       lastBestVmg = bestVmg;
       isoDesc [nIsoc].bestVmg = bestVmg;
       isoDesc [nIsoc].size = optimize (nIsoc, par.opt, tempList, lTempList, isocArray [nIsoc]);
-      if (isoDesc [nIsoc].size == 0) { // no Wind ... we copy
-         memcpy (&isoDesc [nIsoc], &isoDesc [nIsoc -1], sizeof (IsoDesc));
-         memcpy (isocArray [nIsoc], isocArray [nIsoc-1], isoDesc [nIsoc-1].size * sizeof (Pp));
+      if ((isoDesc [nIsoc].size == 0) /*|| (! movePossible)*/) { // no Wind ... we copy
+         replicate (nIsoc);
       }
-      //printf ("Isoc: %d Biglist length: %d optimized size: %d\n", nIsoc, lTempList, isoDesc [nIsoc].size);
-      else {
-         isoDesc [nIsoc].first = findFirst (nIsoc);; 
-         lastClosest = closest (isocArray [nIsoc], isoDesc [nIsoc].size, par.pDest, &index);
-         isoDesc [nIsoc].closest = index;
-      } 
+      isoDesc [nIsoc].first = findFirst (nIsoc);; 
+      lastClosest = closest (isocArray [nIsoc], isoDesc [nIsoc].size, par.pDest, &index);
+      isoDesc [nIsoc].closest = index;
+      // printf ("Isoc: %d Biglist length: %d optimized size: %d\n", nIsoc, lTempList, isoDesc [nIsoc].size);
       nIsoc += 1;
    }
    *lastStepDuration = 0.0;

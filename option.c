@@ -30,6 +30,7 @@ void optionManage (char option) {
       printf ("Loxodist1  : %.2lf,   Loxodist2 : %.2lf\n", loxoDist(lat, lon, lat2, lon2), loxoDist (lat2, lon2, lat, lon));
       break;
    case 'g': // grib
+      printf ("Grib File Name: %s\n", par.gribFileName);
       readGribAll (par.gribFileName, &zone, WIND);
       gribToStr (buffer, zone, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);

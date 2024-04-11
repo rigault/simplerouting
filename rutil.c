@@ -19,6 +19,7 @@
 #include "eccodes.h"
 #include "rtypes.h"
 #include "shapefil.h"
+#include <locale.h>
 
 static const char *CSV_SEP = ";,\t";
 
@@ -395,6 +396,10 @@ bool smtpGribRequestPython (int type, double lat1, double lon1, double lat2, dou
       fprintf (stderr, "Error in smtpGribRequestPython: Tentative to cross antemeridian !\n");
       lon2 = 179.0;
    }
+   if (setlocale (LC_ALL, "C") == NULL) {                   // very important for printf  decimal numbers
+      fprintf (stderr, "Error in main: setlocale failed");
+      return EXIT_FAILURE;
+   }
    
    lat1 = floor (lat1);
    lat2 = ceil (lat2);
@@ -516,6 +521,7 @@ bool writePoi (const char *fileName) {
       fprintf (stderr, "Error in writePoi: cannot write: %s\n", fileName);
       return false;
    }
+   fprintf (f, "LATITUDE; LONGITUDE; Type; Level; PORT_NAME\n");
    for (int i = 0; i < nPoi; i++) {
       if (tPoi[i].type != PORT && tPoi [i].type != UNVISIBLE)
          fprintf (f, "%.2lf; %.2lf; %d; %d; %s\n", tPoi [i].lat, tPoi [i].lon, tPoi [i].type, tPoi [i].level, tPoi [i].name);
@@ -982,6 +988,28 @@ double findTwsByIt (Pp p, int iT0, const FlowP *gribData) {
    v0 = interpolate (p.lat, windP00.lat, windP10.lat, a, b);
 
    return fTws (u0, v0);
+}
+
+/*! interpolation to return gust at index time iT */
+double findGustByIt (Pp p, int iT0, const FlowP *gribData) {
+   double latMin, latMax, lonMin, lonMax;
+   double a, b;
+
+   FlowP windP00, windP01, windP10, windP11;
+   if ((!zone.wellDefined) || (zone.nbLat == 0) || (! isInZone (p, zone))) {
+      return 0;
+   }
+   
+   find4PointsAround (p.lat, p.lon, &latMin, &latMax, &lonMin, &lonMax, zone);
+   
+   windP00 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMax, zone) * zone.nbLon + indLon(lonMin, zone)];  
+   windP01 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMax, zone) * zone.nbLon + indLon(lonMax, zone)];
+   windP10 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMin, zone) * zone.nbLon + indLon(lonMax, zone)];
+   windP11 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMin, zone) * zone.nbLon + indLon(lonMin, zone)];
+
+   a = interpolate (p.lon, windP00.lon, windP01.lon, windP00.g, windP01.g);
+   b = interpolate (p.lon, windP10.lon, windP11.lon, windP10.g, windP11.g); 
+   return interpolate (p.lat, windP00.lat, windP10.lat, a, b);
 }
 
 /*! interpolation to get u, v, g (gust), w (waves) at point p and time t */
@@ -1618,7 +1646,7 @@ bool readParam (const char *fileName) {
       if ((!*pLine) || *pLine == '#' || *pLine == '\n') continue;
       if ((pt = strchr (pLine, '#')) != NULL) // comment elimination
          *pt = '\0';
-      if (sscanf (pLine, "WD:%255s", par.workingDir) > 0);
+      if (sscanf (pLine, "WD:%255s", par.workingDir) > 0); // should be fiest !!!
       else if (sscanf (pLine, "POI:%255s", str) > 0) 
          buildRootName (str, par.poiFileName);
       else if (sscanf (pLine, "PORT:%255s", str) > 0)
@@ -1652,8 +1680,7 @@ bool readParam (const char *fileName) {
          buildRootName (str, par.isSeaFileName);
       else if (sscanf (pLine, "CLI_HELP:%255s", str) > 0)
          buildRootName (str, par.cliHelpFileName);
-      else if (sscanf (pLine, "HELP:%255s", par.helpFileName) > 0)
-         buildRootName (str, par.cliHelpFileName);
+      else if (sscanf (pLine, "HELP:%255s", par.helpFileName) > 0); // full link required
       else if (strstr (pLine, "SMTP_SCRIPT:") != NULL) {
          pLine = strchr (pLine, ':') + 1;
          g_strstrip (pLine);
@@ -1707,10 +1734,13 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "COLOR_DISP:%d", &par.showColors) > 0);
       else if (sscanf (pLine, "DMS_DISP:%d", &par.dispDms) > 0);
       else if (sscanf (pLine, "WIND_DISP:%d", &par.windDisp) > 0);
+      else if (sscanf (pLine, "AVR_OR_GUST_DISP:%d", &par.averageOrGustDisp) > 0);
       else if (sscanf (pLine, "CURRENT_DISP:%d", &par.currentDisp) > 0);
       else if (sscanf (pLine, "WAVE_DISP:%d", &par.waveDisp) > 0);
       else if (sscanf (pLine, "LEVEL_POI_DISP:%d", &par.maxPoiVisible) > 0);
       else if (sscanf (pLine, "MAIL_PW:%255s", par.mailPw) > 0);
+      else if (sscanf (pLine, "WEBKIT:%255s", str) > 0)
+         buildRootName (str, par.webkit);
       else if (strstr (pLine, "EDITOR:") != NULL) {
          pLine = strchr (pLine, ':') + 1;
          g_strstrip (pLine);
@@ -1802,6 +1832,7 @@ bool writeParam (const char *fileName, bool header) {
    fprintf (f, "COLOR_DISP:      %d\n", par.showColors);
    fprintf (f, "DMS_DISP:        %d\n", par.dispDms);
    fprintf (f, "WIND_DISP:       %d\n", par.windDisp);
+   fprintf (f, "AVR_OR_GUST_DISP:%d\n", par.averageOrGustDisp);
    fprintf (f, "CURRENT_DISP:    %d\n", par.currentDisp);
    fprintf (f, "WAVE_DISP:       %d\n", par.waveDisp);
    fprintf (f, "LEVEL_POI_DISP:  %d\n", par.maxPoiVisible);
@@ -1813,6 +1844,7 @@ bool writeParam (const char *fileName, bool header) {
    fprintf (f, "SMTP_SCRIPT:     %s\n", par.smtpScript);
    fprintf (f, "IMAP_TO_SEEN:    %s\n", par.imapToSeen);
    fprintf (f, "IMAP_SCRIPT:     %s\n", par.imapScript);
+   fprintf (f, "WEBKIT:          %s\n", par.webkit);
    fprintf (f, "EDITOR:          %s\n", par.editor);
    fprintf (f, "SPREADSHEET:     %s\n", par.spreadsheet);
    for (int i = 0; i < par.nForbidZone; i++) {
