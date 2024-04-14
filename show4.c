@@ -36,8 +36,8 @@
 #include "engine.h"
 #include "option.h"
 
-#define MAIN_WINDOW_DEFAULT_WIDTH  1000
-#define MAIN_WINDOW_DEFAULT_HEIGHT 500
+#define MAIN_WINDOW_DEFAULT_WIDTH  1200
+#define MAIN_WINDOW_DEFAULT_HEIGHT 600
 //#define APPLICATION_ID        "com.github.ToshioCP.menu1"  // NEW WITH GTK4
 #define APPLICATION_ID        "com.routing"  // NEW WITH GTK4
 #define MIN_ZOOM_POI_VISIBLE  30
@@ -139,7 +139,8 @@ GtkWidget *tab_display = NULL;
 GtkWidget *dialog = NULL;
 GtkWidget *spin_button_time_max = NULL;
 GtkWidget *val_size_eval = NULL; 
-GtkWidget *menuWindow = NULL;        // Pop up menu
+GtkWidget *menuWindow = NULL;        // Pop up menu Right Click
+GtkWidget *menuGrib = NULL;          // Pop uo menu Meteoconsult
 
 WayRoute wayRoute;
 
@@ -172,6 +173,14 @@ struct {
 static void meteogram ();
 static void on_run_button_clicked ();
 static gboolean routingCheck (gpointer data);
+
+/*! hide and terminate popover */
+ void popoverFinish (GtkWidget *pop) {
+   if (pop != NULL) {
+      gtk_widget_hide (pop);
+      gtk_widget_unparent (pop);
+   }
+}
 
 /*! destroy spînner window */
 static void stopSpinner (GtkComboBox *widget, gpointer user_data) {
@@ -219,22 +228,22 @@ static void infoMessage (char *message, GtkMessageType typeMessage) {
 }
 
 /*! open map using open street map or open sea map*/
-static void openMap () {
+static void openMap (GSimpleAction *action, GVariant *parameter, gpointer *data) {
+   int *comportement = (int *) data;
    const char* OSM_URL [] = {"https://www.openstreetmap.org/export/", "https://map.openseamap.org/"};
-   int comportement = 0;
    char command [MAX_SIZE_LINE * 2];
    char mapUrl [MAX_SIZE_LINE];
    double lat = (dispZone.latMin + dispZone.latMax) / 2.0;
    double lon = (dispZone.lonLeft + dispZone.lonRight) / 2.0;
    double zoom = 43.0 / fabs(dispZone.latMax - dispZone.latMin);
    
-   if (comportement == 0)
+   if (*comportement == 0)
       snprintf (mapUrl, sizeof (mapUrl), "%sembed.html?bbox=%.4lf%%2C%.4lf%%2C%.4lf%%2C%.4lf&layer=mapnik&marker=%.4lf%%2C%.4lf", 
-         OSM_URL[comportement], dispZone.lonLeft, dispZone.latMin, dispZone.lonRight, dispZone.latMax,
+         OSM_URL[*comportement], dispZone.lonLeft, dispZone.latMin, dispZone.lonRight, dispZone.latMax,
          par.pOr.lat, par.pOr.lon);
     
    else
-      snprintf (mapUrl, sizeof (mapUrl), "%s?lat=%.4lf&lon=%.4lf&zoom=%.2lf", OSM_URL[comportement], lat, lon, zoom);
+      snprintf (mapUrl, sizeof (mapUrl), "%s?lat=%.4lf&lon=%.4lf&zoom=%.2lf", OSM_URL[*comportement], lat, lon, zoom);
    snprintf (command, MAX_SIZE_LINE * 2, "%s %s", par.webkit, mapUrl);
    if (popen (command, "r") == NULL)
       fprintf (stderr, "Error in openMap: popen call: %s\n", command);
@@ -1719,7 +1728,9 @@ static void polarDraw () {
    gtk_window_set_child (GTK_WINDOW (polWindow), vBox);
    
    // Créer une zone de dessin
-   polar_drawing_area = gtk_drawing_area_new();
+   polar_drawing_area = gtk_drawing_area_new ();
+   gtk_widget_set_hexpand (polar_drawing_area, TRUE);
+   gtk_widget_set_vexpand (polar_drawing_area, TRUE);
    gtk_widget_set_size_request (polar_drawing_area, POLAR_WIDTH, POLAR_HEIGHT - 100);
    gtk_drawing_area_set_draw_func (GTK_DRAWING_AREA (polar_drawing_area), on_draw_polar_event, NULL, NULL);
 
@@ -1821,7 +1832,6 @@ static double getDepartureTimeInHour (MyDate *start) {
 static void calendarResponse (GtkDialog *dialog, gint response_id, gpointer user_data) {
    time_t currentTime = time (NULL);
    struct tm *gmtTime = gmtime (&currentTime);
-   printf ("Response calendar: %d %d\n", response_id, GTK_RESPONSE_ACCEPT);
    if (response_id == GTK_RESPONSE_NONE) { // select right button with curent date
       start->day = gmtTime->tm_mday;
       start->mon = gmtTime->tm_mon;
@@ -2144,6 +2154,7 @@ static gboolean on_play_timeout(gpointer user_data) {
    if (kTime < zone.nTimeStamp - 1) kTime += 1;
    else animation_active = false;
    gtk_widget_queue_draw(drawing_area);
+   statusBarUpdate ();
    return animation_active;
 }
 
@@ -2162,18 +2173,21 @@ static void on_to_start_button_clicked(GtkWidget *widget, gpointer data) {
    kTime = 0;
    theTime = zone.timeStamp [0];
    gtk_widget_queue_draw(drawing_area);
+   statusBarUpdate ();
 }
 
 static void on_to_end_button_clicked(GtkWidget *widget, gpointer data) {
    kTime = zone.nTimeStamp - 1;
    theTime = zone.timeStamp [zone.nTimeStamp - 1];
    gtk_widget_queue_draw(drawing_area);
+   statusBarUpdate ();
 }
 
 /*! Callback for reward button */
 static void on_reward_button_clicked(GtkWidget *widget, gpointer data) {
    if (kTime > 0) kTime -= 1; 
    gtk_widget_queue_draw(drawing_area);
+   statusBarUpdate ();
 }
 
 /*! Callback for Forward button */
@@ -2182,6 +2196,7 @@ static void on_forward_button_clicked(GtkWidget *widget, gpointer data) {
    //if (kTime < zone.nTimeStamp - 1 + deltaPlus) kTime += 1; 
    if (kTime < zone.nTimeStamp - 1) kTime += 1; 
    gtk_widget_queue_draw(drawing_area);
+   statusBarUpdate ();
 }
 
 /*! display isochrones */
@@ -2432,14 +2447,15 @@ void cbEditPoi (GtkDialog *dialog, gint response_id, gpointer user_data) {
 }
 
 /*! edit poi or port */
-static void poiEdit (int comportement) {
+static void poiEdit (GSimpleAction *action, GVariant *parameter, gpointer *data) {
+   int *comportement = (int *) data;
    char line [MAX_SIZE_LINE] = "";
-   snprintf (line, sizeof (line), "%s %s\n", par.spreadsheet, (comportement == POI_SEL) ? par.poiFileName: par.portFileName);
+   snprintf (line, sizeof (line), "%s %s\n", par.spreadsheet, (*comportement == POI_SEL) ? par.poiFileName: par.portFileName);
    if (popen (line, "r") == NULL) {
       fprintf (stderr, "Error in poiEdit: system call: %s\n", line);
       return;
    }
-   snprintf (line, sizeof (line), "Confirm loading: %s", (comportement == POI_SEL) ? par.poiFileName: par.portFileName);
+   snprintf (line, sizeof (line), "Confirm loading: %s", (*comportement == POI_SEL) ? par.poiFileName: par.portFileName);
    GtkWidget *dialogBox = gtk_dialog_new_with_buttons (line, \
          GTK_WINDOW(window), GTK_DIALOG_MODAL, "OK", GTK_RESPONSE_ACCEPT, "Cancel", GTK_RESPONSE_CANCEL, NULL);
    g_signal_connect_swapped (dialogBox, "response", G_CALLBACK (cbEditPoi), dialogBox);
@@ -2500,9 +2516,8 @@ static void helpInfo () {
    char str [MAX_SIZE_LINE];
    char strVersion [MAX_SIZE_LINE];
   
-   snprintf (strVersion, sizeof (strVersion), "%s\nGTK version: %d.%d.%d\nWebKit version: %d.%d.%d\nGlib version: %d.%d.%d\nCairo Version:%s\nCompilation date: %s\n", 
+   snprintf (strVersion, sizeof (strVersion), "%s\nGTK version: %d.%d.%d\nGlib version: %d.%d.%d\nCairo Version:%s\nCompilation date: %s\n", 
       PROG_VERSION, gtk_get_major_version(), gtk_get_minor_version(), gtk_get_micro_version(),
-      0, 0, 0, // ATT GTK4 CHANGE
       // webkit_get_major_version (), webkit_get_minor_version (),webkit_get_micro_version (), // ATT GTK4 CHANGE
       GLIB_MAJOR_VERSION, GLIB_MINOR_VERSION, GLIB_MICRO_VERSION,
       CAIRO_VERSION_STRING,
@@ -2587,7 +2602,7 @@ static void loadGribFile (int type, char *fileName) {
 
 /*! Response for URL change */
 static void urlWindowResponse (GtkDialog *dialog, gint response_id, gpointer user_data) {
-   printf ("Response URL win: %d %d\n", response_id, GTK_RESPONSE_ACCEPT);
+   // printf ("Response URL win: %d %d\n", response_id, GTK_RESPONSE_ACCEPT);
    if (response_id == GTK_RESPONSE_ACCEPT) {
       strncat (urlRequest.outputFileName, strrchr (urlRequest.url, '/'), MAX_SIZE_LINE - strlen (urlRequest.outputFileName)); // le nom du fichier
       if (curlGet (urlRequest.url, urlRequest.outputFileName))
@@ -2617,14 +2632,17 @@ static void urlChange (char *url) {
 }
 
 /*! build url then download it and load the grib file */ 
-static void urlDownloadGrib (int type, int indice) {
-   urlRequest.urlType = type;
-   snprintf (urlRequest.outputFileName, sizeof (urlRequest.outputFileName), (type == WIND) ? "%sgrib": "%scurrentgrib", par.workingDir);
-   buildMeteoUrl (urlRequest.urlType, indice, urlRequest.url);
+static void urlDownloadGrib (gpointer user_data) {
+   int index = GPOINTER_TO_INT(user_data);
+   if (menuGrib != NULL) popoverFinish (menuGrib);
+   urlRequest.urlType = typeFlow;
+   snprintf (urlRequest.outputFileName, sizeof (urlRequest.outputFileName), (typeFlow == WIND) ? "%sgrib": "%scurrentgrib", par.workingDir);
+   buildMeteoUrl (urlRequest.urlType, index, urlRequest.url);
    printf ("url: %s\n", urlRequest.url);
    urlChange (urlRequest.url);
 }
 
+/*! callback for openGrib */
 static void on_open_grib_response (GtkDialog *dialog, int response) {
    if (response == GTK_RESPONSE_ACCEPT) {
       GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
@@ -2642,7 +2660,10 @@ static void on_open_grib_response (GtkDialog *dialog, int response) {
 }
 
 /*! Select grib file and read grib file, fill gribData */
-static void openGrib () {
+static void openGrib (GSimpleAction *action, GVariant *parameter, gpointer *data) {
+   int *indexPtr = (int *) data;
+   typeFlow = *indexPtr;
+   g_print("Type Flow: %d\n", typeFlow);
    char directory [MAX_SIZE_DIR_NAME];
    snprintf (directory, sizeof (directory), (typeFlow == WIND) ? "%sgrib": "%scurrentgrib", par.workingDir);
    GtkWidget *dialog = gtk_file_chooser_dialog_new ("Open Grib", GTK_WINDOW (window), GTK_FILE_CHOOSER_ACTION_OPEN,
@@ -2662,6 +2683,7 @@ static void openGrib () {
    g_signal_connect (dialog, "response", G_CALLBACK (on_open_grib_response), NULL);
 }
 
+/*! callback for openPolar */
 static void on_open_polar_response (GtkDialog *dialog, int response) {
    if (response == GTK_RESPONSE_ACCEPT) {
       GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
@@ -2669,7 +2691,6 @@ static void on_open_polar_response (GtkDialog *dialog, int response) {
       if (file != NULL) {
          gchar *fileName = g_file_get_path(file);
          if (fileName != NULL) {
-            printf ("Fichier sélectionné : %s\n", fileName);
             if (strstr (fileName, "polwave.csv") == NULL) {
                readPolar (fileName, &polMat);
                strncpy (par.polarFileName, fileName, sizeof (par.polarFileName) - 1);
@@ -2983,8 +3004,11 @@ static void gribInfoDisplay (const char *fileName, Zone zone) {
 }
 
 /*! provides meta information about grib file */
-static void gribInfo (int comportement) {
-   if (comportement == WIND) {
+void gribInfo (GSimpleAction *action, GVariant *parameter, gpointer *data) {
+   int *indexPtr = (int *) data;
+   typeFlow = *indexPtr;
+   g_print("Type Flow: %d\n", typeFlow);
+   if (typeFlow == WIND) {
       if (zone.nbLat == 0)
          infoMessage ("No wind data grib available", GTK_MESSAGE_ERROR);
       else 
@@ -3430,7 +3454,6 @@ void windTwsUpdate (GtkWidget *widget, gpointer data) {
 
 /*! Response for OK change */
 static void OKChange (GtkDialog *dialog, gint response_id, gpointer user_data) {
-   printf ("Response Chage: %d %d\n", response_id, GTK_RESPONSE_ACCEPT);
    if (response_id == GTK_RESPONSE_ACCEPT) {
       gtk_widget_queue_draw  (drawing_area); 
       const int EPSILON = 0.01;
@@ -3693,6 +3716,7 @@ static void change () {
    gtk_grid_attach(GTK_GRID (tab_display), checkboxFocal,          2, 7, 1, 1);
 
    gtk_grid_attach(GTK_GRID(tab_display), separator, 0, 8, 10, 1);
+
    // Créer le widget GtkScale
    const int MAX_LEVEL_POI_VISIBLE = 5; 
    labelCreate (tab_display, "level Poi Visible",     0, 9);
@@ -3772,7 +3796,7 @@ static void poi_entry_changed (GtkEditable *editable, gpointer user_data) {
 /*! Response for poi change */
 static void poi_name_response (GtkDialog *dialog, gint response_id, gpointer user_data) {
    printf ("Response POI : %d %d\n", response_id, GTK_RESPONSE_ACCEPT);
-   if (menuWindow != NULL) gtk_widget_hide (menuWindow);
+   if (menuWindow != NULL) popoverFinish (menuWindow);
    if (response_id == GTK_RESPONSE_ACCEPT) {
       strncpy (tPoi [nPoi].name, poiName, MAX_SIZE_POI_NAME);
       tPoi [nPoi].lon = xToLon (whereIsPopup.x);
@@ -3805,7 +3829,7 @@ static void poiNameChoose () {
 
 /*! create wayPoint */
 static void wayPointSelected () {
-   if (menuWindow != NULL) gtk_widget_hide (menuWindow);
+   if (menuWindow != NULL) popoverFinish (menuWindow);
    if (wayRoute.n < MAX_N_WAY_POINT) {
       destPressed = false;
       wayRoute.t [wayRoute.n].lat = yToLat (whereIsPopup.y);
@@ -3818,7 +3842,7 @@ static void wayPointSelected () {
 
 /*! update point of origin */
 static void originSelected () {
-   if (menuWindow != NULL) gtk_widget_hide (menuWindow);
+   if (menuWindow != NULL) popoverFinish (menuWindow);
    destPressed = false;
    par.pOr.lat = yToLat (whereIsPopup.y);
    par.pOr.lon = xToLon (whereIsPopup.x);
@@ -3832,7 +3856,7 @@ static void originSelected () {
 
 /*! update point of destination */
 static void destinationSelected () {
-   if (menuWindow != NULL) gtk_widget_hide (menuWindow);
+   if (menuWindow != NULL) popoverFinish (menuWindow);
    destPressed = true;
    route.n = 0;
    par.pDest.lat = yToLat (whereIsPopup.y);
@@ -3851,7 +3875,7 @@ static void destinationSelected () {
 
 /*! update start polygon for forbidden zone */
 static void startPolygonSelected () {
-   if (menuWindow != NULL) gtk_widget_hide (menuWindow);
+   if (menuWindow != NULL) popoverFinish (menuWindow);
    if ((forbidZones [par.nForbidZone].points = (Point *) malloc (MAX_SIZE_FORBID_ZONE * sizeof(Point))) == NULL) {
       fprintf (stderr, "Error in on_popup_menu_selection: malloc forbidZones with k = %d\n", par.nForbidZone);
       infoMessage ("in on_popup_menu_selection Error malloc forbidZones", GTK_MESSAGE_ERROR);
@@ -3868,7 +3892,7 @@ static void startPolygonSelected () {
 
 /*! intermediate vertex  polygon for forbidden zone */
 static void vertexPolygonSelected () {
-   if (menuWindow != NULL) gtk_widget_hide (menuWindow);
+   if (menuWindow != NULL) popoverFinish (menuWindow);
    if (polygonStarted && (forbidZones [par.nForbidZone].n < MAX_SIZE_FORBID_ZONE-1)) {
       printf ("vertex polygon %d %d\n", par.nForbidZone, forbidZones [par.nForbidZone].n);
       forbidZones [par.nForbidZone].points [forbidZones [par.nForbidZone].n].lat = yToLat (whereIsPopup.y);
@@ -3880,7 +3904,7 @@ static void vertexPolygonSelected () {
 
 /*! close polygon for forbidden zone */
 static void closePolygonSelected () {
-   if (menuWindow != NULL) gtk_widget_hide (menuWindow);
+   if (menuWindow != NULL) popoverFinish (menuWindow);
    if (polygonStarted && (forbidZones [par.nForbidZone].n < MAX_SIZE_FORBID_ZONE) && (forbidZones [par.nForbidZone].n > 2)) {
       forbidZones [par.nForbidZone].points [forbidZones [par.nForbidZone].n].lat = forbidZones [par.nForbidZone].points [0].lat;
       forbidZones [par.nForbidZone].points [forbidZones [par.nForbidZone].n].lon = forbidZones [par.nForbidZone].points [0].lon;
@@ -3910,7 +3934,7 @@ static void changeLastPoint () {
    double x = whereIsPopup.x;
    double y = whereIsPopup.y;
 
-   if (menuWindow != NULL) gtk_widget_hide (menuWindow);
+   if (menuWindow != NULL) popoverFinish (menuWindow);
    if (route.n == 0) return; // we care only if route exist
    for (int i = 0; i < isoDesc [nIsoc - 1 ].size; i++) {
       xLon = getX (isocArray [nIsoc - 1][i].lon);
@@ -4258,8 +4282,7 @@ static void meteogram () {
       infoMessage ("Wind is constant !", GTK_MESSAGE_INFO);
       return;
    }
-   if (menuWindow != NULL) gtk_widget_hide (menuWindow);
-   //if (menuWindow != NULL) gtk_popover_popdown ((GtkPopover *) menuWindow);
+   popoverFinish (menuWindow);
    Pp pt;
    pt.lat = yToLat (whereIsPopup.y);
    pt.lon = xToLon (whereIsPopup.x);
@@ -4279,7 +4302,7 @@ static void meteogram () {
 }
 
 /*! submenu with label and icon */
-void subMenu(GMenu *vMenu, const char *str, const char *app, const gchar *iconName) {
+void try_subMenu(GMenu *vMenu, const char *str, const char *app, const gchar *iconName) {
    GMenuItem *menu_item = g_menu_item_new (str, app);
    g_menu_item_set_label(menu_item, str);
    if (iconName != NULL) {
@@ -4292,89 +4315,47 @@ void subMenu(GMenu *vMenu, const char *str, const char *app, const gchar *iconNa
 }
 
 /*! submenu with label and icon */
-void OsubMenu (GMenu *vMenu, const char *str, const char *app, const gchar *iconName) {
+void subMenu (GMenu *vMenu, const char *str, const char *app, const gchar *iconName) {
    GMenuItem *menu_item = g_menu_item_new (str, app);
    g_menu_append_item (vMenu, menu_item);
    g_object_unref (menu_item);
 }
 
-static void grib_open_activated (GSimpleAction *action, GVariant *parameter, GApplication *application, gpointer *data) {
-   typeFlow = WIND;
-   openGrib ();
+static void grib_url (GSimpleAction *action, GVariant *parameter, gpointer *data) {
+   int *indexPtr = (int *) data;
+   typeFlow = *indexPtr;
+   g_print("Type Flow: %d\n", typeFlow);
+   GtkWidget *itemUrl; 
+   GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 5);
+
+   for (int i = 0; i < N_WIND_URL; i++) {
+      itemUrl = gtk_button_new_with_label (WIND_URL [i * 2]);
+      g_signal_connect_swapped (itemUrl, "clicked", G_CALLBACK (urlDownloadGrib), GINT_TO_POINTER (i));
+      gtk_box_append (GTK_BOX (box), itemUrl);
+   }
+   //g_object_unref (itemUrl);
+   /*meteoConsultWindow = gtk_application_window_new (app);
+   gtk_window_set_decorated(GTK_WINDOW(meteoConsultWindow), FALSE);
+   gtk_window_set_child (GTK_WINDOW (meteoConsultWindow), (GtkWidget *) box);
+   gtk_window_present (GTK_WINDOW (meteoConsultWindow));
+   */
+   menuGrib = gtk_popover_new ();
+   gtk_widget_set_parent (menuGrib, window);
+   gtk_popover_set_child ((GtkPopover*) menuGrib, (GtkWidget *) box);
+   gtk_popover_set_has_arrow ((GtkPopover*) menuGrib, false);
+   GdkRectangle rect = {200, 100, 1, 1};
+   gtk_popover_set_pointing_to ((GtkPopover*) menuGrib, &rect);
+   gtk_widget_show (menuGrib);
 }
 
-static void grib_info_activated (GSimpleAction *action, GVariant *parameter, GApplication *application) {
-   gribInfo (WIND);
-}
-static void grib_wind_url_activated0(GSimpleAction *action, GVariant *parameter, GApplication *application) {
-   printf ("GVariant: %s\n", g_variant_get_type_string (parameter));
-   urlDownloadGrib (WIND, 0);
-}
-
-static void grib_wind_url_activated1  (GSimpleAction *action, GVariant *parameter, GApplication *application) {
-   urlDownloadGrib (WIND, 1);
-}
-
-static void grib_wind_url_activated2  (GSimpleAction *action, GVariant *parameter, GApplication *application) {
-   urlDownloadGrib (WIND, 2);
-}
-
-static void grib_wind_url_activated3  (GSimpleAction *action, GVariant *parameter, GApplication *application) {
-   urlDownloadGrib (WIND, 3);
-}
-
-static void grib_wind_url_activated4  (GSimpleAction *action, GVariant *parameter, GApplication *application) {
-   urlDownloadGrib (WIND, 4);
-}
-
-static void grib_wind_url_activated5  (GSimpleAction *action, GVariant *parameter, GApplication *application) {
-   urlDownloadGrib (WIND, 5);
-}
-
-static void current_grib_open_activated (GSimpleAction *action, GVariant *parameter, GApplication *application) {
-   typeFlow = CURRENT;
-   openGrib ();
-}
-
-static void current_grib_info_activated (GSimpleAction *action, GVariant *parameter, GApplication *application) {
-   gribInfo (CURRENT);
-}
-
-static void grib_current_url_activated0 (GSimpleAction *action, GVariant *parameter, GApplication *application) {
-   urlDownloadGrib (CURRENT, 0);
-}
-
-static void grib_current_url_activated1 (GSimpleAction *action, GVariant *parameter, GApplication *application) {
-   urlDownloadGrib (CURRENT, 1);
-}
-
-static void grib_current_url_activated2 (GSimpleAction *action, GVariant *parameter, GApplication *application) {
-   urlDownloadGrib (CURRENT, 2);
-}
-
-static void grib_current_url_activated3 (GSimpleAction *action, GVariant *parameter, GApplication *application) {
-   urlDownloadGrib (CURRENT, 3);
-}
-
-static void grib_current_url_activated4 (GSimpleAction *action, GVariant *parameter, GApplication *application) {
-   urlDownloadGrib (CURRENT, 4);
-}
-
-static void grib_current_url_activated5 (GSimpleAction *action, GVariant *parameter, GApplication *application) {
-   urlDownloadGrib (CURRENT, 5);
-}
-
-static void quit_activated(GSimpleAction *action, GVariant *parameter, GApplication *application) {
-   g_application_quit (application);
+static void quit_activated (GSimpleAction *action, GVariant *parameter, GApplication *application) {
+   exit (EXIT_SUCCESS);
+   //g_application_quit (application);
 }
    
-static void polar_draw_activated (GSimpleAction *action, GVariant *parameter, GApplication *application) {
-   polarType = POLAR;
-   polarDraw (); 
-}
-
-static void wave_polar_draw_activated (GSimpleAction *action, GVariant *parameter, GApplication *application) {
-   polarType = WAVE_POLAR;
+static void polar_draw_activated (GSimpleAction *action, GVariant *parameter, gpointer *data) {
+   int *indexPtr = (int *) data;
+   polarType = *indexPtr;
    polarDraw (); 
 }
 
@@ -4382,19 +4363,10 @@ static void poi_save_activated (GSimpleAction *action, GVariant *parameter, GApp
    writePoi (par.poiFileName);
 }
 
-static void poi_edit_activated (GSimpleAction *action, GVariant *parameter, GApplication *application) {
-   poiEdit (POI_SEL);
-}
-
-static void ports_edit_activated (GSimpleAction *action, GVariant *parameter, GApplication *application) {
-   poiEdit (PORT_SEL);
-}
-
 /*! for text read file */
 static void cli_activated (GSimpleAction *action, GVariant *parameter, GApplication *application) {
    displayFile (par.cliHelpFileName, "CLI Info");
 }
-
 
 /*! create a button within toolBow, with an icon and a callback function */
 void createButton (GtkWidget *toolBox, char *iconName, void *callBack) { 
@@ -4410,9 +4382,7 @@ static void app_activate (GApplication *application) {
    titleUpdate ();
    gtk_window_set_default_size (GTK_WINDOW (window), MAIN_WINDOW_DEFAULT_WIDTH, MAIN_WINDOW_DEFAULT_HEIGHT);
    gtk_window_maximize (GTK_WINDOW (window)); // full screen
-
    gtk_application_window_set_show_menubar (GTK_APPLICATION_WINDOW (window), TRUE);
-   // Création du layout vertical
    GtkWidget *vBox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 5);
    gtk_window_set_child (GTK_WINDOW (window), vBox);
 
@@ -4436,7 +4406,7 @@ static void app_activate (GApplication *application) {
    createButton (toolBox, "pan-end-symbolic", on_right_button_clicked);
    createButton (toolBox, "find-location-symbolic", on_gps_button_clicked);
    createButton (toolBox, "edit-select-all", paletteDraw);
-   createButton (toolBox, "zoom-original", testFunction);
+   createButton (toolBox, "applications-engineering-symbolic", testFunction);
   
    // Création de la barre d'état
    statusbar = gtk_statusbar_new();
@@ -4489,16 +4459,19 @@ static void app_activate (GApplication *application) {
 }
 
 /*! for app_startup */
-static void createAction (char *actionName, void *callBack, GApplication *application) {
+static void createAction (char *actionName, void *callBack) {
    GSimpleAction *act_item = g_simple_action_new (actionName, NULL);
    g_action_map_add_action (G_ACTION_MAP (app), G_ACTION (act_item));
-   g_signal_connect (act_item, "activate", G_CALLBACK (callBack), application);
+   g_signal_connect (act_item, "activate", G_CALLBACK (callBack), NULL);
 }
 
-
-static void color_activated(GSimpleAction *action, GVariant *parameter) {
-   gint16 index = g_variant_get_int16 (parameter);
-   printf ("Menu actif\n");
+/*! for app_startup */
+static void createActionWithParam (char *actionName, void *callBack, int param) {
+   static int zero = 0;
+   static int one = 1;
+   GSimpleAction *act_item = g_simple_action_new (actionName, NULL);
+   g_action_map_add_action (G_ACTION_MAP (app), G_ACTION (act_item));
+   g_signal_connect_data (act_item, "activate", G_CALLBACK(callBack), (param == 0) ? &zero : &one, NULL, 0);
 }
 
 /*! Menu set up */
@@ -4509,54 +4482,44 @@ static void app_startup (GApplication *application) {
    }
    GtkApplication *app = GTK_APPLICATION (application);
 
-   createAction ("gribOpen", grib_open_activated, application);
-   createAction ("gribInfo", grib_info_activated, application);
-   createAction ("windURLselect0", grib_wind_url_activated0, application);
-   createAction ("windURLselect1", grib_wind_url_activated1, application);
-   createAction ("windURLselect2", grib_wind_url_activated2, application);
-   createAction ("windURLselect3", grib_wind_url_activated3, application);
-   createAction ("windURLselect4", grib_wind_url_activated4, application);
-   createAction ("windURLselect5", grib_wind_url_activated5, application);
-   createAction ("windURLselect5", grib_wind_url_activated5, application);
-   createAction ("currentGribOpen", current_grib_open_activated, application);
-   createAction ("currentGribInfo", current_grib_info_activated, application);
-   createAction ("currentURLselect0", grib_current_url_activated0, application);
-   createAction ("currentURLselect1", grib_current_url_activated1, application);
-   createAction ("currentURLselect2", grib_current_url_activated2, application);
-   createAction ("currentURLselect3", grib_current_url_activated3, application);
-   createAction ("currentURLselect4", grib_current_url_activated4, application);
-   createAction ("currentURLselect5", grib_current_url_activated5, application);
-   createAction ("quit", quit_activated, application);
+   createActionWithParam ("gribOpen", openGrib, WIND);
+   createActionWithParam ("gribInfo", gribInfo, WIND);
+   createActionWithParam ("windURLselect", grib_url, WIND);
+   createActionWithParam ("currentGribOpen", openGrib, CURRENT);
+   createActionWithParam ("currentGribInfo", gribInfo, CURRENT);
+   createActionWithParam ("currentURLselect", grib_url, CURRENT);
+   createAction ("quit", quit_activated);
 
-   createAction ("scenarioOpen", openScenario, application);
-   createAction ("scenarioSettings", change, application);
-   createAction ("scenarioShow", parDump, application);
-   createAction ("scenarioSave", saveScenario, application);
-   createAction ("scenarioEdit", editScenario, application);
-   createAction ("scenarioInfo", parInfo, application);
+   createAction ("scenarioOpen", openScenario);
+   createAction ("scenarioSettings", change);
+   createAction ("scenarioShow", parDump);
+   createAction ("scenarioSave", saveScenario);
+   createAction ("scenarioEdit", editScenario);
+   createAction ("scenarioInfo", parInfo);
 
-   createAction ("polarOpen", openPolar, application);
-   createAction ("polarDraw", polar_draw_activated, application);
-   createAction ("wavePolarDraw", wave_polar_draw_activated, application);
+   createAction ("polarOpen", openPolar);
+   createActionWithParam ("polarDraw", polar_draw_activated, POLAR);
+   createActionWithParam ("wavePolarDraw", polar_draw_activated, WAVE_POLAR);
 
-   createAction ("isochrones", isocDump, application);
-   createAction ("isochronesDesc", isocDescDump, application);
-   createAction ("orthoRoute", orthoDump, application);
-   createAction ("orthoReport", niceWayPointReport, application);
-   createAction ("sailRoute", rteDump, application);
-   createAction ("sailReport", rteReport, application);
-   createAction ("simulationReport", simulationReport, application);
-   createAction ("gps", gpsDump, application);
+   createAction ("isochrones", isocDump);
+   createAction ("isochronesDesc", isocDescDump);
+   createAction ("orthoRoute", orthoDump);
+   createAction ("orthoReport", niceWayPointReport);
+   createAction ("sailRoute", rteDump);
+   createAction ("sailReport", rteReport);
+   createAction ("simulationReport", simulationReport);
+   createAction ("gps", gpsDump);
 
-   createAction ("poiDump", poiDump, application);
-   createAction ("poiSave", poi_save_activated, application);
-   createAction ("poiEdit", poi_edit_activated, application);
-   createAction ("portsEdit", ports_edit_activated, application);
-
-   createAction ("help", help, application);
-   createAction ("OSM0", openMap, application);
-   createAction ("CLI", cli_activated, application);
-   createAction ("info", helpInfo, application);
+   createAction ("poiDump", poiDump);
+   createAction ("poiSave", poi_save_activated);
+   createActionWithParam ("poiEdit", poiEdit, POI_SEL);
+   createActionWithParam ("portsEdit", poiEdit, PORT_SEL);
+   
+   createAction ("help", help);
+   createActionWithParam ("OSM0", openMap, 0); // open Street Map
+   createActionWithParam ("OSM1", openMap, 1); // open Sea Map
+   createAction ("CLI", cli_activated);
+   createAction ("info", helpInfo);
 
    GMenu *menubar = g_menu_new ();
    GMenuItem *file_menu = g_menu_item_new ("_Grib", NULL);
@@ -4570,34 +4533,10 @@ static void app_startup (GApplication *application) {
    GMenu *file_menu_v = g_menu_new ();
    subMenu (file_menu_v, "Wind: Open Grib", "app.gribOpen", "folder");
    subMenu (file_menu_v, "Wind: Grib Info", "app.gribInfo", "applications-engineering-symbolic");
-
-   // sous sous menu wind URL 
-   GMenu *wind_url_submenu = g_menu_new  ();
-   g_menu_append_submenu (file_menu_v, "Wind: MeteoConsult", G_MENU_MODEL (wind_url_submenu));
-
-   for (int i = 0; i < N_WIND_URL; i++) {
-      char appName [MAX_SIZE_NAME];
-      //snprintf (appName, MAX_SIZE_NAME, "app.windURLselect(int16, i)"); 
-      snprintf (appName, MAX_SIZE_NAME, "app.windURLselect%d", i); 
-      GMenuItem *url_menu_item = g_menu_item_new (WIND_URL [i * 2], appName);
-      g_menu_append_item (wind_url_submenu, url_menu_item);
-   }
- 
+   subMenu (file_menu_v, "Wind: Meteoconsult", "app.windURLselect", "applications-engineering-symbolic");
    subMenu (file_menu_v, "Current: Open Grib", "app.currentGribOpen", "folder");
    subMenu (file_menu_v, "Current: Grib Info", "app.currentGribInfo", "applications-engineering-symbolic");
-
-   // sous sous menu current URL 
-   GMenu *current_url_submenu = g_menu_new  ();
-   g_menu_append_submenu (file_menu_v, "Current: MeteoConsult", G_MENU_MODEL (current_url_submenu));
- 
-   for (int i = 0; i < N_CURRENT_URL; i++) {
-      char appName [MAX_SIZE_NAME];
-       
-      snprintf (appName, MAX_SIZE_NAME, "app.currentURLselect%d", i); 
-      GMenuItem *url_menu_item = g_menu_item_new (WIND_URL [i * 2], appName);
-      g_menu_append_item (current_url_submenu, url_menu_item);
-   }
-
+   subMenu (file_menu_v, "Current: Meteoconsult", "app.currentURLselect", "applications-engineering-symbolic");
    subMenu (file_menu_v, "Quit", "app.quit", "application-exit-symbolic");
 
    // Ajout d'éléments dans le menu "Polar"
@@ -4637,6 +4576,7 @@ static void app_startup (GApplication *application) {
    GMenu *help_menu_v = g_menu_new ();
    subMenu (help_menu_v, "Help", "app.help", "");
    subMenu (help_menu_v, "Open Street Map", "app.OSM0", "");
+   subMenu (help_menu_v, "Open Sea Map", "app.OSM1", "");
    subMenu (help_menu_v, "CLI mode", "app.CLI", "text-x-generic");
    subMenu (help_menu_v, "Info", "app.info", "");
 
