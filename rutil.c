@@ -381,7 +381,7 @@ char *lonToStr (double lon, int type, char* str) {
 double lonCanonize (double lon) {
    lon = fmod (lon, 360);
    if (lon > 180) lon -= 360;
-   if (lon <= -180) lon += 360;
+   else if (lon <= -180) lon += 360;
    return lon;
 } 
 
@@ -1632,7 +1632,8 @@ bool readParam (const char *fileName) {
    par.style = 1;
    par.showColors =2;
    par.dispDms = 2;
-   par.windDisp =  1;
+   par.windDisp = 1;
+   par.xWind = 1.0;
    
    if ((f = fopen (fileName, "r")) == NULL) {
       fprintf (stderr, "Error in readParam: Cannot open: %s\n", fileName);
@@ -1711,6 +1712,7 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "MOTOR_S:%lf", &par.motorSpeed) > 0);
       else if (sscanf (pLine, "THRESHOLD:%lf", &par.threshold) > 0);
       else if (sscanf (pLine, "EFFICIENCY:%lf", &par.efficiency) > 0);
+      else if (sscanf (pLine, "X_WIND:%lf", &par.xWind) > 0);
       else if (sscanf (pLine, "CONST_WAVE:%lf", &par.constWave) > 0);
       else if (sscanf (pLine, "CONST_WIND_TWS:%lf", &par.constWindTws) > 0);
       else if (sscanf (pLine, "CONST_WIND_TWD:%lf", &par.constWindTwd) > 0);
@@ -1811,6 +1813,7 @@ bool writeParam (const char *fileName, bool header) {
    fprintf (f, "MOTOR_S:         %.2lf\n", par.motorSpeed);
    fprintf (f, "THRESHOLD:       %.2lf\n", par.threshold);
    fprintf (f, "EFFICIENCY:      %.2lf\n", par.efficiency);
+   fprintf (f, "X_WIND:          %.2lf\n", par.xWind);
 
    if (par.constWave != 0)
       fprintf (f, "CONST_WAVE:      %.2lf\n", par.constWave);

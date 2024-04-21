@@ -185,6 +185,7 @@ typedef struct {
    int    id;
    int    father;
    int    amure;
+   bool   motor;
    int    sector;
    double lat;
    double lon;
@@ -234,6 +235,7 @@ typedef struct {
    double lon;
    int    id;
    int    father;
+   bool   motor;
    double od;
    double oCap;
    double ld;
@@ -242,13 +244,15 @@ typedef struct {
 
 /*! Route description  */
 typedef struct {
-   int    n;
-   double calculationTime;
+   int    n;                                // number of steps
+   double calculationTime;                  // compute time to calculate the route
    long   kTime0;                           // relative index time of departure
-   double duration;
-   double totDist;
+   double duration;                         // total time in hours of the route
+   double motorDuration;                    // total time in hours using motor
+   double totDist;                          // total distance in NM
+   double motorDist;                        // distance using motor in NM
    int    ret;                              // return value of routing
-   bool   destinationReached;
+   bool   destinationReached;               // true if destination reaches
    SailPoint t [MAX_N_ISOC + 1];
 } SailRoute;
 
@@ -311,6 +315,7 @@ typedef struct {
    double motorSpeed;                        // motor speed if used
    double threshold;                         // threshold for motor use
    double efficiency;                        // efficiency of team 
+   double xWind;                             // multiply factor for wind
    char editor [MAX_SIZE_NAME];              // name of text file editor
    char webkit [MAX_SIZE_NAME];              // name of webkit application
    char spreadsheet [MAX_SIZE_NAME];         // name of spreadshhet application
