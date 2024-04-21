@@ -25,7 +25,7 @@ Pp        isocArray [MAX_N_ISOC][MAX_SIZE_ISOC];  // list of isochrones
 IsoDesc   isoDesc [MAX_N_ISOC];                   // Isochrone meta data
 int       nIsoc = 0;                              // total number of isochrones 
 Pp        lastClosest;                            // closest point to destination in last isochrone computed
-
+HistoryRoute historyRoute = {0};
 ChooseDeparture chooseDeparture;                  // for choice of departure time
 
 /*! following global variable could be static but linking issue */
@@ -174,9 +174,9 @@ static int buildNextIsochrone (Isoc isoList, int isoLen, Pp pDest, double t, dou
          sog = (motor) ? par.motorSpeed : par.efficiency * findPolar (twa, tws * par.xWind, polMat); 
          newPt.motor = motor;
          newPt.amure = (cog > twd) ? BABORD : TRIBORD;
-         /*if ((waveCorrection = findPolar (twa, w, wavePolMat)) > 0) {
+         if ((w > 0) && ((waveCorrection = findPolar (twa, w, wavePolMat)) > 0)) {
             sog = sog * (waveCorrection / 100.0);
-         }*/
+         }
          if ((!motor) && (newPt.amure != isoList [k].amure)) {       // changement amure
             if (fabs (twa) < 90) penalty = par.penalty0;             // virement de bord
             else penalty = par.penalty1;                             // empannage
@@ -315,6 +315,17 @@ bool dumpRoute (const char *fileName, Pp dest) {
    return true;
 }
 
+/*! store current route in history */
+void saveRoute () {
+   int z = historyRoute.n;
+   if (z < MAX_HISTORY_ROUTE) {
+      memcpy (&historyRoute.r[z], &route, sizeof (SailRoute));
+      historyRoute.n += 1;
+   }
+   else
+      fprintf (stderr, "Error in saveRoute: Limit of MAX_HISTORY_ROUTE reached: %d\n", MAX_HISTORY_ROUTE);
+}
+
 /*! stat route */
 void statRoute (double lastStepDuration) {
    route.totDist = route.motorDist = 0;
@@ -348,10 +359,9 @@ void statRoute (double lastStepDuration) {
 /*! store route */
 void storeRoute (Pp pDest, double lastStepDuration) {
    //route.destinationReached = (pDest.id == 0);
-   int k, iFather;
-   int dep = (pDest.id == 0) ? nIsoc : nIsoc - 1;
-   //int dep = (route.destinationReached) ? nIsoc : nIsoc - 1;
-   bool found = false;
+   int iFather;
+   // bool found = false;
+   route.n =  (pDest.id == 0) ? nIsoc + 2 : nIsoc + 1;
    if (nIsoc == 0) {
       route.n = 1;
       statRoute (lastStepDuration);
@@ -359,23 +369,21 @@ void storeRoute (Pp pDest, double lastStepDuration) {
    }
    Pp pt = pDest;
    Pp ptLast = pDest;
-   route.t [dep+1].lat = pDest.lat;
-   route.t [dep+1].lon = pDest.lon;
-   route.t [dep+1].id = pDest.id;
-   route.t [dep+1].father = pDest.father;
-   route.t [dep+1].motor = pDest.motor;
-
-   for (int i = dep - 1; i >= 0; i--) {
+   route.t [route.n - 1].lat = pDest.lat;
+   route.t [route.n - 1].lon = pDest.lon;
+   route.t [route.n - 1].id = pDest.id;
+   route.t [route.n - 1].father = pDest.father;
+   route.t [route.n - 1].motor = pDest.motor;
+   for (int i = route.n - 3; i >= 0; i--) {
       iFather = findFather (pt.father, i, isoDesc[i].size);
       if (iFather == -1) continue;
-      found = true;
+      // found = true;
       pt = isocArray [i][iFather];
-      k = i+1;
-      route.t [k].lat = pt.lat;
-      route.t [k].lon = pt.lon;
-      route.t [k].id = pt.id;
-      route.t [k].father = pt.father;
-      route.t [k].motor = ptLast.motor;
+      route.t [i+1].lat = pt.lat;
+      route.t [i+1].lon = pt.lon;
+      route.t [i+1].id = pt.id;
+      route.t [i+1].father = pt.father;
+      route.t [i+1].motor = ptLast.motor;
       ptLast = pt;
    }
    /*if (!found) {
@@ -388,8 +396,8 @@ void storeRoute (Pp pDest, double lastStepDuration) {
    route.t [0].id = par.pOr.id;
    route.t [0].father = par.pOr.father;
    route.t [0].motor = ptLast.motor;
-   route.n = dep + 2;
    statRoute (lastStepDuration);
+   saveRoute ();
 }
 
 /*! copy route in a string
@@ -443,7 +451,7 @@ static inline bool goalP (Pp pFrom, Pp pDest, double t, double dt, double *timeT
    *motor =  ((maxSpeedInPolarAt (tws * par.xWind, polMat) < par.threshold) && (par.motorSpeed > 0));
    // printf ("maxSpeedinPolar: %.2lf\n", maxSpeedInPolarAt (tws, polMat));
    sog = (*motor) ? par.motorSpeed : par.efficiency * findPolar (twa, tws * par.xWind, polMat);
-   if ((waveCorrection = findPolar (twa, w, wavePolMat)) > 0) { 
+   if ((w > 0) && ((waveCorrection = findPolar (twa, w, wavePolMat)) > 0)) { 
       sog = sog * (waveCorrection / 100.0);
    }
    *timeTo = *distance/sog;

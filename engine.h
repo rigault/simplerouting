@@ -4,6 +4,7 @@ extern IsoDesc   isoDesc  [MAX_N_ISOC];
 extern int       nIsoc;
 extern Pp        lastClosest;                   // closest point to destination in last isocgrone computed
 extern ChooseDeparture chooseDeparture;           // for choice of departure time
+extern HistoryRoute historyRoute;
 
 extern void    storeRoute (Pp pDest, double lastStepDuration);
 extern bool    allIsocToStr (char *str, size_t maxLength);

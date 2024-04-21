@@ -52,6 +52,7 @@
 #define MAX_N_SHP_FILES       4                 // max number of shape file
 #define MAX_N_POI             4096              // max number of poi in poi file
 #define MAX_SIZE_POI_NAME     32                // max size of city name
+#define MAX_HISTORY_ROUTE     10                // max nimbedr of history route stored
 #define GPSD_TCP_PORT         "2947"            // TCP port for gps demon
 #define MAX_SIZE_FORBID_ZONE  100               // max size per forbidden zone
 #define MAX_N_FORBID_ZONE     10                // max nummber of forbidden zones
@@ -255,6 +256,12 @@ typedef struct {
    bool   destinationReached;               // true if destination reaches
    SailPoint t [MAX_N_ISOC + 1];
 } SailRoute;
+
+/*! History Route description  */
+typedef struct {
+   int n;
+   SailRoute r [MAX_HISTORY_ROUTE];
+} HistoryRoute;
 
 /*! Parameters */
 typedef struct {

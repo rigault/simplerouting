@@ -390,8 +390,10 @@ bool smtpGribRequestPython (int type, double lat1, double lon1, double lat2, dou
    int i;
    char temp [MAX_SIZE_LINE];
    char *suffix = "WIND,GUST,WAVES"; 
+   if (par.mailPw [0] == '\0') return false;
    lon1 = lonCanonize (lon1);
    lon2 = lonCanonize (lon2);
+   
    if ((lon1 > 0) && (lon2 < 0)) {// zone crossing antimeridien
       fprintf (stderr, "Error in smtpGribRequestPython: Tentative to cross antemeridian !\n");
       lon2 = 179.0;
@@ -1104,7 +1106,8 @@ void findWind (Pp pt, double t, double *u, double *v, double *gust, double *w, d
       *twd = fTwd (*u, *v);
       *tws = fTws (*u, *v);
    }
-   if (par.constWave != 0) *w = par.constWave;
+   if (par.constWave < 0) *w = 0;
+   else if (par.constWave != 0) *w = par.constWave;
 }
 
 /*! use findflow to get current */

@@ -927,6 +927,27 @@ static gboolean drawAllIsochrones (cairo_t *cr, int style) {
    return FALSE;
 }
 
+GtkWidget *popInfo = NULL;
+void focusInfo (double lon, double lat) { 
+   GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 5);
+   GtkWidget *label0 = gtk_label_new ("Hello");
+   GtkWidget *label1 = gtk_label_new ("coucou");
+   gtk_box_append (GTK_BOX (box), label0);
+   gtk_box_append (GTK_BOX (box), label1);
+   popInfo = gtk_popover_new ();
+   //gtk_widget_set_parent (popInfo, drawing_area);
+   gtk_widget_set_parent (popInfo, window);
+   gtk_popover_set_child ((GtkPopover*) popInfo, (GtkWidget *) box);
+   //GdkRectangle rect = {getX (lon), getY (lat), 1, 1};
+   GdkRectangle rect = {300, 200, 1, 1};
+   //gtk_popover_set_has_arrow ((GtkPopover*) menuWindow, false);
+   gtk_popover_set_pointing_to ((GtkPopover*) popInfo, &rect);
+   //gtk_popover_popup ((GtkPopover *) menuWindow);
+   //gtk_popover_set_cascade_popdown ((GtkPopover*) menuWindow, TRUE);
+   //gtk_popover_set_autohide ((GtkPopover*) menuWindow, TRUE);
+   gtk_widget_show (popInfo);
+}
+
 /*! give the focus on point in route at kTime */
 static void focusOnPointInRoute (cairo_t *cr)  {
    int i;
@@ -943,6 +964,7 @@ static void focusOnPointInRoute (cairo_t *cr)  {
    lon = route.t[i].lon;
    showUnicode (cr, BOAT_UNICODE, lon, lat);
    circle (cr, lon, lat, 1.0, 0.0, 0.0); // red
+   // focusInfo (lon, lat);
 }
 
 /*! draw the routes based on route table, from pOr to pDest or best point */
@@ -966,7 +988,36 @@ static void drawRoute (cairo_t *cr) {
       y = getY (route.t[i].lat);
       cairo_line_to (cr, x, y);
    }
+   if (route.destinationReached) {
+      x = getX (par.pDest.lon);
+      y = getY (par.pDest.lat);
+      cairo_line_to (cr, x, y);
+   }
    cairo_stroke (cr);
+}
+
+/*! draw the route based on route table index */
+static void drawHistoryRoute (cairo_t *cr, int k) {
+   double x = getX (historyRoute.r[k].t[0].lon);
+   double y = getY (historyRoute.r[k].t[0].lat);
+   CAIRO_SET_SOURCE_RGB_PINK(cr);
+   cairo_set_line_width (cr, 2);
+   cairo_move_to (cr, x, y);
+
+   for (int i = 1; i < historyRoute.r[k].n; i++) {
+      x = getX (historyRoute.r[k].t[i].lon);
+      y = getY (historyRoute.r[k].t[i].lat);
+      cairo_line_to (cr, x, y);
+   }
+   cairo_stroke (cr);
+}
+
+/*! draw the routes based on route table */
+static void drawAllRoutes (cairo_t *cr) {
+   for (int k = 0; k < historyRoute.n - 1; k++) {
+      drawHistoryRoute (cr, k);
+   }
+   drawRoute (cr);
 }
 
 /*! draw Point of Interests */
@@ -1374,7 +1425,7 @@ static void drawGribCallback (GtkDrawingArea *area, cairo_t *cr, int width, int 
       circle (cr, my_gps_data.lon, my_gps_data.lat , 1.0, 0.0, 0.0);
    if ((route.n != 0) && (isfinite(route.totDist)) && (route.totDist > 0)) { 
       drawAllIsochrones (cr, par.style);
-      drawRoute (cr);
+      drawAllRoutes (cr);
       focusOnPointInRoute (cr);
       Pp selectedPt = isocArray [nIsoc - 1][selectedPointInLastIsochrone]; // selected point in last isochrone
       circle (cr, selectedPt.lon, selectedPt.lat, 1.0, 0.0, 1.1);
@@ -2439,6 +2490,19 @@ static void rteDump () {
    }
 }
 
+/*! print the route from origin to destination or best point */
+static void historyRteDump (int k) {
+   char buffer [MAX_SIZE_BUFFER];
+   char title [MAX_SIZE_LINE];
+   if (historyRoute.r[k].n <= 0)
+      infoMessage ("No route calculated", GTK_MESSAGE_INFO);
+   else {
+      routeToStr (historyRoute.r[k], buffer, MAX_SIZE_BUFFER); 
+      snprintf (title, MAX_SIZE_LINE, "History: %2d", k);
+      displayText (buffer, title);
+   }
+}
+
 /*! print the orthodromic and loxo routes through waypoints */
 static void orthoDump () {
    char buffer [MAX_SIZE_BUFFER] = "";
@@ -3166,10 +3230,10 @@ static void model_combo_changed (GtkComboBox *widget, gpointer user_data) {
 
 /*! Calback to set up mail password  */
 static void password_entry_changed (GtkEditable *editable, gpointer user_data) {
-   //char *name = (gchar *) user_data;
    const gchar *text = gtk_editable_get_text (editable);
    g_strlcpy (par.mailPw, text, MAX_SIZE_NAME);
-   printf ("pw: %s\n", par.mailPw);
+   dollarReplace (par.mailPw);
+   //printf ("pw: %s\n", par.mailPw);
 }
 
 /*! action when closing mail request box */
@@ -3192,8 +3256,7 @@ static void mailRequestBoxResponse (GtkDialog *dialog, gint response_id, gpointe
          gribMailTimeout = g_timeout_add (GRIB_TIME_OUT, mailGribRead, NULL);
       }
       else {
-         infoMessage ("Error SMTP request Python", GTK_MESSAGE_ERROR);
-         par.mailPw [0] = '\0';
+         infoMessage ("Error SMTP request Python, check connectivity and mail Password", GTK_MESSAGE_ERROR);
       }
    }
    gtk_window_destroy (GTK_WINDOW (dialog));
@@ -4083,10 +4146,17 @@ static gboolean on_scroll_event (GtkEventController *controller, double delta_x,
 /*! Callback when keyboard key  pressed */
 static gboolean on_key_event (GtkEventController *controller, guint keyval, guint keycode, GdkModifierType modifiers, gpointer user_data) {
    char buffer [MAX_SIZE_BUFFER];
+   static int nRoute = 0;
    switch (keyval) {
    case GDK_KEY_F1:
       checkGribToStr (buffer, MAX_SIZE_BUFFER);
       displayText (buffer, "Grib Wind Check");
+      break;
+   case GDK_KEY_F2:
+      historyRteDump (nRoute);
+      nRoute += 1;
+      if (nRoute == historyRoute.n)
+         nRoute = 0;
       break;
    case GDK_KEY_Escape:
       printf ("Exit success\n");
