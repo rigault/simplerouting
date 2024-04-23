@@ -1,3 +1,6 @@
+/*! list of wayPoint */
+extern WayPointList wayPoints;
+
 /*! forbid zones */
 extern Polygon forbidZones [MAX_N_FORBID_ZONE];
 
@@ -61,27 +64,27 @@ extern char   *latToStr (double lat, int type, char* str);
 extern char   *lonToStr (double lon, int type, char* str);
 extern void   initZone (Zone *zone);
 extern time_t dateToTime_t (long date);
-extern bool   isInZone (Pp pt, Zone zone);
-extern double zoneTimeDiff (Zone zone1, Zone zone0);
-extern time_t diffNowGribTime0 (Zone zone);
+extern bool   isInZone (Pp pt, Zone *zone);
+extern double zoneTimeDiff (Zone *zone1, Zone *zone0);
+extern time_t diffNowGribTime0 (Zone *zone);
 extern bool   readPolar (char *fileName, PolMat *mat);
-extern char   *polToStr (char*str, PolMat mat, size_t maxLength);
+extern char   *polToStr (char*str, PolMat *mat, size_t maxLength);
 extern void   *readGrib (void *data);
 extern bool   readGribAll (const char *fileName, Zone *zone, int iFlow);
 extern double findTwsByIt  (Pp p, int iT0, FlowP *gribData);
 extern double findGustByIt (Pp p, int iT0, FlowP *gribData);
-extern bool   findFlow (Pp p, double t, double *rU, double *rV, double *rG, double *rW, Zone zone, FlowP *gribData);
+extern bool   findFlow (Pp p, double t, double *rU, double *rV, double *rG, double *rW, Zone *zone, FlowP *gribData);
 extern void   findWind (Pp pt, double t, double *u, double *v, double *gust, double *w, double *twd, double *tws );
 extern void   findCurrent (Pp pt, double t, double *uCurr, double *vCurr, double *tcd, double *tcs);
 extern char   *newDate (long intDate, double myTime, char *res);
-extern char   *gribToStr (char *str, Zone zone, size_t maxLength);
-extern double maxValInPol (PolMat mat);
-extern void   bestVmg (double tws, PolMat mat, double *vmgAngle, double *vmgSpeed);
+extern char   *gribToStr (char *str, Zone *zone, size_t maxLength);
+extern double maxValInPol (PolMat *mat);
+extern void   bestVmg (double tws, PolMat *mat, double *vmgAngle, double *vmgSpeed);
 extern bool   fileToStr (char *fileName, char* str, size_t maxLength);
 extern bool   readParam (const char *fileName);
 extern bool   writeParam (const char *fileName, bool header);
 extern char   *paramToStr (char * str);
-extern void   printGrib (Zone zone, FlowP *gribData);
+extern void   printGrib (Zone *zone, FlowP *gribData);
 extern bool   readIsSea (const char *fileName);
 extern int    readPoi (const char *fileName);
 extern bool   writePoi (const char *fileName);
@@ -93,7 +96,6 @@ extern char   *strchrReplace (char *source, char cIn, char cOut, char *dest);
 extern void   dollarReplace (char* str);
 extern char   *buildMeteoUrl (int type, int i, char *url);
 extern bool   curlGet (char *url, char *outputFile); 
-extern bool   isInPolygon (Point p, Polygon po);
 extern bool   isInForbidArea (Pp p);
 extern void   updateIsSeaWithForbiddenAreas ();
 extern bool   isServerAccessible (const char *url);

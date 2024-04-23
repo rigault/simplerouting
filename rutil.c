@@ -43,6 +43,9 @@ struct DictProvider providerTab [N_PROVIDERS] = {
    {"gmngrib@globalmarinenet.net", "GlobalMarinet GFS",      ""}
 };
 
+/*! list of wayPoint */
+WayPointList wayPoints;
+
 /*! polar matrix description */
 PolMat polMat;
 
@@ -204,7 +207,7 @@ void freeSHP () {
 }
 
 /*! select most recent file in "directory" that contains "pattern" in name 
-  return true if found wirh name of selected file */
+  return true if found with name of selected file */
 bool mostRecentFile (const char *directory, const char *pattern, char *name) {
    DIR *dir = opendir(directory);
    if (dir == NULL) {
@@ -327,7 +330,7 @@ long getFileSize (const char *fileName) {
 }
 
 /*! return date and time using ISO notation after adding myTime (hours) to the Date */
-char *newDate (long intDate, double  myTime, char *res) {
+char *newDate (long intDate, double myTime, char *res) {
    time_t seconds = 0;
    struct tm *tm0 = localtime (&seconds);;
    tm0->tm_year = ((int ) intDate / 10000) - 1900;
@@ -360,7 +363,7 @@ char *latToStr (double lat, int type, char* str) {
 }
 
 /*! convert lon to str according to type */
-char *lonToStr (double lon, int type, char* str) {
+char *lonToStr (double lon, int type, char *str) {
    double mn = 60 * lon - 60 * (int) lon;
    double sec = 3600 * lon - (3600 * (int) lon) - (60 * (int) mn);
    char cc [10];
@@ -646,31 +649,31 @@ time_t dateToTime_t (long date) {
 }
 
 /*! return difference in hours between two zones (current zone and Wind zone) */
-double zoneTimeDiff (Zone zone1, Zone zone0) {
-   if (zone1.wellDefined && zone0.wellDefined) {
-      time_t time1 = dateToTime_t (zone1.dataDate [0]) + 3600 * (zone1.dataTime [0] / 100);
-      time_t time0 = dateToTime_t (zone0.dataDate [0]) + 3600 * (zone0.dataTime [0] /100);   // add seconds
+double zoneTimeDiff (Zone *zone1, Zone *zone0) {
+   if (zone1->wellDefined && zone0->wellDefined) {
+      time_t time1 = dateToTime_t (zone1->dataDate [0]) + 3600 * (zone1->dataTime [0] / 100);
+      time_t time0 = dateToTime_t (zone0->dataDate [0]) + 3600 * (zone0->dataTime [0] /100);   // add seconds
       return (time1 - time0) / 3600.0;
    }
    else return 0;
 } 
 
 /*! return number of second between beginning of grib to now */
-time_t diffNowGribTime0 (Zone zone) {
+time_t diffNowGribTime0 (Zone *zone) {
    time_t now;
-   return time (&now) - (dateToTime_t (zone.dataDate [0]) + 3600 * (zone.dataTime [0] / 100));
+   return time (&now) - (dateToTime_t (zone->dataDate [0]) + 3600 * (zone->dataTime [0] / 100));
 }
 
 /*! print Grib u v for all lat lon time information */
-void printGrib (Zone zone, FlowP *gribData) {
+void printGrib (Zone *zone, FlowP *gribData) {
    int iGrib;
    printf ("printGrib\n");
-   for (size_t  k = 0; k < zone.nTimeStamp; k++) {
-      double t = zone.timeStamp [k];
+   for (size_t  k = 0; k < zone->nTimeStamp; k++) {
+      double t = zone->timeStamp [k];
       printf ("Time: %.0lf\n", t);
-      for (int i = 0; i < zone.nbLat; i++) {
-         for (int j = 0; j < zone.nbLon; j++) {
-	         iGrib = (k * zone.nbLat * zone.nbLon) + (i * zone.nbLon) + j;
+      for (int i = 0; i < zone->nbLat; i++) {
+         for (int j = 0; j < zone->nbLon; j++) {
+	         iGrib = (k * zone->nbLat * zone->nbLon) + (i * zone->nbLon) + j;
             printf (" %6.2f %6.2f %6.2f %6.2f\n", \
             gribData [iGrib].lon, \
 	         gribData [iGrib].lat, \
@@ -894,27 +897,27 @@ bool checkGribToStr (char *buffer, size_t maxLength) {
 }
 
 /*! find iTinf and iTsup in order t : zone.timeStamp [iTInf] <= t <= zone.timeStamp [iTSup] */
-static inline void findTimeAround (double t, int *iTInf, int *iTSup, Zone zone) { 
+static inline void findTimeAround (double t, int *iTInf, int *iTSup, Zone *zone) { 
    size_t k;
-   if (t <= zone.timeStamp [0]) {
+   if (t <= zone->timeStamp [0]) {
       *iTInf = 0;
       *iTSup = 0;
       return;
    }
-   for (k = 0; k < zone.nTimeStamp; k++) {
-      if (t == zone.timeStamp [k]) {
+   for (k = 0; k < zone->nTimeStamp; k++) {
+      if (t == zone->timeStamp [k]) {
          *iTInf = k;
 	      *iTSup = k;
 	      return;
       }
-      if (t < zone.timeStamp [k]) {
+      if (t < zone->timeStamp [k]) {
          *iTInf = k - 1;
          *iTSup = k;
          return;
       }
    }
-   *iTInf = zone.nTimeStamp -1;
-   *iTSup = zone.nTimeStamp -1;
+   *iTInf = zone->nTimeStamp -1;
+   *iTSup = zone->nTimeStamp -1;
 }
 
 /*! ex arrondiMin (46.4, 0.25) = 46.25 */
@@ -929,39 +932,39 @@ static inline double arrondiMax (double v, double step) {
 
 /*! provide 4 wind points around p */
 static inline void find4PointsAround (double lat, double lon,  double *latMin, 
-   double *latMax, double *lonMin, double *lonMax, Zone zone) {
-   *latMin = arrondiMin (lat, zone.latStep);
-   *latMax = arrondiMax (lat, zone.latStep);
-   *lonMin = arrondiMin (lon, zone.lonStep);
-   *lonMax = arrondiMax (lon, zone.lonStep);
+   double *latMax, double *lonMin, double *lonMax, Zone *zone) {
+   *latMin = arrondiMin (lat, zone->latStep);
+   *latMax = arrondiMax (lat, zone->latStep);
+   *lonMin = arrondiMin (lon, zone->lonStep);
+   *lonMax = arrondiMax (lon, zone->lonStep);
   
    // check limits
-   if (zone.latMin > *latMin) *latMin = zone.latMin;
-   if (zone.latMax < *latMax) *latMax = zone.latMax; 
-   if (zone.lonLeft > *lonMin) *lonMin = zone.lonLeft; 
-   if (zone.lonRight < *lonMax) *lonMax = zone.lonRight;
+   if (zone->latMin > *latMin) *latMin = zone->latMin;
+   if (zone->latMax < *latMax) *latMax = zone->latMax; 
+   if (zone->lonLeft > *lonMin) *lonMin = zone->lonLeft; 
+   if (zone->lonRight < *lonMax) *lonMax = zone->lonRight;
    
-   if (zone.latMax < *latMin) *latMin = zone.latMax; 
-   if (zone.latMin > *latMax) *latMax = zone.latMin; 
-   if (zone.lonRight < *lonMin) *lonMin = zone.lonRight; 
-   if (zone.lonLeft > *lonMax) *lonMax = zone.lonLeft;
+   if (zone->latMax < *latMin) *latMin = zone->latMax; 
+   if (zone->latMin > *latMax) *latMax = zone->latMin; 
+   if (zone->lonRight < *lonMin) *lonMin = zone->lonRight; 
+   if (zone->lonLeft > *lonMax) *lonMax = zone->lonLeft;
 }
 
 /*! return indice of lat in gribData wind or current  */
-static inline int indLat (double lat, Zone zone) {
-   return (int) round ((lat - zone.latMin)/zone.latStep); // ATTENTION
+static inline int indLat (double lat, Zone *zone) {
+   return (int) round ((lat - zone->latMin)/zone->latStep); // ATTENTION
 }
 
 /*! return indice of lon in gribData wind or current */
-static inline int indLon (double lon, Zone zone) {
-   if (lon < zone.lonLeft) lon += 360;
-   return (int) round ((lon - zone.lonLeft)/zone.lonStep);
+static inline int indLon (double lon, Zone *zone) {
+   if (lon < zone->lonLeft) lon += 360;
+   return (int) round ((lon - zone->lonLeft)/zone->lonStep);
 }
 
 /*! true if P is within the zone */
-bool isInZone (Pp pt, Zone zone) {
+bool isInZone (Pp pt, Zone *zone) {
    if (par.constWindTws > 0) return true;
-   else return (pt.lat >= zone.latMin) && (pt.lat <= zone.latMax) && (pt.lon >= zone.lonLeft) && (pt.lon <= zone.lonRight);
+   else return (pt.lat >= zone->latMin) && (pt.lat <= zone->latMax) && (pt.lon >= zone->lonLeft) && (pt.lon <= zone->lonRight);
 }
 
 /*! interpolation to return tws at index time iT */
@@ -970,16 +973,16 @@ double findTwsByIt (Pp p, int iT0, const FlowP *gribData) {
    double a, b, u0, v0;
 
    FlowP windP00, windP01, windP10, windP11;
-   if ((!zone.wellDefined) || (zone.nbLat == 0) || (! isInZone (p, zone))) {
+   if ((!zone.wellDefined) || (zone.nbLat == 0) || (! isInZone (p, &zone))) {
       return 0;
    }
    
-   find4PointsAround (p.lat, p.lon, &latMin, &latMax, &lonMin, &lonMax, zone);
+   find4PointsAround (p.lat, p.lon, &latMin, &latMax, &lonMin, &lonMax, &zone);
    
-   windP00 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMax, zone) * zone.nbLon + indLon(lonMin, zone)];  
-   windP01 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMax, zone) * zone.nbLon + indLon(lonMax, zone)];
-   windP10 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMin, zone) * zone.nbLon + indLon(lonMax, zone)];
-   windP11 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMin, zone) * zone.nbLon + indLon(lonMin, zone)];
+   windP00 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMax, &zone) * zone.nbLon + indLon(lonMin, &zone)];  
+   windP01 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMax, &zone) * zone.nbLon + indLon(lonMax, &zone)];
+   windP10 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMin, &zone) * zone.nbLon + indLon(lonMax, &zone)];
+   windP11 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMin, &zone) * zone.nbLon + indLon(lonMin, &zone)];
 
    a = interpolate (p.lon, windP00.lon, windP01.lon, windP00.u, windP01.u);
    b = interpolate (p.lon, windP10.lon, windP11.lon, windP10.u, windP11.u); 
@@ -998,16 +1001,16 @@ double findGustByIt (Pp p, int iT0, const FlowP *gribData) {
    double a, b;
 
    FlowP windP00, windP01, windP10, windP11;
-   if ((!zone.wellDefined) || (zone.nbLat == 0) || (! isInZone (p, zone))) {
+   if ((!zone.wellDefined) || (zone.nbLat == 0) || (! isInZone (p, &zone))) {
       return 0;
    }
    
-   find4PointsAround (p.lat, p.lon, &latMin, &latMax, &lonMin, &lonMax, zone);
+   find4PointsAround (p.lat, p.lon, &latMin, &latMax, &lonMin, &lonMax, &zone);
    
-   windP00 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMax, zone) * zone.nbLon + indLon(lonMin, zone)];  
-   windP01 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMax, zone) * zone.nbLon + indLon(lonMax, zone)];
-   windP10 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMin, zone) * zone.nbLon + indLon(lonMax, zone)];
-   windP11 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMin, zone) * zone.nbLon + indLon(lonMin, zone)];
+   windP00 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMax, &zone) * zone.nbLon + indLon(lonMin, &zone)];  
+   windP01 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMax, &zone) * zone.nbLon + indLon(lonMax, &zone)];
+   windP10 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMin, &zone) * zone.nbLon + indLon(lonMax, &zone)];
+   windP11 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMin, &zone) * zone.nbLon + indLon(lonMin, &zone)];
 
    a = interpolate (p.lon, windP00.lon, windP01.lon, windP00.g, windP01.g);
    b = interpolate (p.lon, windP10.lon, windP11.lon, windP10.g, windP11.g); 
@@ -1015,13 +1018,13 @@ double findGustByIt (Pp p, int iT0, const FlowP *gribData) {
 }
 
 /*! interpolation to get u, v, g (gust), w (waves) at point p and time t */
-bool findFlow (Pp p, double t, double *rU, double *rV, double *rG, double *rW, Zone zone, const FlowP *gribData) {
+bool findFlow (Pp p, double t, double *rU, double *rV, double *rG, double *rW, Zone *zone, const FlowP *gribData) {
    double t0,t1;
    double latMin, latMax, lonMin, lonMax;
    double a, b, u0, u1, v0, v1, g0, g1, w0, w1;
    int iT0, iT1;
    FlowP windP00, windP01, windP10, windP11;
-   if ((!zone.wellDefined) || (zone.nbLat == 0) || (! isInZone (p, zone)) || (t < 0)){
+   if ((!zone->wellDefined) || (zone->nbLat == 0) || (! isInZone (p, zone)) || (t < 0)){
       *rU = 0, *rV = 0, *rG = 0; *rW = 0;
       return false;
    }
@@ -1030,10 +1033,10 @@ bool findFlow (Pp p, double t, double *rU, double *rV, double *rG, double *rW, Z
    find4PointsAround (p.lat, p.lon, &latMin, &latMax, &lonMin, &lonMax, zone);
    //printf ("lat %lf iT0 %d, iT1 %d, latMin %lf latMax %lf lonMin %lf lonMax %lf\n", p.lat, iT0, iT1, latMin, latMax, lonMin, lonMax);  
    // 4 points at time t0
-   windP00 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMax, zone) * zone.nbLon + indLon(lonMin, zone)];  
-   windP01 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMax, zone) * zone.nbLon + indLon(lonMax, zone)];
-   windP10 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMin, zone) * zone.nbLon + indLon(lonMax, zone)];
-   windP11 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMin, zone) * zone.nbLon + indLon(lonMin, zone)];
+   windP00 = gribData [iT0 * zone->nbLat * zone->nbLon + indLat(latMax, zone) * zone->nbLon + indLon(lonMin, zone)];  
+   windP01 = gribData [iT0 * zone->nbLat * zone->nbLon + indLat(latMax, zone) * zone->nbLon + indLon(lonMax, zone)];
+   windP10 = gribData [iT0 * zone->nbLat * zone->nbLon + indLat(latMin, zone) * zone->nbLon + indLon(lonMax, zone)];
+   windP11 = gribData [iT0 * zone->nbLat * zone->nbLon + indLat(latMin, zone) * zone->nbLon + indLon(lonMin, zone)];
 
    // printf ("00lat %lf  01lat %lf  10lat %lf 11lat %lf\n", windP00.lat, windP01.lat,windP10.lat,windP11.lat); 
    // printf ("00tws %lf  01tws %lf  10tws %lf 11tws %lf\n", windP00.tws, windP01.tws,windP10.tws,windP11.tws); 
@@ -1059,10 +1062,10 @@ bool findFlow (Pp p, double t, double *rU, double *rV, double *rG, double *rW, Z
    //printf ("lat %lf a %lf  b %lf  00lat %lf 10lat %lf  %lf\n", p.lat, a, b, windP00.lat, windP10.lat, tws0); 
 
    // 4 points at time t1
-   windP00 = gribData [iT1 * zone.nbLat * zone.nbLon + indLat(latMax, zone) * zone.nbLon + indLon(lonMin, zone)];  
-   windP01 = gribData [iT1 * zone.nbLat * zone.nbLon + indLat(latMax, zone) * zone.nbLon + indLon(lonMax, zone)];
-   windP10 = gribData [iT1 * zone.nbLat * zone.nbLon + indLat(latMin, zone) * zone.nbLon + indLon(lonMax, zone)];
-   windP11 = gribData [iT1 * zone.nbLat * zone.nbLon + indLat(latMin, zone) * zone.nbLon + indLon(lonMin, zone)];
+   windP00 = gribData [iT1 * zone->nbLat * zone->nbLon + indLat(latMax, zone) * zone->nbLon + indLon(lonMin, zone)];  
+   windP01 = gribData [iT1 * zone->nbLat * zone->nbLon + indLat(latMax, zone) * zone->nbLon + indLon(lonMax, zone)];
+   windP10 = gribData [iT1 * zone->nbLat * zone->nbLon + indLat(latMin, zone) * zone->nbLon + indLon(lonMax, zone)];
+   windP11 = gribData [iT1 * zone->nbLat * zone->nbLon + indLat(latMin, zone) * zone->nbLon + indLon(lonMin, zone)];
 
    // interpolatuon for  for u, v
    a = interpolate (p.lon, windP00.lon, windP01.lon, windP00.u, windP01.u);
@@ -1081,9 +1084,9 @@ bool findFlow (Pp p, double t, double *rU, double *rV, double *rG, double *rW, Z
    b = interpolate (p.lon, windP10.lon, windP11.lon, windP10.w, windP11.w); 
    w1 = interpolate (p.lat, windP00.lat, windP10.lat, a, b);
    
-   // finally, inderpolation twd tws between t0 and t1
-   t0 = zone.timeStamp [iT0];
-   t1 = zone.timeStamp [iT1];
+   // finally, interpolation twd tws between t0 and t1
+   t0 = zone->timeStamp [iT0];
+   t1 = zone->timeStamp [iT1];
    *rU = interpolate (t, t0, t1, u0, u1);
    *rV = interpolate (t, t0, t1, v0, v1);
    *rG = interpolate (t, t0, t1, g0, g1);
@@ -1102,7 +1105,7 @@ void findWind (Pp pt, double t, double *u, double *v, double *gust, double *w, d
       *w = 0;
    }
    else {
-      findFlow (pt, t, u, v, gust, w, zone, tGribData [WIND]);
+      findFlow (pt, t, u, v, gust, w, &zone, tGribData [WIND]);
       *twd = fTwd (*u, *v);
       *tws = fTws (*u, *v);
    }
@@ -1126,7 +1129,7 @@ void findCurrent (Pp pt, double t, double *uCurr, double *vCurr, double *tcd, do
    }
    else {
       if (t <= currentZone.timeStamp [currentZone.nTimeStamp - 1]) {
-         findFlow (pt, t, uCurr, vCurr, &gust, &bidon, currentZone, tGribData [CURRENT]);
+         findFlow (pt, t, uCurr, vCurr, &gust, &bidon, &currentZone, tGribData [CURRENT]);
          *tcd = fTwd (*uCurr, *vCurr);
          *tcs = fTws (*uCurr, *vCurr);
       }
@@ -1231,12 +1234,12 @@ static bool readGribParameters (const char *fileName, Zone *zone) {
 }
 
 /*! find index in gribData table */
-static inline int indexOf (int timeStep, double lat, double lon, Zone zone) {
+static inline int indexOf (int timeStep, double lat, double lon, Zone *zone) {
    int iLat = indLat (lat, zone);
    int iLon = indLon (lon, zone);
    int iT = -1;
-   for (iT = 0; iT < (int) zone.nTimeStamp; iT++) {
-      if (timeStep == zone.timeStamp [iT])
+   for (iT = 0; iT < (int) zone->nTimeStamp; iT++) {
+      if (timeStep == zone->timeStamp [iT])
          break;
    }
    if (iT == -1) {
@@ -1244,7 +1247,7 @@ static inline int indexOf (int timeStep, double lat, double lon, Zone zone) {
       return -1;
    }
    //printf ("iT: %d iLon :%d iLat: %d\n", iT, iLon, iLat); 
-   return  (iT * zone.nbLat * zone.nbLon) + (iLat * zone.nbLon) + iLon;
+   return  (iT * zone->nbLat * zone->nbLon) + (iLat * zone->nbLon) + iLon;
 }
 
 
@@ -1328,7 +1331,7 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
       while (codes_grib_iterator_next(iter, &lat, &lon, &val)) {
          // printf("%.2f %.2f %.2lf %ld %s\n", lat, lon, val, timeStep, shortName);
          lon = lonCanonize (lon);
-         iGrib = indexOf ((int) timeStep, lat, lon, *zone);
+         iGrib = indexOf ((int) timeStep, lat, lon, zone);
          if (iGrib == -1) return NULL;
          tGribData [iFlow] [iGrib].lat = lat; 
          tGribData [iFlow] [iGrib].lon = lon; 
@@ -1372,7 +1375,7 @@ void *readGrib (void *data) {
 }
 
 /*! write Grib information in string */
-char *gribToStr (char *str, Zone zone, size_t maxLength) {
+char *gribToStr (char *str, Zone *zone, size_t maxLength) {
    char line [MAX_SIZE_LINE] = "";
    char strTmp [MAX_SIZE_LINE] = "";
    char strLat0 [MAX_SIZE_NAME] = "", strLon0 [MAX_SIZE_NAME] = "";
@@ -1380,47 +1383,47 @@ char *gribToStr (char *str, Zone zone, size_t maxLength) {
    char centreName [MAX_SIZE_NAME] = "";
    
    for (size_t i = 0; i < sizeof(dicTab) / sizeof(dicTab[0]); i++) // search name of center
-     if (dicTab [i].id == zone.centreId) 
+     if (dicTab [i].id == zone->centreId) 
         strncpy (centreName, dicTab [i].name, sizeof (centreName) - 1);
          
-   newDate (zone.dataDate [0], zone.dataTime [0]/100, strTmp);
+   newDate (zone->dataDate [0], zone->dataTime [0]/100, strTmp);
    snprintf (str, MAX_SIZE_LINE, "Centre ID: %ld %s   %s   Ed number: %ld\nnMessages: %d\nstepUnits: %ld\n# values : %ld\n",\
-      zone.centreId, centreName, strTmp, zone.editionNumber, zone.nMessage, zone.stepUnits, zone.numberOfValues);
+      zone->centreId, centreName, strTmp, zone->editionNumber, zone->nMessage, zone->stepUnits, zone->numberOfValues);
    snprintf (line, MAX_SIZE_LINE, "Zone From: %s, %s To: %s, %s\n", \
-      latToStr (zone.latMin, par.dispDms, strLat0), lonToStr (zone.lonLeft, par.dispDms, strLon0),\
-      latToStr (zone.latMax, par.dispDms, strLat1), lonToStr (zone.lonRight, par.dispDms, strLon1));
+      latToStr (zone->latMin, par.dispDms, strLat0), lonToStr (zone->lonLeft, par.dispDms, strLon0),\
+      latToStr (zone->latMax, par.dispDms, strLat1), lonToStr (zone->lonRight, par.dispDms, strLon1));
    strncat (str, line, maxLength - strlen (str));   
-   snprintf (line, MAX_SIZE_LINE, "LatStep  : %04.4f° LonStep: %04.4f°\n", zone.latStep, zone.lonStep);
+   snprintf (line, MAX_SIZE_LINE, "LatStep  : %04.4f° LonStep: %04.4f°\n", zone->latStep, zone->lonStep);
    strncat (str, line, maxLength - strlen (str));   
-   snprintf (line, MAX_SIZE_LINE, "Nb Lat   : %ld      Nb Lon : %ld\n", zone.nbLat, zone.nbLon);
+   snprintf (line, MAX_SIZE_LINE, "Nb Lat   : %ld      Nb Lon : %ld\n", zone->nbLat, zone->nbLon);
    strncat (str, line, maxLength - strlen (str));   
-   if (zone.nTimeStamp < 8) {
-      snprintf (line, MAX_SIZE_LINE, "TimeStamp List of %zu : [ ", zone.nTimeStamp);
+   if (zone->nTimeStamp < 8) {
+      snprintf (line, MAX_SIZE_LINE, "TimeStamp List of %zu : [ ", zone->nTimeStamp);
       strncat (str, line, maxLength - strlen (str));   
-      for (size_t k = 0; k < zone.nTimeStamp; k++) {
-         snprintf (line, MAX_SIZE_LINE, "%ld ", zone.timeStamp [k]);
+      for (size_t k = 0; k < zone->nTimeStamp; k++) {
+         snprintf (line, MAX_SIZE_LINE, "%ld ", zone->timeStamp [k]);
          strncat (str, line, maxLength - strlen (str));   
       }
       strncat (str, "]\n", maxLength - strlen (str));
    }
    else {
-      snprintf (line, MAX_SIZE_LINE, "TimeStamp List of %zu : [%ld, %ld, ..%ld]\n", zone.nTimeStamp,\
-         zone.timeStamp [0], zone.timeStamp [1], zone.timeStamp [zone.nTimeStamp - 1]);
+      snprintf (line, MAX_SIZE_LINE, "TimeStamp List of %zu : [%ld, %ld, ..%ld]\n", zone->nTimeStamp,\
+         zone->timeStamp [0], zone->timeStamp [1], zone->timeStamp [zone->nTimeStamp - 1]);
       strncat (str, line, maxLength - strlen (str));   
    }
 
    snprintf (line, MAX_SIZE_LINE, "Shortname List: [ ");
    strncat (str, line, maxLength - strlen (str));   
-   for (size_t k = 0; k < zone.nShortName; k++) {
-      snprintf (line, MAX_SIZE_LINE, "%s ", zone.shortName [k]);
+   for (size_t k = 0; k < zone->nShortName; k++) {
+      snprintf (line, MAX_SIZE_LINE, "%s ", zone->shortName [k]);
       strncat (str, line, maxLength - strlen (str));   
    }
    strncat (str, "]\n", maxLength - strlen (str));
-   if ((zone.nDataDate > 1) || (zone.nDataTime > 1)) {
-      snprintf (line, MAX_SIZE_LINE, "Warning number of Date: %zu, number of Time: %zu\n", zone.nDataDate, zone.nDataTime);
+   if ((zone->nDataDate > 1) || (zone->nDataTime > 1)) {
+      snprintf (line, MAX_SIZE_LINE, "Warning number of Date: %zu, number of Time: %zu\n", zone->nDataDate, zone->nDataTime);
       strncat (str, line, maxLength - strlen (str));   
    }
-   snprintf (line, MAX_SIZE_LINE, "Zone is       :  %s\n", (zone.wellDefined) ? "Well defined" : "Undefined");
+   snprintf (line, MAX_SIZE_LINE, "Zone is       :  %s\n", (zone->wellDefined) ? "Well defined" : "Undefined");
    strncat (str, line, maxLength - strlen (str));   
    return str;
 }
@@ -1468,42 +1471,42 @@ bool readPolar (char *fileName, PolMat *mat) {
 }
 
 /*! return the max value found in polar */
-double maxValInPol (PolMat mat) {
+double maxValInPol (PolMat *mat) {
    double max = 0.0;
-   for (int i = 1; i < mat.nLine; i++)
-      for (int j = 1; j < mat.nCol; j++) 
-         if (mat.t [i][j] > max) max = mat.t [i][j];
+   for (int i = 1; i < mat->nLine; i++)
+      for (int j = 1; j < mat->nCol; j++) 
+         if (mat->t [i][j] > max) max = mat->t [i][j];
    return max;
 }
 
 /*! return VMG: angle and speed at TWS */
-void bestVmg (double tws, PolMat mat, double *vmgAngle, double *vmgSpeed) {
+void bestVmg (double tws, PolMat *mat, double *vmgAngle, double *vmgSpeed) {
    *vmgSpeed = -1;
    double vmg;
-   for (int i = 1; i < mat.nLine; i++) {
-      if (mat.t [i][0] > 90) break; // useless over 90°
-      vmg = findPolar (mat.t [i][0], tws, mat) * cos (DEG_TO_RAD * mat.t [i][0]);
+   for (int i = 1; i < mat->nLine; i++) {
+      if (mat->t [i][0] > 90) break; // useless over 90°
+      vmg = findPolar (mat->t [i][0], tws, *mat) * cos (DEG_TO_RAD * mat->t [i][0]);
       if (vmg > *vmgSpeed) {
          *vmgSpeed = vmg;
-         *vmgAngle = mat.t [i][0];
+         *vmgAngle = mat->t [i][0];
       }
    }
 }
 
 /*! write polar information in string */
-char *polToStr (char * str, PolMat mat, size_t maxLength) {
+char *polToStr (char * str, PolMat *mat, size_t maxLength) {
    char line [MAX_SIZE_LINE] = "";
    str [0] = '\0';
-   for (int i = 0; i < mat.nLine; i++) {
-      for (int j = 0; j < mat.nCol; j++) {
-         snprintf (line, MAX_SIZE_LINE, "%6.2f ", mat.t [i][j]);
+   for (int i = 0; i < mat->nLine; i++) {
+      for (int j = 0; j < mat->nCol; j++) {
+         snprintf (line, MAX_SIZE_LINE, "%6.2f ", mat->t [i][j]);
          strncat (str, line, maxLength - strlen (str));
       }
       strncat (str, "\n", maxLength - strlen (str));
    }
-   snprintf (line, MAX_SIZE_LINE, "Number of rows in polar : %d\n", mat.nCol);
+   snprintf (line, MAX_SIZE_LINE, "Number of rows in polar : %d\n", mat->nCol);
    strncat (str, line, maxLength - strlen (str));
-   snprintf (line, MAX_SIZE_LINE, "Number of lines in polar: %d\n", mat.nLine);
+   snprintf (line, MAX_SIZE_LINE, "Number of lines in polar: %d\n", mat->nLine);
    strncat (str, line, maxLength - strlen (str));
    snprintf (line, MAX_SIZE_LINE, "Max                     : %.2lf\n", maxValInPol (mat));
    strncat (str, line, maxLength - strlen (str));

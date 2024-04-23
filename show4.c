@@ -142,8 +142,6 @@ GtkWidget *val_size_eval = NULL;
 GtkWidget *menuWindow = NULL;        // Pop up menu Right Click
 GtkWidget *menuGrib = NULL;          // Pop up menu Meteoconsult
 
-WayRoute wayRoute;
-
 Coordinates whereWasMouse, whereIsMouse, whereIsPopup;
 
 /*! displayed zone */
@@ -450,13 +448,13 @@ static double yToLat (double y) {
 }
 
 /*! draw a polygon */
-static void drawPolygon (cairo_t *cr, Polygon po) {
-   double x = getX (po.points[0].lon);
-   double y = getY (po.points[0].lat);
+static void drawPolygon (cairo_t *cr, Polygon *po) {
+   double x = getX (po->points[0].lon);
+   double y = getY (po->points[0].lat);
    cairo_move_to (cr, x, y);
-   for (int k = 1; k < po.n; k++) {
-      x = getX (po.points [k].lon);
-      y = getY (po.points [k].lat);
+   for (int k = 1; k < po->n; k++) {
+      x = getX (po->points [k].lon);
+      y = getY (po->points [k].lat);
       cairo_line_to (cr, x, y);
    }
    cairo_close_path(cr);
@@ -467,7 +465,7 @@ static void drawPolygon (cairo_t *cr, Polygon po) {
 static void drawForbidArea (cairo_t *cr) {
    CAIRO_SET_SOURCE_RGBA_FORBID_AREA(cr);
    for (int i = 0; i < par.nForbidZone; i++)
-      drawPolygon (cr, forbidZones [i]);
+      drawPolygon (cr, &forbidZones [i]);
 }
 
 /*! association of color r g b with wind speed twd */
@@ -566,20 +564,20 @@ static void paletteDraw () {
 
 /*! make calculation over Ortho route */
 static void calculateOrthoRoute () {
-   wayRoute.t [0].lCap =  directCap (par.pOr.lat, par.pOr.lon,  wayRoute.t [0].lat,  wayRoute.t [0].lon);
-   wayRoute.t [0].oCap = wayRoute.t [0].lCap + givry (par.pOr.lat, par.pOr.lon, wayRoute.t [0].lat, wayRoute.t [0].lon);
-   wayRoute.t [0].ld = loxoDist (par.pOr.lat, par.pOr.lon,  wayRoute.t [0].lat,  wayRoute.t [0].lon);
-   wayRoute.t [0].od = orthoDist (par.pOr.lat, par.pOr.lon,  wayRoute.t [0].lat,  wayRoute.t [0].lon);
-   wayRoute.totLoxoDist = wayRoute.t [0].ld; 
-   wayRoute.totOrthoDist = wayRoute.t [0].od; 
+   wayPoints.t [0].lCap =  directCap (par.pOr.lat, par.pOr.lon,  wayPoints.t [0].lat,  wayPoints.t [0].lon);
+   wayPoints.t [0].oCap = wayPoints.t [0].lCap + givry (par.pOr.lat, par.pOr.lon, wayPoints.t [0].lat, wayPoints.t [0].lon);
+   wayPoints.t [0].ld = loxoDist (par.pOr.lat, par.pOr.lon,  wayPoints.t [0].lat,  wayPoints.t [0].lon);
+   wayPoints.t [0].od = orthoDist (par.pOr.lat, par.pOr.lon,  wayPoints.t [0].lat,  wayPoints.t [0].lon);
+   wayPoints.totLoxoDist = wayPoints.t [0].ld; 
+   wayPoints.totOrthoDist = wayPoints.t [0].od; 
    
-   for (int i = 0; i <  wayRoute.n; i++) {
-      wayRoute.t [i+1].lCap = directCap (wayRoute.t [i].lat, wayRoute.t [i].lon, wayRoute.t [i+1].lat, wayRoute.t [i+1].lon); 
-      wayRoute.t [i+1].oCap = wayRoute.t [i+1].lCap + givry (wayRoute.t [i].lat,  wayRoute.t [i].lon, wayRoute.t [i+1].lat, wayRoute.t [i+1].lon);
-      wayRoute.t [i+1].ld = loxoDist (wayRoute.t [i].lat, wayRoute.t [i].lon, wayRoute.t [i+1].lat, wayRoute.t [i+1].lon);
-      wayRoute.t [i+1].od = orthoDist (wayRoute.t [i].lat, wayRoute.t [i].lon, wayRoute.t [i+1].lat, wayRoute.t [i+1].lon);
-      wayRoute.totLoxoDist += wayRoute.t [i+1].ld; 
-      wayRoute.totOrthoDist += wayRoute.t [i+1].od; 
+   for (int i = 0; i <  wayPoints.n; i++) {
+      wayPoints.t [i+1].lCap = directCap (wayPoints.t [i].lat, wayPoints.t [i].lon, wayPoints.t [i+1].lat, wayPoints.t [i+1].lon); 
+      wayPoints.t [i+1].oCap = wayPoints.t [i+1].lCap + givry (wayPoints.t [i].lat,  wayPoints.t [i].lon, wayPoints.t [i+1].lat, wayPoints.t [i+1].lon);
+      wayPoints.t [i+1].ld = loxoDist (wayPoints.t [i].lat, wayPoints.t [i].lon, wayPoints.t [i+1].lat, wayPoints.t [i+1].lon);
+      wayPoints.t [i+1].od = orthoDist (wayPoints.t [i].lat, wayPoints.t [i].lon, wayPoints.t [i+1].lat, wayPoints.t [i+1].lon);
+      wayPoints.totLoxoDist += wayPoints.t [i+1].ld; 
+      wayPoints.totOrthoDist += wayPoints.t [i+1].od; 
    }
 }
 
@@ -626,12 +624,12 @@ static void orthoPoints (cairo_t *cr, double lat1, double lon1, double lat2, dou
 }
 
 /*! reset way route with only pDest */
-static void initWayRoute () {
-   wayRoute.n = 0;
-   wayRoute.totOrthoDist = 0;
-   wayRoute.totLoxoDist = 0;
-   wayRoute.t [0].lat = par.pDest.lat;
-   wayRoute.t [0].lon = par.pDest.lon;
+static void initWayPoints () {
+   wayPoints.n = 0;
+   wayPoints.totOrthoDist = 0;
+   wayPoints.totLoxoDist = 0;
+   wayPoints.t [0].lat = par.pDest.lat;
+   wayPoints.t [0].lon = par.pDest.lon;
 }
 
 /*! return label associated to x */
@@ -698,7 +696,7 @@ static void niceWayPointReport () {
    gtk_grid_attach(GTK_GRID(grid), separator,                      0, 1, 7, 1);
   
    int i;
-   for (i = -1; i <  wayRoute.n; i++) {
+   for (i = -1; i <  wayPoints.n; i++) {
       if (i == -1) {
          gtk_grid_attach (GTK_GRID (grid), strToLabel("Origin", -1),                                    0, 2, 1, 1);
          gtk_grid_attach (GTK_GRID (grid), strToLabel(latToStr (par.pOr.lat, par.dispDms, strLat), -1), 1, 2, 1, 1);
@@ -706,13 +704,13 @@ static void niceWayPointReport () {
       }
       else {
          gtk_grid_attach (GTK_GRID (grid), strToLabel("Waypoint", i),                                         0, i+3, 1, 1);
-         gtk_grid_attach (GTK_GRID (grid), strToLabel(latToStr (wayRoute.t[i].lat, par.dispDms, strLat), -1), 1, i+3, 1, 1);
-         gtk_grid_attach (GTK_GRID (grid), strToLabel(lonToStr (wayRoute.t[i].lon, par.dispDms, strLon), -1), 2, i+3, 1, 1);
+         gtk_grid_attach (GTK_GRID (grid), strToLabel(latToStr (wayPoints.t[i].lat, par.dispDms, strLat), -1), 1, i+3, 1, 1);
+         gtk_grid_attach (GTK_GRID (grid), strToLabel(lonToStr (wayPoints.t[i].lon, par.dispDms, strLon), -1), 2, i+3, 1, 1);
       }
-      gtk_grid_attach (GTK_GRID (grid), doubleToLabel (wayRoute.t [i+1].oCap),                                3, i+3, 1, 1);
-      gtk_grid_attach (GTK_GRID (grid), doubleToLabel (wayRoute.t [i+1].od),                                  4, i+3, 1, 1);
-      gtk_grid_attach (GTK_GRID (grid), doubleToLabel (wayRoute.t [i+1].lCap),                                5, i+3, 1, 1);
-      gtk_grid_attach (GTK_GRID (grid), doubleToLabel (wayRoute.t [i+1].ld),                                  6, i+3, 1, 1);
+      gtk_grid_attach (GTK_GRID (grid), doubleToLabel (wayPoints.t [i+1].oCap),                                3, i+3, 1, 1);
+      gtk_grid_attach (GTK_GRID (grid), doubleToLabel (wayPoints.t [i+1].od),                                  4, i+3, 1, 1);
+      gtk_grid_attach (GTK_GRID (grid), doubleToLabel (wayPoints.t [i+1].lCap),                                5, i+3, 1, 1);
+      gtk_grid_attach (GTK_GRID (grid), doubleToLabel (wayPoints.t [i+1].ld),                                  6, i+3, 1, 1);
    }
    gtk_grid_attach (GTK_GRID (grid), strToLabel("Destination", -1),                                 0, i+3, 1, 1);
    gtk_grid_attach (GTK_GRID (grid), strToLabel(latToStr (par.pDest.lat, par.dispDms, strLat), -1), 1, i+3, 1, 1);
@@ -723,37 +721,37 @@ static void niceWayPointReport () {
    gtk_grid_attach(GTK_GRID(grid), separator,                                                     0, i+3, 7, 1);
    i += 1;
    gtk_grid_attach (GTK_GRID (grid), strToLabel("Total Orthodomic Distance", -1),                 0, i+3, 3, 1);
-   gtk_grid_attach (GTK_GRID (grid), doubleToLabel (wayRoute.totOrthoDist),                       3, i+3, 1, 1);
+   gtk_grid_attach (GTK_GRID (grid), doubleToLabel (wayPoints.totOrthoDist),                       3, i+3, 1, 1);
    i += 1;
    separator = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
    gtk_grid_attach(GTK_GRID(grid), separator,                                                     0, i+3, 7, 1);
    i += 1;
    gtk_grid_attach (GTK_GRID (grid), strToLabel("Total Loxodromic Distance", -1),                 0, i+3, 3, 1);
-   gtk_grid_attach (GTK_GRID (grid), doubleToLabel (wayRoute.totLoxoDist),                        3, i+3, 1, 1);
+   gtk_grid_attach (GTK_GRID (grid), doubleToLabel (wayPoints.totLoxoDist),                        3, i+3, 1, 1);
    gtk_window_present (GTK_WINDOW (dialog));
 }
 
 /*! dump orthodomic route into str */
-static void wayPointToStr (char * str, int maxLength) {
+static void wayPointToStr (char *str, int maxLength) {
    char line [MAX_SIZE_LINE];
    char strLat [MAX_SIZE_LINE];
    char strLon [MAX_SIZE_LINE];
    snprintf (str, MAX_SIZE_BUFFER, " Point  Lat        Lon       Ortho cap   Ortho Dist   Loxo Cap   Loxo Dist\n");
    snprintf (line, sizeof (line), " pOr:   %-12s%-12s%7.2lf°      %7.2lf   %7.2lf°     %7.2lf \n", \
       latToStr (par.pOr.lat, par.dispDms, strLat), lonToStr (par.pOr.lon, par.dispDms, strLon), \
-      wayRoute.t [0].oCap,  wayRoute.t [0].od, wayRoute.t [0].lCap,  wayRoute.t [0].ld);
+      wayPoints.t [0].oCap,  wayPoints.t [0].od, wayPoints.t [0].lCap,  wayPoints.t [0].ld);
    strncat (str, line, maxLength - strlen (str));
-   for (int i=0; i <  wayRoute.n; i++) {
+   for (int i = 0; i <  wayPoints.n; i++) {
       snprintf (line, sizeof (line), " WP %02d: %-12s%-12s%7.2lf°      %7.2lf   %7.2lf°     %7.2lf \n", i + 1,  \
-         latToStr (wayRoute.t[i].lat, par.dispDms, strLat), lonToStr (wayRoute.t[i].lon, par.dispDms, strLon),\
-         wayRoute.t [i+1].oCap,  wayRoute.t [i+1].od, wayRoute.t [i+1].lCap,  wayRoute.t [i+1].ld);
+         latToStr (wayPoints.t[i].lat, par.dispDms, strLat), lonToStr (wayPoints.t[i].lon, par.dispDms, strLon),\
+         wayPoints.t [i+1].oCap,  wayPoints.t [i+1].od, wayPoints.t [i+1].lCap,  wayPoints.t [i+1].ld);
       strncat (str, line, maxLength - strlen (str));
    }
    snprintf (line, sizeof (line), " pDest: %-12s%-12s\n\n", latToStr (par.pDest.lat, par.dispDms, strLat), lonToStr (par.pDest.lon, par.dispDms, strLon));
    strncat (str, line, maxLength - strlen (str));
-   snprintf (line, sizeof (line), " Total orthodromic distance: %.2lf NM\n", wayRoute.totOrthoDist);
+   snprintf (line, sizeof (line), " Total orthodromic distance: %.2lf NM\n", wayPoints.totOrthoDist);
    strncat (str, line, maxLength - strlen (str));
-   snprintf (line, sizeof (line), " Total loxodromic distance : %.2lf NM\n", wayRoute.totLoxoDist);
+   snprintf (line, sizeof (line), " Total loxodromic distance : %.2lf NM\n", wayPoints.totLoxoDist);
    strncat (str, line, maxLength - strlen (str));
 }
 
@@ -763,9 +761,9 @@ static void drawLoxoRoute (cairo_t *cr) {
    double y = getY (par.pOr.lat);
    CAIRO_SET_SOURCE_RGB_LIGHT_GRAY(cr);
    cairo_move_to (cr, x, y);
-   for (int i = 0; i <  wayRoute.n; i++) {
-      x = getX (wayRoute.t [i].lon);
-      y = getY (wayRoute.t [i].lat);
+   for (int i = 0; i <  wayPoints.n; i++) {
+      x = getX (wayPoints.t [i].lon);
+      y = getY (wayPoints.t [i].lat);
       cairo_line_to (cr, x, y);
    }
    if (destPressed) {
@@ -780,10 +778,10 @@ static void drawLoxoRoute (cairo_t *cr) {
 static void drawOrthoRoute (cairo_t *cr, int n) {
    double prevLat = par.pOr.lat;
    double prevLon = par.pOr.lon;
-   for (int i = 0; i <  wayRoute.n; i++) {
-      orthoPoints (cr, prevLat, prevLon,  wayRoute.t [i].lat,  wayRoute.t [i].lon, n);
-      prevLat =  wayRoute.t [i].lat;
-      prevLon =  wayRoute.t [i].lon;
+   for (int i = 0; i <  wayPoints.n; i++) {
+      orthoPoints (cr, prevLat, prevLon,  wayPoints.t [i].lat,  wayPoints.t [i].lon, n);
+      prevLat =  wayPoints.t [i].lat;
+      prevLon =  wayPoints.t [i].lon;
    }
    if (destPressed)
       orthoPoints (cr, prevLat, prevLon, par.pDest.lat, par.pDest.lon, n);
@@ -1261,7 +1259,7 @@ static void statusBarUpdate () {
    double u = 0, v = 0, g = 0, w = 0, uCurr = 0, vCurr = 0, currTwd = 0, currTws = 0;
    char seaEarth [MAX_SIZE_NAME];
    char strLat [MAX_SIZE_NAME] = "", strLon [MAX_SIZE_NAME] = "";
-   double tDeltaCurrent = zoneTimeDiff (currentZone, zone);
+   double tDeltaCurrent = zoneTimeDiff (&currentZone, &zone);
    double twd, tws;
    pt.lat = yToLat (whereIsMouse.y);
    pt.lon = xToLon (whereIsMouse.x);
@@ -1336,7 +1334,7 @@ static gboolean exitOnTimeOut (gpointer data) {
 static void drawGribCallback (GtkDrawingArea *area, cairo_t *cr, int width, int height, gpointer user_data) {
    // if (widget == NULL) return FALSE; //ATT
    double u, v, gust, w, twd, tws, uCurr, vCurr, currTwd, currTws, head_x, head_y;
-   double tDeltaCurrent = zoneTimeDiff (currentZone, zone);
+   double tDeltaCurrent = zoneTimeDiff (&currentZone, &zone);
    static int count = 2;
    if (count <= 1) printf ("drawGribCallback count: %d\n", count);
    Pp pt;
@@ -1395,7 +1393,7 @@ static void drawGribCallback (GtkDrawingArea *area, cairo_t *cr, int width, int 
       pt.lon = dispZone.lonLeft;
       while (pt.lon <= dispZone.lonRight) {
 	      u = 0; v = 0; w = 0; uCurr = 0; vCurr = 0;
-         if (isInZone (pt, zone)) {
+         if (isInZone (pt, &zone)) {
 	         findWind (pt, theTime, &u, &v, &gust, &w, &twd, &tws);
 	         if (par.windDisp == BARBULE) {
                barbule (cr, pt, u, v, (par.averageOrGustDisp == 0) ? tws : gust *MS_TO_KN, WIND);
@@ -1463,7 +1461,7 @@ static void drawGribCallback (GtkDrawingArea *area, cairo_t *cr, int width, int 
 /*! draw the polar circles and scales */
 static void polarTarget (cairo_t *cr, int type, double width, double height, double rStep) {
    PolMat *ptMat = (type == WAVE_POLAR) ? &wavePolMat : &polMat; 
-   double nStep = ceil (maxValInPol (*ptMat));
+   double nStep = ceil (maxValInPol (ptMat));
    char str [MAX_SIZE_NUMBER];
    if (type == WAVE_POLAR) {
       nStep = nStep/10;
@@ -1563,7 +1561,7 @@ static void getPolarXYbyCol (int type, int l, int c, double width, double height
 }
 
 /*! Draw polar from polar matrix */
-static void drawPolarBySelectedTws (cairo_t *cr, int polarType, PolMat ptMat,
+static void drawPolarBySelectedTws (cairo_t *cr, int polarType, PolMat *ptMat,
    double selectedTws, double width, double height, double radiusFactor) {
    char line [MAX_SIZE_LINE];
    double x, y, x1, x2, y1, y2, vmgAngle, vmgSpeed;
@@ -1574,27 +1572,27 @@ static void drawPolarBySelectedTws (cairo_t *cr, int polarType, PolMat ptMat,
 
    // segments
    if (segmentOrBezier == SEGMENT) {
-      for (int l = 2; l < ptMat.nLine; l += 1) {
+      for (int l = 2; l < ptMat->nLine; l += 1) {
          getPolarXYbyValue (polarType, l, selectedTws, width, height, radiusFactor, &x, &y);
          cairo_line_to (cr, x, y);
       }
    }
    // Tracer la courbe de Bézier si nb de points suffisant
    else {
-      for (int l = 2; l < ptMat.nLine - 2; l += 3) {
+      for (int l = 2; l < ptMat->nLine - 2; l += 3) {
          getPolarXYbyValue (polarType, l, selectedTws, width, height, radiusFactor, &x, &y);
          getPolarXYbyValue (polarType, l+1, selectedTws, width, height, radiusFactor, &x1, &y1);
          getPolarXYbyValue (polarType, l+2, selectedTws, width, height, radiusFactor, &x2, &y2);
          cairo_curve_to(cr, x, y, x1, y1, x2, y2);
       }
-      getPolarXYbyValue (polarType, ptMat.nLine -1, selectedTws, width, height, radiusFactor, &x, &y);
+      getPolarXYbyValue (polarType, ptMat->nLine -1, selectedTws, width, height, radiusFactor, &x, &y);
       cairo_line_to(cr, x, y);
    }
    cairo_stroke(cr);
 
    if (polarType == POLAR) {
-      bestVmg (selectedTws, polMat, &vmgAngle, &vmgSpeed);
-      double ceilSpeed = ceil (maxValInPol (polMat));
+      bestVmg (selectedTws, &polMat, &vmgAngle, &vmgSpeed);
+      double ceilSpeed = ceil (maxValInPol (&polMat));
       if (vmgSpeed > 0) {
          cairo_set_line_width (cr, 0.5);
          cairo_move_to (cr, width/2, height/2);
@@ -1648,26 +1646,26 @@ static void drawPolarAll (cairo_t *cr, int polarType, PolMat ptMat,
 /*! Draw polar from polar matrix */
 static void on_draw_polar_event (GtkDrawingArea *area, cairo_t *cr, int width, int height, gpointer user_data) {
    PolMat *ptMat = (polarType == WAVE_POLAR) ? &wavePolMat : &polMat; 
-   //double radiusFactor = (polarType == WAVE_POLAR) ? width / 40 : width / (maxValInPol (*ptMat) * 5); // Ajustez la taille de la courbe
+   //double radiusFactor = (polarType == WAVE_POLAR) ? width / 40 : width / (maxValInPol (ptMat) * 5); // Ajustez la taille de la courbe
    double radiusFactor;
-   radiusFactor = width / (maxValInPol (*ptMat) * 6); // Ajustez la taille de la courbe
+   radiusFactor = width / (maxValInPol (ptMat) * 6); // Ajustez la taille de la courbe
    polarTarget (cr, polarType, width, height, radiusFactor);
    polarLegend (cr, polarType);
    drawPolarAll (cr, polarType, *ptMat, width, height, radiusFactor);
-   drawPolarBySelectedTws (cr, polarType, *ptMat, selectedTws, width, height, radiusFactor);
+   drawPolarBySelectedTws (cr, polarType, ptMat, selectedTws, width, height, radiusFactor);
    if (polar_drawing_area != NULL)
       gtk_widget_queue_draw (polar_drawing_area);
 }
 
 /*! find index in polar to draw */
-static void on_filter_changed(GtkComboBox *widget, gpointer user_data) {
+static void on_filter_changed (GtkComboBox *widget, gpointer user_data) {
    selectedPol = gtk_combo_box_get_active(GTK_COMBO_BOX(filter_combo));
    if (polar_drawing_area != NULL)
       gtk_widget_queue_draw (polar_drawing_area);
 }
 
 /*! combo filter zone for polar */
-static void create_filter_combo(int type) {
+static void create_filter_combo (int type) {
    char str [MAX_SIZE_LINE];
    GtkTreeIter iter;
    // Créez un modèle de liste pour la liste déroulante
@@ -1848,7 +1846,7 @@ static void polarDraw () {
    GtkWidget *polStatusbar = gtk_statusbar_new ();
    guint context_id = gtk_statusbar_get_context_id (GTK_STATUSBAR(polStatusbar), "Statusbar");
    snprintf (sStatus, sizeof (sStatus), "nCol: %2d   nLig: %2d   max: %2.2lf", \
-      ptMat->nCol, ptMat->nLine, maxValInPol (*ptMat));
+      ptMat->nCol, ptMat->nLine, maxValInPol (ptMat));
    gtk_statusbar_push (GTK_STATUSBAR (polStatusbar), context_id, sStatus);
    gtk_box_append (GTK_BOX (vBox), hBox);
    gtk_box_append (GTK_BOX (vBox), polar_drawing_area);
@@ -1894,18 +1892,18 @@ static double getDepartureTimeInHour (MyDate *start) {
    tmStart->tm_hour = start->hour;; 
    tmStart->tm_min = start->min; 
    tmStart->tm_sec = start->sec;;
-   time_t startTime = mktime (tmStart);                   // converion struct tm en time_t
-   return (startTime - theTime0)/3600.0;                  // calcul ajout en secondes
+   time_t startTime = mktime (tmStart);          // conversion struct tm en time_t
+   return (startTime - theTime0)/3600.0;         // calcul ajout en secondes
 } 
    
 /*! Response for URL change */
 static void calendarResponse (GtkDialog *dialog, gint response_id, gpointer user_data) {
    time_t currentTime = time (NULL);
    struct tm *gmtTime = gmtime (&currentTime);
-   if (response_id == GTK_RESPONSE_NONE) { // select right button with curent date
+   if (response_id == GTK_RESPONSE_NONE) {      // select right button with curent date
       start->day = gmtTime->tm_mday;
       start->mon = gmtTime->tm_mon;
-      start->year = gmtTime->tm_year + 1900; // tm_year est le nombre d'années depuis 1900
+      start->year = gmtTime->tm_year + 1900;    // tm_year est le nombre d'années depuis 1900
       start->hour = gmtTime->tm_hour;
       start->min = gmtTime->tm_min;
       start->sec = gmtTime->tm_sec;
@@ -2006,17 +2004,17 @@ static void lineReport (GtkWidget *grid, int l, const char* iconName, const char
 }
 
 /*! display nice report */
-static void niceReport (double computeTime) {
+static void niceReport (SailRoute *route, double computeTime) {
    char totalDate [MAX_SIZE_DATE]; 
    char *pDate = &totalDate [0];
    char line [MAX_SIZE_LINE];
    char strLat [MAX_SIZE_LINE];
    char strLon [MAX_SIZE_LINE];
    if (computeTime > 0)
-      snprintf (line, sizeof (line), "%s      Compute Time:%.2lf sec.", (route.destinationReached) ? 
+      snprintf (line, sizeof (line), "%s      Compute Time:%.2lf sec.", (route->destinationReached) ? 
        "Destination reached" : "Destination unreached", computeTime);
    else 
-      snprintf (line,sizeof (line), "%s", (route.destinationReached) ? "Destination reached" : "Destination unreached");
+      snprintf (line,sizeof (line), "%s", (route->destinationReached) ? "Destination reached" : "Destination unreached");
 
 
    GtkWidget *dialog = gtk_dialog_new_with_buttons (line, GTK_WINDOW (window), GTK_DIALOG_DESTROY_WITH_PARENT,
@@ -2034,36 +2032,36 @@ static void niceReport (double computeTime) {
    snprintf (line, sizeof (line), "%4d/%02d/%02d %02d:%02d\n", start->year, start->mon+1, start->day, start->hour, start->min);
    lineReport (grid, 0, "document-open-recent", "Departure Date and Time", line);
 
-   snprintf (line, sizeof (line), "%.2lf\n", par.startTimeInHours);
+   snprintf (line, sizeof (line), "%.2lf\n", route->startTimeInHours);
    lineReport (grid, 2, "dialog-information-symbolic", "Nb hours after origin of grib", line);
    
-   snprintf (line, sizeof (line), "%d\n", nIsoc);
+   snprintf (line, sizeof (line), "%d\n", route->nIsoc);
    lineReport (grid, 4, "accessories-text-editor-symbolic", "Nb of isochrones", line);
 
    snprintf (line, sizeof (line), "%s %s\n", latToStr (lastClosest.lat, par.dispDms, strLat), lonToStr (lastClosest.lon, par.dispDms, strLon));
    lineReport (grid, 6, "emblem-ok-symbolic", "Best Point Reached", line);
 
-   snprintf (line, sizeof (line), "%.2lf\n", (route.destinationReached) ? 0 : orthoDist (lastClosest.lat, lastClosest.lon,\
+   snprintf (line, sizeof (line), "%.2lf\n", (route->destinationReached) ? 0 : orthoDist (lastClosest.lat, lastClosest.lon,\
          par.pDest.lat, par.pDest.lon));
    lineReport (grid, 8, "mail-forward-symbolic", "Distance To Destination", line);
 
    snprintf (line, sizeof (line), "%s\n",\
-      newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours + route.duration, pDate));
+      newDate (zone.dataDate [0], zone.dataTime [0]/100 + route->startTimeInHours + route->duration, pDate));
    lineReport (grid, 10, "alarm-symbolic", "Arrival Date and Time", line);
 
-   snprintf (line, sizeof (line), "%.2lf\n", route.totDist);
+   snprintf (line, sizeof (line), "%.2lf\n", route->totDist);
    lineReport (grid, 12, "emblem-important-symbolic", "Total Distance in Nautical Miles", line);
    
-   snprintf (line, sizeof (line), "%.2lf\n", route.motorDist);
+   snprintf (line, sizeof (line), "%.2lf\n", route->motorDist);
    lineReport (grid, 14, "emblem-important-symbolic", "Motor Distance in Nautical Miles", line);
    
-   snprintf (line, sizeof (line), "%.2lf\n", route.duration);
+   snprintf (line, sizeof (line), "%.2lf\n", route->duration);
    lineReport (grid, 16, "user-away", "Duration in Hours", line);
    
-   snprintf (line, sizeof (line), "%.2lf\n", route.motorDuration);
+   snprintf (line, sizeof (line), "%.2lf\n", route->motorDuration);
    lineReport (grid, 18, "user-away", "Motor Duration in Hours", line);
    
-   snprintf (line, sizeof (line), "%.2lf\n", route.totDist/route.duration);
+   snprintf (line, sizeof (line), "%.2lf\n", route->totDist/route->duration);
    lineReport (grid, 20, "utilities-system-monitor-symbolic", "Mean Speed Over Ground", line);
 
    gtk_window_present (GTK_WINDOW (dialog));
@@ -2092,7 +2090,7 @@ static gboolean routingCheck (gpointer data) {
    if (! isfinite (route.totDist) || (route.totDist <= 1)) {
       infoMessage ("No route calculated. Check if wind !", GTK_MESSAGE_WARNING);
    }
-   niceReport (route.calculationTime);
+   niceReport (&route, route.calculationTime);
    selectedPointInLastIsochrone = (nIsoc <= 1) ? 0 : isoDesc [nIsoc -1].closest; 
    gtk_widget_queue_draw (drawing_area);
    return TRUE;
@@ -2100,11 +2098,11 @@ static gboolean routingCheck (gpointer data) {
 
 /*! launch routing */
 static void on_run_button_clicked () {
-   if (! isInZone (par.pOr, zone)) {
+   if (! isInZone (par.pOr, &zone)) {
      infoMessage ("Origin point not in wind zone", GTK_MESSAGE_WARNING);
      return;
    }
-   if (! isInZone (par.pDest, zone)) {
+   if (! isInZone (par.pDest, &zone)) {
      infoMessage ("Destination point not in wind zone", GTK_MESSAGE_WARNING);
      return;
    }
@@ -2141,7 +2139,7 @@ static gboolean bestDepartureCheck (gpointer data) {
       infoMessage (str, GTK_MESSAGE_WARNING);
       initStart (start);
       selectedPointInLastIsochrone = (nIsoc <= 1) ? 0 : isoDesc [nIsoc -1].closest; 
-      niceReport (route.calculationTime);
+      niceReport (&route, route.calculationTime);
       gtk_widget_queue_draw (drawing_area);
       break;
    default: 
@@ -2166,11 +2164,11 @@ static void chooseDepartureResponse (GtkDialog *dialog, gint response_id, gpoint
 
 /*! launch all routing in ordor to choose best departure time */
 static void on_choose_departure_button_clicked (GtkWidget *widget, gpointer data) {
-   if (! isInZone (par.pOr, zone)) {
+   if (! isInZone (par.pOr, &zone)) {
      infoMessage ("Origin point not in wind zone", GTK_MESSAGE_WARNING);
      return;
    }
-   if (! isInZone (par.pDest, zone)) {
+   if (! isInZone (par.pDest, &zone)) {
      infoMessage ("Destination point not in wind zone", GTK_MESSAGE_WARNING);
      return;
    }
@@ -2375,7 +2373,7 @@ static void rteReport () {
    if (route.n <= 0)
       infoMessage ("No route calculated", GTK_MESSAGE_INFO);
    else {
-      niceReport (0);
+      niceReport (&route, 0);
    }
 }
 
@@ -2484,7 +2482,7 @@ static void rteDump () {
    if (route.n <= 0)
       infoMessage ("No route calculated", GTK_MESSAGE_INFO);
    else {
-      routeToStr (route, buffer, MAX_SIZE_BUFFER); 
+      routeToStr (&route, buffer, MAX_SIZE_BUFFER); 
       displayText (buffer, (route.destinationReached) ? "Destination reached" :\
          "Destination unreached. Route to best point");
    }
@@ -2497,7 +2495,7 @@ static void historyRteDump (int k) {
    if (historyRoute.r[k].n <= 0)
       infoMessage ("No route calculated", GTK_MESSAGE_INFO);
    else {
-      routeToStr (historyRoute.r[k], buffer, MAX_SIZE_BUFFER); 
+      routeToStr (&historyRoute.r[k], buffer, MAX_SIZE_BUFFER); 
       snprintf (title, MAX_SIZE_LINE, "History: %2d", k);
       displayText (buffer, title);
    }
@@ -2904,9 +2902,9 @@ static void initScenario () {
    nIsoc = 0;
    route.n = 0;
    route.destinationReached = false;
-   wayRoute.n = 0;
-   wayRoute.t[0].lat = par.pDest.lat;
-   wayRoute.t[0].lon = par.pDest.lon;
+   wayPoints.n = 0;
+   wayPoints.t[0].lat = par.pDest.lat;
+   wayPoints.t[0].lon = par.pDest.lon;
 }
 
 /*! Call back editScenario */
@@ -2980,7 +2978,7 @@ static void openScenario () {
 }
 
 /*! provides meta information about grib file, called by gribInfo*/
-static void gribInfoDisplay (const char *fileName, Zone zone) {
+static void gribInfoDisplay (const char *fileName, Zone *zone) {
    char buffer [MAX_SIZE_BUFFER];
    char line [MAX_SIZE_LINE] = "";
    char str [MAX_SIZE_NAME] = "";
@@ -2995,10 +2993,10 @@ static void gribInfoDisplay (const char *fileName, Zone zone) {
  
    // for (size_t i = 0; i < sizeof(dicTab) / sizeof(dicTab[0]); i++) // search name of center
    for (size_t i = 0; i < 4; i++) // search name of center
-     if (dicTab [i].id == zone.centreId) 
+     if (dicTab [i].id == zone->centreId) 
         strncpy (centreName, dicTab [i].name, sizeof (centreName) - 1);
          
-   snprintf (line, sizeof (line), "Centre ID: %ld %s   Ed. number: %ld", zone.centreId, centreName, zone.editionNumber);
+   snprintf (line, sizeof (line), "Centre ID: %ld %s   Ed. number: %ld", zone->centreId, centreName, zone->editionNumber);
 
    GtkWidget *dialog = gtk_dialog_new_with_buttons (line, GTK_WINDOW (window), GTK_DIALOG_DESTROY_WITH_PARENT,
                           NULL, NULL, NULL, NULL, NULL);
@@ -3014,46 +3012,46 @@ static void gribInfoDisplay (const char *fileName, Zone zone) {
 
    // Définir l'espacement entre les colonnes (10 pixels)
 
-   newDate (zone.dataDate [0], zone.dataTime [0]/100, strTmp);
+   newDate (zone->dataDate [0], zone->dataTime [0]/100, strTmp);
    lineReport (grid, 0, "document-open-recent", "Date From", strTmp);
    
-   newDate (zone.dataDate [0], zone.dataTime [0]/100 + zone.timeStamp [zone.nTimeStamp -1], strTmp);
+   newDate (zone->dataDate [0], zone->dataTime [0]/100 + zone->timeStamp [zone->nTimeStamp -1], strTmp);
    lineReport (grid, l+=2, "document-open-recent", "Date To", strTmp);
 
-   snprintf (line, sizeof (line), "%d", zone.nMessage);
+   snprintf (line, sizeof (line), "%d", zone->nMessage);
    lineReport (grid, l+=2, "zoom-original-symbolic", "Nb. Messages", line);
 
-   snprintf (line, sizeof (line), "%ld", zone.stepUnits);
+   snprintf (line, sizeof (line), "%ld", zone->stepUnits);
    lineReport (grid, l+=2, "document-page-setup", "Step Unit", line);
 
-   snprintf (line, sizeof (line), "%ld", zone.numberOfValues);
+   snprintf (line, sizeof (line), "%ld", zone->numberOfValues);
    lineReport (grid, l+=2, "document-page-setup-symbolic", "Nb. of Values", line);
 
-   snprintf (line, sizeof (line), "From: %s, %s To: %s %s", latToStr (zone.latMax, par.dispDms, strLat0), lonToStr (zone.lonLeft, par.dispDms, strLon0),
-      latToStr (zone.latMin, par.dispDms, strLat1), lonToStr (zone.lonRight, par.dispDms, strLon1));
+   snprintf (line, sizeof (line), "From: %s, %s To: %s %s", latToStr (zone->latMax, par.dispDms, strLat0), lonToStr (zone->lonLeft, par.dispDms, strLon0),
+      latToStr (zone->latMin, par.dispDms, strLat1), lonToStr (zone->lonRight, par.dispDms, strLon1));
    lineReport (grid, l+=2, "network-workgroup-symbolic", "Zone ", line);
 
-   snprintf (line, sizeof (line), "%.3f° - %.3f°\n", zone.latStep, zone.lonStep);
+   snprintf (line, sizeof (line), "%.3f° - %.3f°\n", zone->latStep, zone->lonStep);
    lineReport (grid, l+=2, "dialog-information-symbolic", "Lat Step - Lon Step", line);
 
-   snprintf (line, sizeof (line), "%ld - %ld\n", zone.nbLat, zone.nbLon);
+   snprintf (line, sizeof (line), "%ld - %ld\n", zone->nbLat, zone->nbLon);
    lineReport (grid, l+=2 , "preferences-desktop-locale-symbolic", "Nb. Lat - Nb. Lon", line);
 
-   timeStep = zone.timeStamp [1] - zone.timeStamp [0];
+   timeStep = zone->timeStamp [1] - zone->timeStamp [0];
    // check if regular
-   for (size_t i = 1; i < zone.nTimeStamp - 1; i++)
-      if ((zone.timeStamp [i] - zone.timeStamp [i-1]) != timeStep) {
+   for (size_t i = 1; i < zone->nTimeStamp - 1; i++)
+      if ((zone->timeStamp [i] - zone->timeStamp [i-1]) != timeStep) {
          isTimeStepOK = false;
-         // printf ("timeStep: %ld other timeStep: %ld\n", timeStep, zone.timeStamp [i] - zone.timeStamp [i-1]);
+         // printf ("timeStep: %ld other timeStep: %ld\n", timeStep, zone->timeStamp [i] - zone->timeStamp [i-1]);
       }
 
-   snprintf (strTmp, sizeof (strTmp), "TimeStamp List of %s %zu", (isTimeStepOK)? "regular" : "UNREGULAR", zone.nTimeStamp);
-   if (zone.nTimeStamp < 8 || ! isTimeStepOK) {
+   snprintf (strTmp, sizeof (strTmp), "TimeStamp List of %s %zu", (isTimeStepOK)? "regular" : "UNREGULAR", zone->nTimeStamp);
+   if (zone->nTimeStamp < 8 || ! isTimeStepOK) {
       strcpy (buffer, "[ ");
-      for (size_t k = 0; k < zone.nTimeStamp; k++) {
+      for (size_t k = 0; k < zone->nTimeStamp; k++) {
          if ((k > 0) && ((k % 20) == 0)) 
             strncat (buffer, "\n", MAX_SIZE_BUFFER - strlen (buffer));
-         snprintf (str, sizeof (str), "%ld ", zone.timeStamp [k]);
+         snprintf (str, sizeof (str), "%ld ", zone->timeStamp [k]);
          if (strlen (buffer) > MAX_SIZE_BUFFER - 10)
             break;
          strncat (buffer, str, MAX_SIZE_BUFFER - strlen (buffer));
@@ -3061,23 +3059,23 @@ static void gribInfoDisplay (const char *fileName, Zone zone) {
       strncat (buffer, "]\n", MAX_SIZE_BUFFER - strlen (buffer));
    }
    else {
-      snprintf (buffer, sizeof (buffer), "[%ld, %ld, ..%ld]\n", zone.timeStamp [0], zone.timeStamp [1], zone.timeStamp [zone.nTimeStamp - 1]);
+      snprintf (buffer, sizeof (buffer), "[%ld, %ld, ..%ld]\n", zone->timeStamp [0], zone->timeStamp [1], zone->timeStamp [zone->nTimeStamp - 1]);
    }
    lineReport (grid, l+=2, "view-list-symbolic", strTmp, buffer);
    
    strcpy (line, "[ ");
-   for (size_t k = 0; k < zone.nShortName -1; k++) {
-      snprintf (str, sizeof (str), "%s ", zone.shortName [k]);
+   for (size_t k = 0; k < zone->nShortName -1; k++) {
+      snprintf (str, sizeof (str), "%s ", zone->shortName [k]);
       strncat (line, str, MAX_SIZE_LINE - strlen (line));
    }
-   if (zone.nShortName > 0) {
-      snprintf (str, sizeof (str), "%s ]\n", zone.shortName [zone.nShortName -1]);
+   if (zone->nShortName > 0) {
+      snprintf (str, sizeof (str), "%s ]\n", zone->shortName [zone->nShortName -1]);
       strncat (line, str, MAX_SIZE_LINE - strlen (line));
    }
    lineReport (grid, l+=2, "non-starred-symbolic", "ShortName List", line);
 
-   snprintf (line, sizeof (line), "%s\n", (zone.wellDefined) ? (zone.allTimeStepOK) ? "Well defined" : "All TimeSteps are not defined" : "Undefined");
-   lineReport (grid, l+=2 , (zone.wellDefined) ? "weather-clear" : "weather-showers", "Zone is", line);
+   snprintf (line, sizeof (line), "%s\n", (zone->wellDefined) ? (zone->allTimeStepOK) ? "Well defined" : "All TimeSteps are not defined" : "Undefined");
+   lineReport (grid, l+=2 , (zone->wellDefined) ? "weather-clear" : "weather-showers", "Zone is", line);
    
    lineReport (grid, l+=2 , "mail-attachment-symbolic", "Grib File Name", fileName);
    
@@ -3085,8 +3083,8 @@ static void gribInfoDisplay (const char *fileName, Zone zone) {
     
    lineReport (grid, l+=2, "document-properties-symbolic", "Grib File size", str1);
 
-   if ((zone.nDataDate > 1) || (zone.nDataTime > 1)) {
-      snprintf (line, sizeof (line), "Date: %zu, Time: %zu\n", zone.nDataDate, zone.nDataTime);
+   if ((zone->nDataDate > 1) || (zone->nDataTime > 1)) {
+      snprintf (line, sizeof (line), "Date: %zu, Time: %zu\n", zone->nDataDate, zone->nDataTime);
       lineReport (grid, l+=2, "software-update-urgent-symbolic", "Warning number of", line);
    }
 
@@ -3102,14 +3100,14 @@ void gribInfo (GSimpleAction *action, GVariant *parameter, gpointer *data) {
       if (zone.nbLat == 0)
          infoMessage ("No wind data grib available", GTK_MESSAGE_ERROR);
       else 
-         gribInfoDisplay (par.gribFileName, zone);
+         gribInfoDisplay (par.gribFileName, &zone);
       
    }
    else { // current
       if (currentZone.nbLat == 0)
          infoMessage ("No current data grib available", GTK_MESSAGE_ERROR);
       else 
-         gribInfoDisplay (par.currentGribFileName, currentZone);
+         gribInfoDisplay (par.currentGribFileName, &currentZone);
    }
 }
 
@@ -3552,7 +3550,7 @@ static void OKChange (GtkDialog *dialog, gint response_id, gpointer user_data) {
       /*if (G_APPROX_VALUE (oldPOr.lat, par.pOr.lat, EPSILON) || G_APPROX_VALUE(oldPOr.lon, par.pOr.lon, EPSILON) || 
          G_APPROX_VALUE (oldPDest.lat, par.pDest.lat, EPSILON) || G_APPROX_VALUE (oldPDest.lon, par.pDest.lon, EPSILON)) {
          //if ((oldPOr.lat != par.pOr.lat) || (oldPOr.lon != par.pOr.lon) || (oldPDest.lat != par.pDest.lat) || (oldPDest.lon != par.pDest.lon)) {
-         initWayRoute ();
+         initWayPoints ();
          route.n = 0;
       }*/
    }
@@ -3926,11 +3924,11 @@ static void poiNameChoose () {
 /*! create wayPoint */
 static void wayPointSelected () {
    if (menuWindow != NULL) popoverFinish (menuWindow);
-   if (wayRoute.n < MAX_N_WAY_POINT) {
+   if (wayPoints.n < MAX_N_WAY_POINT) {
       destPressed = false;
-      wayRoute.t [wayRoute.n].lat = yToLat (whereIsPopup.y);
-      wayRoute.t [wayRoute.n].lon = xToLon (whereIsPopup.x);
-      wayRoute.n += 1;
+      wayPoints.t [wayPoints.n].lat = yToLat (whereIsPopup.y);
+      wayPoints.t [wayPoints.n].lon = xToLon (whereIsPopup.x);
+      wayPoints.n += 1;
       gtk_widget_queue_draw (drawing_area);
    }
    else (infoMessage ("Number of waypoints exceeded", GTK_MESSAGE_ERROR));
@@ -3943,9 +3941,9 @@ static void originSelected () {
    par.pOr.lat = yToLat (whereIsPopup.y);
    par.pOr.lon = xToLon (whereIsPopup.x);
    route.n = 0;
-   wayRoute.n = 0;
-   wayRoute.totOrthoDist = 0;
-   wayRoute.totLoxoDist = 0;
+   wayPoints.n = 0;
+   wayPoints.totOrthoDist = 0;
+   wayPoints.totLoxoDist = 0;
    par.pOrName [0] = '\0';
    gtk_widget_queue_draw (drawing_area);
 } 
@@ -3957,8 +3955,8 @@ static void destinationSelected () {
    route.n = 0;
    par.pDest.lat = yToLat (whereIsPopup.y);
    par.pDest.lon = xToLon (whereIsPopup.x);
-   wayRoute.t [wayRoute.n].lat = par.pDest.lat;
-   wayRoute.t [wayRoute.n].lon = par.pDest.lon;
+   wayPoints.t [wayPoints.n].lat = par.pDest.lat;
+   wayPoints.t [wayPoints.n].lon = par.pDest.lon;
    calculateOrthoRoute ();
    niceWayPointReport (); 
    par.pOr.id = -1;
@@ -4042,8 +4040,8 @@ static void changeLastPoint () {
       }
    }
    lastClosest = isocArray [nIsoc - 1][selectedPointInLastIsochrone];
-   storeRoute (lastClosest, 0);
-   niceReport (0);
+   storeRoute (&par.pOr, &lastClosest, 0);
+   niceReport (&route, 0);
 }
 
 /*! select action associated to right click */ 
@@ -4064,7 +4062,7 @@ static void on_right_click_event (GtkGestureClick *gesture, int n_press, double 
    g_signal_connect (meteoGramButton, "clicked", G_CALLBACK (meteogram), NULL);
    GtkWidget *originButton = gtk_button_new_with_label ("Point Of Origin");
    g_signal_connect (originButton, "clicked", G_CALLBACK (originSelected), NULL);
-   snprintf (str, sizeof (str), "Waypoint no: %d",  wayRoute.n + 1);
+   snprintf (str, sizeof (str), "Waypoint no: %d",  wayPoints.n + 1);
    GtkWidget *waypointButton = gtk_button_new_with_label (str);
    g_signal_connect (waypointButton, "clicked", G_CALLBACK (wayPointSelected), NULL);
    GtkWidget *destinationButton = gtk_button_new_with_label ("Point of Destination");
@@ -4188,7 +4186,7 @@ static void on_meteogram_event (GtkDrawingArea *area, cairo_t *cr, int width, in
    double u, v, g = 0, w, twd, tws, head_x, maxTws = 0, maxG = 0, maxMax = 0, maxWave = 0;
    double uCurr, vCurr, currTwd, currTws, maxCurrTws = 0;// current
    long tMax = zone.timeStamp [zone.nTimeStamp -1];
-   double tDeltaCurrent = zoneTimeDiff (currentZone, zone);
+   double tDeltaCurrent = zoneTimeDiff (&currentZone, &zone);
    double tDeltaNow = 0; // time between beginning of grib and now in hours
    Pp pt;
    memset (&pt, 0, sizeof (Pp));
@@ -4229,7 +4227,7 @@ static void on_meteogram_event (GtkDrawingArea *area, cairo_t *cr, int width, in
    cairo_show_text (cr, "Current");
    
    // graphical difference between up to now and after now 
-   tDeltaNow = diffNowGribTime0 (zone) / 3600.0;
+   tDeltaNow = diffNowGribTime0 (&zone) / 3600.0;
    CAIRO_SET_SOURCE_RGB_YELLOW(cr);
    if (tDeltaNow > 0) {
       x = X_LEFT + XK * tDeltaNow;

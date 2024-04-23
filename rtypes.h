@@ -222,14 +222,6 @@ typedef struct {
    double lCap;   // loxo  cap 
 } WayPoint;
 
-/* Way point route description */
-typedef struct {
-   int n;
-   double totOrthoDist;
-   double totLoxoDist;
-   WayPoint t [MAX_N_WAY_POINT];
-} WayRoute;
-
 /*! Point for Sail Route  */
 typedef struct {
    double lat;
@@ -237,17 +229,27 @@ typedef struct {
    int    id;
    int    father;
    bool   motor;
-   double od;
-   double oCap;
-   double ld;
-   double lCap;
+   double od;     // orthodomuc distance
+   double oCap;   // orthodromic cap
+   double ld;     // loxodromic distance
+   double lCap;   // loxodromic cap
 } SailPoint;
+
+/* Way point route description */
+typedef struct {
+   int n;
+   double totOrthoDist;
+   double totLoxoDist;
+   WayPoint t [MAX_N_WAY_POINT];
+} WayPointList;
 
 /*! Route description  */
 typedef struct {
+   int    nIsoc;                            // number of Isochrones
    int    n;                                // number of steps
    double calculationTime;                  // compute time to calculate the route
    long   kTime0;                           // relative index time of departure
+   double startTimeInHours;                 // time of beginning of routing after time0Grib
    double duration;                         // total time in hours of the route
    double motorDuration;                    // total time in hours using motor
    double totDist;                          // total distance in NM

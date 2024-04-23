@@ -12,9 +12,8 @@
 void optionManage (char option) {
 	FILE *f = NULL;
    char buffer [MAX_SIZE_BUFFER] = "";
-   double u, v, g, w, twa, tws, time, lon, lat, lat2, lon2;
+   double w, twa, tws, lon, lat, lat2, lon2;
    char str [MAX_SIZE_LINE] = "";
-   Pp pt;
    switch (option) {
    case 'c': // cap
       printf ("Lon1 = ");
@@ -32,20 +31,20 @@ void optionManage (char option) {
    case 'g': // grib
       printf ("Grib File Name: %s\n", par.gribFileName);
       readGribAll (par.gribFileName, &zone, WIND);
-      gribToStr (buffer, zone, MAX_SIZE_BUFFER);
+      gribToStr (buffer, &zone, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       printf ("grib print...\n");
-      printGrib (zone, tGribData [WIND]);
+      printGrib (&zone, tGribData [WIND]);
       printf ("\n\nFollowing lines are suspects info...\n");
       checkGribToStr (buffer, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       break;
    case 'G': // grib
       readGribAll (par.currentGribFileName, &currentZone, CURRENT);
-      gribToStr (buffer, currentZone, MAX_SIZE_BUFFER);
+      gribToStr (buffer, &currentZone, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       printf ("grib print...\n");
-      printGrib (currentZone, tGribData [CURRENT]);
+      printGrib (&currentZone, tGribData [CURRENT]);
       printf ("\n\nFollowing lines are suspects info...\n");
       checkGribToStr (buffer, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
@@ -66,7 +65,7 @@ void optionManage (char option) {
       break;
    case 'p': //polar
       readPolar (par.polarFileName, &polMat);
-      polToStr (buffer, polMat, MAX_SIZE_BUFFER);
+      polToStr (buffer, &polMat, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       while (true) {
          printf ("twa true wind angle = ");
@@ -78,7 +77,7 @@ void optionManage (char option) {
       break;
    case 'P': // Wave polar
       readPolar (par.wavePolFileName, &wavePolMat);
-      polToStr (buffer, wavePolMat, MAX_SIZE_BUFFER);
+      polToStr (buffer, &wavePolMat, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       while (true) {
          printf ("angle = " );
@@ -105,21 +104,6 @@ void optionManage (char option) {
    case 'v': // version
       printf ("Prog version: %s, %s, %s\n", PROG_NAME, PROG_VERSION, PROG_AUTHOR);
       printf ("Compilation-date: %s\n", __DATE__);
-      break;
-   case 'w': // findflow wind
-      readGrib (NULL);
-      printf ("Time = ");
-      scanf ("%lf", &time);
-      printf ("Lat = ");
-      scanf ("%lf", &pt.lat);
-      printf ("Lon = ");
-      scanf ("%lf", &pt.lon);
-      findFlow (pt, time, &u, &v, &g, &w, zone, tGribData [WIND]);
-      printf ("u: %.2f m/s v: %.2f m/s g: %.2f m/s w: %2.f m\n", u, v, g, w);
-      break;
-   case 'y':
-      readGrib (NULL);
-      printf ("Time now minus Time0 Grib in hours %.2lf\n", diffNowGribTime0 (zone)/3600.0);
       break;
    case 'z': //
       printf ("size of buffer %zu\n", sizeof (buffer));
