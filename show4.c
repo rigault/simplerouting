@@ -141,6 +141,7 @@ GtkWidget *spin_button_time_max = NULL;
 GtkWidget *val_size_eval = NULL; 
 GtkWidget *menuWindow = NULL;        // Pop up menu Right Click
 GtkWidget *menuGrib = NULL;          // Pop up menu Meteoconsult
+GtkWidget *menuHist = NULL;          // Pop up menu Hustory Routes
 
 Coordinates whereWasMouse, whereIsMouse, whereIsPopup;
 
@@ -257,7 +258,7 @@ static void apply_bold_style(GtkTextBuffer *buffer, GtkTextIter *start, GtkTextI
 }
 
 /*! display text with monochrome police */
-static void displayText (const char *text, const char *title) {
+static void displayText (guint width, guint height, const char *text, const char *title) {
    GtkWidget *window, *scrolled_window, *text_view;
    GtkTextBuffer *buffer;
 
@@ -265,7 +266,7 @@ static void displayText (const char *text, const char *title) {
    window = gtk_application_window_new (app);
   
    gtk_window_set_title(GTK_WINDOW(window), title);
-   gtk_window_set_default_size(GTK_WINDOW(window), 750, 400);
+   gtk_window_set_default_size(GTK_WINDOW(window), width, height);
    g_signal_connect(G_OBJECT(window), "destroy", G_CALLBACK(gtk_window_destroy), NULL);
    
    // Création de la zone de défilement
@@ -971,6 +972,7 @@ static void drawRoute (cairo_t *cr) {
    double x = getX (par.pOr.lon);
    double y = getY (par.pOr.lat);
    cairo_set_line_width (cr, 5);
+   char line [MAX_SIZE_LINE];
 
    for (int i = 0; i < route.n; i++) {
       if (route.t[i].motor != motor) {
@@ -992,10 +994,17 @@ static void drawRoute (cairo_t *cr) {
       cairo_line_to (cr, x, y);
    }
    cairo_stroke (cr);
+   cairo_select_font_face (cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+   cairo_set_font_size (cr, 15);
+   cairo_move_to (cr, x +5, y + 5);
+   snprintf (line, MAX_SIZE_LINE, "Rte: %d", historyRoute.n - 1);
+   cairo_show_text (cr, line);
+   cairo_stroke(cr);
 }
 
 /*! draw the route based on route table index */
 static void drawHistoryRoute (cairo_t *cr, int k) {
+   char line [MAX_SIZE_LINE];
    double x = getX (historyRoute.r[k].t[0].lon);
    double y = getY (historyRoute.r[k].t[0].lat);
    CAIRO_SET_SOURCE_RGB_PINK(cr);
@@ -1008,6 +1017,13 @@ static void drawHistoryRoute (cairo_t *cr, int k) {
       cairo_line_to (cr, x, y);
    }
    cairo_stroke (cr);
+   cairo_select_font_face (cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+   cairo_set_font_size (cr, 15);
+   cairo_move_to (cr, x +5, y + 5);
+   snprintf (line, MAX_SIZE_LINE, "Rte: %d", k);
+   cairo_show_text (cr, line);
+   cairo_stroke(cr);
+   
 }
 
 /*! draw the routes based on route table */
@@ -1021,6 +1037,8 @@ static void drawAllRoutes (cairo_t *cr) {
 /*! draw Point of Interests */
 static void drawPoi (cairo_t *cr) {
    double x, y;
+   cairo_select_font_face (cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+   cairo_set_font_size (cr, 10);
    for (int i = 0; i < nPoi; i++) {
       x = getX (tPoi [i].lon);
       y = getY (tPoi [i].lat);
@@ -2284,7 +2302,7 @@ static void isocDump () {
          infoMessage ("Not enough memory", GTK_MESSAGE_ERROR); 
       else {
          allIsocToStr (buffer, nIsoc * MAX_SIZE_LINE * N_POINT_FACTOR); 
-         displayText (buffer, "Isochrones");
+         displayText (750, 400, buffer, "Isochrones");
          free (buffer);
       }
    }
@@ -2300,7 +2318,7 @@ static void isocDescDump () {
          infoMessage ("Not enough memory", GTK_MESSAGE_ERROR); 
       else {
          if (isoDescToStr (buffer, nIsoc * MAX_SIZE_LINE))
-            displayText (buffer, "Isochrone Descriptor");
+            displayText (750, 400, buffer, "Isochrone Descriptor");
          else infoMessage ("Not enough space", GTK_MESSAGE_ERROR);
       }
    }
@@ -2368,6 +2386,49 @@ static void poiDump () {
    gtk_window_present (GTK_WINDOW (dialog));
 }
 
+/*! print the route from origin to destination or best point */
+static void historyRteDump (gpointer user_data) {
+   int k = GPOINTER_TO_INT (user_data);
+   char buffer [MAX_SIZE_BUFFER];
+   char title [MAX_SIZE_LINE];
+   if (historyRoute.r[k].n <= 0)
+      infoMessage ("No route calculated", GTK_MESSAGE_INFO);
+   else {
+      routeToStr (&historyRoute.r[k], buffer, MAX_SIZE_BUFFER); 
+      snprintf (title, MAX_SIZE_LINE, "History: %2d", k);
+      displayText (1000, 400, buffer, title);
+   }
+}
+
+/*! display history of routes */
+static void rteHistory () {
+   char str [MAX_SIZE_LINE];
+   GtkWidget *itemHist; 
+   GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 5);
+   if (historyRoute.n <= 1) {
+      infoMessage ("No History", GTK_MESSAGE_INFO);
+      return;
+   }
+   else if (historyRoute.n == 2) {
+      historyRteDump (GINT_TO_POINTER (0));
+      return;
+   }
+   for (int i = 0; i < historyRoute.n - 1; i++) {
+      sprintf (str, "History: %d", i); 
+      itemHist = gtk_button_new_with_label (str);
+      g_signal_connect_swapped (itemHist, "clicked", G_CALLBACK (historyRteDump), GINT_TO_POINTER (i));
+      gtk_box_append (GTK_BOX (box), itemHist);
+   }
+   menuHist = gtk_popover_new ();
+   gtk_widget_set_parent (menuHist, window);
+   gtk_popover_set_child ((GtkPopover*) menuHist, (GtkWidget *) box);
+   gtk_popover_set_has_arrow ((GtkPopover*) menuHist, false);
+   GdkRectangle rect = {200, 100, 1, 1};
+   gtk_popover_set_pointing_to ((GtkPopover*) menuHist, &rect);
+   gtk_widget_show (menuHist);
+}
+
+/*! Draw simulation */
 /*! display the report of route calculation */
 static void rteReport () {
    if (route.n <= 0)
@@ -2483,21 +2544,8 @@ static void rteDump () {
       infoMessage ("No route calculated", GTK_MESSAGE_INFO);
    else {
       routeToStr (&route, buffer, MAX_SIZE_BUFFER); 
-      displayText (buffer, (route.destinationReached) ? "Destination reached" :\
+      displayText (1000, 400, buffer, (route.destinationReached) ? "Destination reached" :\
          "Destination unreached. Route to best point");
-   }
-}
-
-/*! print the route from origin to destination or best point */
-static void historyRteDump (int k) {
-   char buffer [MAX_SIZE_BUFFER];
-   char title [MAX_SIZE_LINE];
-   if (historyRoute.r[k].n <= 0)
-      infoMessage ("No route calculated", GTK_MESSAGE_INFO);
-   else {
-      routeToStr (&historyRoute.r[k], buffer, MAX_SIZE_BUFFER); 
-      snprintf (title, MAX_SIZE_LINE, "History: %2d", k);
-      displayText (buffer, title);
    }
 }
 
@@ -2506,7 +2554,7 @@ static void orthoDump () {
    char buffer [MAX_SIZE_BUFFER] = "";
    calculateOrthoRoute ();
    wayPointToStr (buffer, MAX_SIZE_BUFFER);
-   displayText (buffer, "Orthodomic and Loxdromic Waypoint routes");
+   displayText (750, 400, buffer, "Orthodomic and Loxdromic Waypoint routes");
 }
 
 /*! show parameters information */
@@ -3380,7 +3428,7 @@ static void testFunction () {
    char buffer [MAX_SIZE_BUFFER];
    printf ("test\n");
    checkGribToStr (buffer, MAX_SIZE_BUFFER);
-   displayText (buffer, "Grib Wind Check");
+   displayText (750, 400, buffer, "Grib Wind Check");
 }
 
 /*! display label in col c and ligne l of tab*/
@@ -3570,7 +3618,7 @@ static void change () {
    GtkWidget *entry_wave;
    GtkWidget *entry_penalty0, *entry_penalty1;
    GtkWidget *entry_sog, *entry_threshold;
-   GtkWidget *entry_efficiency;
+   GtkWidget *entry_efficiency, *entry_max_wind;
    //Pp oldPOr = par.pOr;
    //Pp oldPDest = par.pDest;
    
@@ -3748,6 +3796,12 @@ static void change () {
    gtk_grid_attach(GTK_GRID(tab_tec), entry_efficiency,  3, 11, 1, 1);
    g_signal_connect (entry_wave, "changed", G_CALLBACK (doubleUpdate), &par.constWave);
    g_signal_connect (entry_efficiency, "changed", G_CALLBACK (doubleUpdate), &par.efficiency);
+
+   // Création des éléments pour maxWind
+   entry_max_wind = doubleToEntry (par.maxWind);
+   labelCreate (tab_tec, "Max Wind",                     0, 12);
+   gtk_grid_attach(GTK_GRID(tab_tec), entry_max_wind,    1, 12, 1, 1);
+   g_signal_connect (entry_max_wind, "changed", G_CALLBACK (doubleUpdate), &par.maxWind);
 
    GtkWidget *hbox0 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
 
@@ -4144,17 +4198,10 @@ static gboolean on_scroll_event (GtkEventController *controller, double delta_x,
 /*! Callback when keyboard key  pressed */
 static gboolean on_key_event (GtkEventController *controller, guint keyval, guint keycode, GdkModifierType modifiers, gpointer user_data) {
    char buffer [MAX_SIZE_BUFFER];
-   static int nRoute = 0;
    switch (keyval) {
    case GDK_KEY_F1:
       checkGribToStr (buffer, MAX_SIZE_BUFFER);
-      displayText (buffer, "Grib Wind Check");
-      break;
-   case GDK_KEY_F2:
-      historyRteDump (nRoute);
-      nRoute += 1;
-      if (nRoute == historyRoute.n)
-         nRoute = 0;
+      displayText (750, 400, buffer, "Grib Wind Check");
       break;
    case GDK_KEY_Escape:
       printf ("Exit success\n");
@@ -4608,6 +4655,7 @@ static void app_startup (GApplication *application) {
    createAction ("orthoReport", niceWayPointReport);
    createAction ("sailRoute", rteDump);
    createAction ("sailReport", rteReport);
+   createAction ("sailHistory", rteHistory);
    createAction ("simulationReport", simulationReport);
    createAction ("gps", gpsDump);
 
@@ -4663,6 +4711,7 @@ static void app_startup (GApplication *application) {
    subMenu (display_menu_v, "Ortho and Loxo Report", "app.orthoReport", "");
    subMenu (display_menu_v, "Sail Route", "app.sailRoute", "");
    subMenu (display_menu_v, "Sail Report", "app.sailReport", "");
+   subMenu (display_menu_v, "Sail History Routes", "app.sailHistory", "");
    subMenu (display_menu_v, "Simulation Report", "app.simulationReport", "");
    subMenu (display_menu_v, "GPS", "app.gps", "");
 

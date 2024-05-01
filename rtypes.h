@@ -229,10 +229,17 @@ typedef struct {
    int    id;
    int    father;
    bool   motor;
-   double od;     // orthodomuc distance
+   double time;   // time in hours after start
    double oCap;   // orthodromic cap
-   double ld;     // loxodromic distance
+   double od;     // orthodromic dromic distance
    double lCap;   // loxodromic cap
+   double ld;     // loxodromic distance
+   double u;      // east west wind or current in meter/s
+   double v;      // north south component of wind or current in meter/s
+   double w;      // waves height WW3 model
+   double g;      // wind speed gust
+   double twd;    // wind direction
+   double tws;    // wind speed un Knots
 } SailPoint;
 
 /* Way point route description */
@@ -256,6 +263,12 @@ typedef struct {
    double motorDist;                        // distance using motor in NM
    int    ret;                              // return value of routing
    bool   destinationReached;               // true if destination reaches
+   double avrTws;                           // average wind speed of the route
+   double avrGust;                          // average gust of the route
+   double avrWave;                          // average wave of the route
+   double maxTws;                           // max wind speed of the route
+   double maxGust;                          // max gust of the route
+   double maxWave;                          // max wave of the route
    SailPoint t [MAX_N_ISOC + 1];
 } SailRoute;
 
@@ -325,6 +338,7 @@ typedef struct {
    double threshold;                         // threshold for motor use
    double efficiency;                        // efficiency of team 
    double xWind;                             // multiply factor for wind
+   double maxWind;                           // max Wind supported
    char editor [MAX_SIZE_NAME];              // name of text file editor
    char webkit [MAX_SIZE_NAME];              // name of webkit application
    char spreadsheet [MAX_SIZE_NAME];         // name of spreadshhet application

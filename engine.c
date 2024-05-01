@@ -6,6 +6,7 @@
 * cog = Course over Ground  of the boat
 * */
 /*! compilation gcc -Wall -c engine.c */
+#include <glib.h>
 #include <float.h>   
 #include <limits.h>
 #include <ctype.h>
@@ -162,6 +163,8 @@ static int buildNextIsochrone (Pp *pOr, Pp *pDest, Isoc isoList, int isoLen, dou
    
    for (int k = 0; k < isoLen; k++) {
       findWind (isoList [k], t, &u, &v, &gust, &w, &twd, &tws);
+      if (tws > par.maxWind)
+         continue; // avoid location where wind speed too high...
       findCurrent (isoList [k], t - tDeltaCurrent, &uCurr, &vCurr, &currTwd, &currTws);
       vDirectCap = orthoCap (isoList [k].lat, isoList [k].lon, pDest->lat, pDest->lon);
       directCog = ((int)(vDirectCap / par.cogStep)) * par.cogStep;
@@ -328,9 +331,16 @@ static void saveRoute () {
 
 /*! stat route */
 static void statRoute (double lastStepDuration) {
+   Pp p;
+   if (route.n == 0) return;
    route.totDist = route.motorDist = 0;
    route.duration = route.motorDuration = 0;
+   route.maxTws = route.maxGust = route.maxWave = 0;
+   route.avrTws = route.avrGust = route.avrWave = 0;
    for (int i = 1; i < route.n; i++) {
+      p.lat = route.t [i-1].lat;
+      p.lon = route.t [i-1].lon;
+      route.t [i-1].time = par.tStep * (i - 1) + route.startTimeInHours;
       route.t [i-1].lCap = directCap (route.t[i-1].lat, route.t[i-1].lon, route.t[i].lat, route.t[i].lon);
       route.t [i-1].oCap = orthoCap (route.t[i-1].lat, route.t[i-1].lon, route.t[i].lat, route.t[i].lon);
       route.t [i-1].ld  = loxoDist (route.t[i-1].lat, route.t[i-1].lon, route.t[i].lat, route.t[i].lon);
@@ -341,8 +351,19 @@ static void statRoute (double lastStepDuration) {
          route.motorDuration += par.tStep;
          route.motorDist += route.t [i-1].od;
       }
+      findWind (p, route.t [i-1].time, &route.t [i-1].u, &route.t [i-1].v, &route.t [i-1].g, &route.t [i-1].w, 
+         &route.t [i-1].twd, &route.t [i-1].tws);
+      route.avrTws  += route.t [i-1].tws;
+      route.avrGust += route.t [i-1].g;
+      route.avrWave += route.t [i-1].w;
+      route.maxTws  = MAX (route.maxTws, route.t [i-1].tws);
+      route.maxGust = MAX (route.maxGust, route.t [i-1].g);
+      route.maxWave = MAX (route.maxWave, route.t [i-1].w);
    }
    if (route.destinationReached) {
+      p.lat = route.t [route.n-1].lat;
+      p.lon = route.t [route.n-1].lon;
+      route.t [route.n-1].time = par.tStep * (route.n-1) + route.startTimeInHours;
       route.t [route.n-1].lCap = directCap (route.t[route.n-1].lat, route.t[route.n-1].lon, par.pDest.lat, par.pDest.lon);
       route.t [route.n-1].oCap = orthoCap (route.t[route.n-1].lat, route.t[route.n-1].lon, par.pDest.lat, par.pDest.lon);
       route.t [route.n-1].ld = loxoDist (route.t[route.n-1].lat, route.t[route.n-1].lon, par.pDest.lat, par.pDest.lon);
@@ -353,7 +374,19 @@ static void statRoute (double lastStepDuration) {
          route.motorDuration += lastStepDuration;
          route.motorDist += route.t [route.n-1].od;
       }
+      findWind (p, route.t [route.n-1].time, &route.t [route.n-1].u, &route.t [route.n-1].v, &route.t [route.n-1].g, 
+         &route.t [route.n-1].w, &route.t [route.n-1].twd, &route.t [route.n-1].tws);
+      route.maxTws  = MAX (route.maxTws, route.t [route.n-1].tws);
+      route.maxGust = MAX (route.maxGust, route.t [route.n-1].g);
+      route.maxWave = MAX (route.maxWave, route.t [route.n-1].w);
+      route.avrTws  += route.t [route.n-1].tws;
+      route.avrGust += route.t [route.n-1].g;
+      route.avrWave += route.t [route.n-1].w;
    }
+   if (route.n == 0) return;
+   route.avrTws /= route.n;
+   route.avrGust /= route.n;
+   route.avrWave /= route.n;
 }
 
 /*! store route */
@@ -408,23 +441,29 @@ bool routeToStr (SailRoute *route, char *str, size_t maxLength) {
    char line [MAX_SIZE_LINE];
    char strLat [MAX_SIZE_LINE];
    char strLon [MAX_SIZE_LINE];
-   strcpy (str, " No        Lat        Lon             Id Father  Motor     Cap        Dist\n");
-   snprintf (line, MAX_SIZE_LINE, " pOr:      %-12s%-12s %6d %6d %6d %7.2f°   %7.2lf\n", \
+   strcpy (str, " No        Lat        Lon             Id Father  Motor     Cap       Dist     Twd      Tws    Gust   Waves\n");
+   snprintf (line, MAX_SIZE_LINE, " pOr:      %-12s%-12s %6d %6d %6d %7.2f°   %7.2lf  %6.0lf° %7.2lf %7.2lf %7.2lf\n", \
       latToStr (route->t[0].lat, par.dispDms, strLat), lonToStr (route->t[0].lon, par.dispDms, strLon), \
-      route->t[0].id, route->t[0].father, route->t[0].motor, route->t[0].lCap, route->t[0].ld);
+      route->t[0].id, route->t[0].father, route->t[0].motor, route->t[0].lCap, route->t[0].ld,
+      route->t[0].twd, route->t[0].tws, MS_TO_KN * route->t[0].g, route->t[0].w);
 
    strncat (str, line, maxLength - strlen (str));
    for (int i = 1; i < route->n; i++) {
       if ((fabs(route->t[i].lon) > 180.0) || (fabs (route->t[i].lat) > 90.0))
          snprintf (line, MAX_SIZE_LINE, " Isoc %3d: Erreur sur latitude ou longitude\n", i-1);   
       else
-         snprintf (line, MAX_SIZE_LINE, " Isoc %3d: %-12s%-12s %6d %6d %6d %7.2f°   %7.2f\n", \
+         snprintf (line, MAX_SIZE_LINE, " Isoc %3d: %-12s%-12s %6d %6d %6d %7.2f°   %7.2f  %6.0lf° %7.2lf %7.2lf %7.2lf\n", \
             i-1, latToStr (route->t[i].lat, par.dispDms, strLat), lonToStr (route->t[i].lon, par.dispDms, strLon), \
             route->t[i].id, route->t[i].father, route->t[i].motor,\
-            route->t[i].lCap, route->t[i].ld); 
+            route->t[i].lCap, route->t[i].ld, 
+            route->t[i].twd, route->t[i].tws, MS_TO_KN * route->t[i].g, route->t[i].w);
       strncat (str, line, maxLength - strlen (str));
    }
-
+   
+   snprintf (line, MAX_SIZE_LINE, " Avr %76s  %7.2lf %7.2lf %7.2lf\n", " ", route->avrTws, MS_TO_KN * route->avrGust, route->avrWave); 
+   strncat (str, line, maxLength - strlen (str));
+   snprintf (line, MAX_SIZE_LINE, " Max %76s  %7.2lf %7.2lf %7.2lf\n", " ", route->maxTws, MS_TO_KN * route->maxGust, route->maxWave); 
+   strncat (str, line, maxLength - strlen (str));
    snprintf (line, MAX_SIZE_LINE, "\n Total distance: %7.2lf NM,    Motor distance: %7.2lf NM\n", route->totDist, route->motorDist);
    strncat (str, line, maxLength - strlen (str));
    snprintf (line, MAX_SIZE_LINE, " Total Duration: %7.2lf hours, Motor Duration: %7.2lf hours\n", route->duration, route->motorDuration);
@@ -544,26 +583,17 @@ static int routing (Pp *pOr, Pp *pDest, double t, double dt, double *lastStepDur
    double timeLastStep;
    int index; // index of closest point to pDest in insochrone
    double bestVmg;
-   pOr->id = -1;
-   pOr->father = -1;
-   pDest->father = 0;
+   //pOr->id = -1;
+   //pOr->father = -1;
+   //pDest->father = 0;
    pOr->dd = orthoDist (pOr->lat, pOr->lon, pDest->lat, pDest->lon);
    pOr->vmc = 0;
    pOrTtoPDestCog = orthoCap (pOr->lat, pOr->lon, pDest->lat, pDest->lon);
    lastClosestDist = pOr->dd;
    lastBestVmg = 0;
-   tDeltaCurrent = zoneTimeDiff (&currentZone, &zone); // global variable
-   nIsoc = 0;
-   pId = 1;
-   route.n = 0;
-   route.destinationReached = false;
-   initSector (0, par.nSectors); 
-   for (int i = 0; i < MAX_N_ISOC; i++) {
-      isoDesc [i].size = 0;
-      isoDesc [i].distance = DBL_MAX;
-      isoDesc [i].bestVmg = 0;
-   }
+   //tempList [nIsoc] = *pOr; // liste avec un unique élément;
    tempList [0] = *pOr; // liste avec un unique élément;
+   initSector (nIsoc, par.nSectors); 
    
    if (goalP (pOr, pDest, t, dt, &timeToReach, &distance, &motor)) {
       pDest->father = pOr->id;
@@ -571,19 +601,19 @@ static int routing (Pp *pOr, Pp *pDest, double t, double dt, double *lastStepDur
       *lastStepDuration = timeToReach;
       return 1;
    }
-   isoDesc [0].size = buildNextIsochrone (pOr, pDest, tempList, 1, t, dt, isocArray [0], &bestVmg);
+   isoDesc [nIsoc].size = buildNextIsochrone (pOr, pDest, tempList, 1, t, dt, isocArray [0], &bestVmg);
    // printf ("%-20s%d, %d\n", "Isochrone no, len: ", 0, isoDesc [0].size);
    lastBestVmg = bestVmg;
-   isoDesc [0].bestVmg = bestVmg;
-   isoDesc [0].first = 0; 
-   lastClosest = closest (isocArray [0], isoDesc[0].size, pDest, &index);
-   isoDesc [0].closest = index; 
-   if (isoDesc [0].size == 0) { // no wind at the beginning. 
-      isoDesc [0].size = 1;
-      isocArray [0][0] = *pOr;
+   isoDesc [nIsoc].bestVmg = bestVmg;
+   isoDesc [nIsoc].first = 0; 
+   lastClosest = closest (isocArray [nIsoc], isoDesc[nIsoc].size, pDest, &index);
+   isoDesc [nIsoc].closest = index; 
+   if (isoDesc [nIsoc].size == 0) { // no wind at the beginning. 
+      isoDesc [nIsoc].size = 1;
+      isocArray [nIsoc][0] = *pOr;
    }
    
-   nIsoc = 1;
+   nIsoc += 1;
    //printf ("Routing t = %.2lf, zone: %.2ld\n", t, zone.timeStamp [zone.nTimeStamp-1]);
    while (t < (zone.timeStamp [zone.nTimeStamp-1]/* + par.tStep*/) && (nIsoc < par.maxIso)) {
       t += dt;
@@ -624,29 +654,77 @@ void *routingLaunch () {
    double lastStepDuration;
    lastClosest = par.pOr;
    route.kTime0 = (int) (par.startTimeInHours / (zone.timeStamp [1] - zone.timeStamp [0]));
+   tDeltaCurrent = zoneTimeDiff (&currentZone, &zone); // global variable
+   Pp pFrom = par.pOr;
+   Pp pNext;
+   par.pOr.id = -1;
+   par.pOr.father = -1;
+   par.pDest.id = 0;
+   par.pDest.father = 0;
+   pId = 1;
+   route.n = 0;
+   route.destinationReached = false;
+   for (int i = 0; i < MAX_N_ISOC; i++) {
+      isoDesc [i].size = 0;
+      isoDesc [i].distance = DBL_MAX;
+      isoDesc [i].bestVmg = 0;
+   }
 
    gettimeofday (&t0, NULL);
    ut0 = t0.tv_sec * MILLION + t0.tv_usec;
+   nIsoc = 0;
 
-   Pp pFrom = par.pOr;
-   Pp pNext;
+   //Launch routing
    
-   int i = 0;
-   //Launch routing !
-   do {
-      if (i >= wayPoints.n) 
+   if (wayPoints.n == 0)
+      route.ret = routing (&par.pOr, &par.pDest, par.startTimeInHours, par.tStep, &lastStepDuration);
+   // printf ("After routingLaunch:  ret = %d\n", route.ret);
+   else {
+      //pNext = par.pDest;
+      pNext.lat = wayPoints.t[0].lat;
+      pNext.lon = wayPoints.t[0].lon;
+      pNext.id = pId++;
+      route.ret = routing (&par.pOr, &pNext, par.startTimeInHours, par.tStep, &lastStepDuration);
+      //isocArray [nIsoc][0] = pNext;
+      //isoDesc [nIsoc].size = 1;
+      //nIsoc += 1;
+      par.pDest.father = pNext.id;
+      pFrom.lat = wayPoints.t[0].lat;
+      pFrom.lon = wayPoints.t[0].lon;
+      pFrom.id = pId++;
+      pFrom.father = pNext.id;
+      //nIsoc -= 1;
+      
+      //route.ret = routing (&pFrom, &par.pDest, par.startTimeInHours, par.tStep, &lastStepDuration);
+      /*if (route.ret > 0) {
+         nIsoc -= 1;
+         pFrom = pNext;
+         //pFrom.id = pId++;
+         //pFrom.father = pNext.id;
+         printf ("pFrom id: %d, father: %d\n", pFrom.id, pFrom.father);
+         route.ret = routing (&pFrom, &par.pDest, par.startTimeInHours, par.tStep, &lastStepDuration);
+      }*/
+   }
+   /*
+   for (int i = 0; i <= wayPoints.n; i++) {
+      if (i == wayPoints.n) {
          pNext = par.pDest;
-      else { 
-         pNext.lat = wayPoints.t[i].lat;
-         pNext.lon = wayPoints.t[i].lon;
+      }
+      else {
+         pNext.lat = wayPoints.t[0].lat;
+         pNext.lon = wayPoints.t[0].lon;
+         pNext.father = 0;
       }
       route.ret = routing (&pFrom, &pNext, par.startTimeInHours, par.tStep, &lastStepDuration);
-      if (i > wayPoints.n)
+      if ((route.ret > 0) && (i != wayPoints.n)){
+         nIsoc -= 1;
          pFrom = pNext;
-      printf ("After routingLaunch: i = %d, ret = %d\n", i, route.ret);
-      i += 1;
-   } while (i < wayPoints.n);
-
+         pFrom.id = pId++;
+         printf ("pFrom id: %d, father: %d\n", pFrom.id, pFrom.father);
+      }
+      else break;
+   }
+   */
    gettimeofday (&t1, NULL);
    ut1 = t1.tv_sec * MILLION + t1.tv_usec;
    route.calculationTime = (double) ((ut1-ut0)/MILLION);
