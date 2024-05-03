@@ -331,7 +331,7 @@ static void saveRoute () {
 
 /*! stat route */
 static void statRoute (double lastStepDuration) {
-   Pp p;
+   Pp p = {0};
    if (route.n == 0) return;
    route.totDist = route.motorDist = 0;
    route.duration = route.motorDuration = 0;
@@ -583,15 +583,11 @@ static int routing (Pp *pOr, Pp *pDest, double t, double dt, double *lastStepDur
    double timeLastStep;
    int index; // index of closest point to pDest in insochrone
    double bestVmg;
-   //pOr->id = -1;
-   //pOr->father = -1;
-   //pDest->father = 0;
    pOr->dd = orthoDist (pOr->lat, pOr->lon, pDest->lat, pDest->lon);
    pOr->vmc = 0;
    pOrTtoPDestCog = orthoCap (pOr->lat, pOr->lon, pDest->lat, pDest->lon);
    lastClosestDist = pOr->dd;
    lastBestVmg = 0;
-   //tempList [nIsoc] = *pOr; // liste avec un unique élément;
    tempList [0] = *pOr; // liste avec un unique élément;
    initSector (nIsoc, par.nSectors); 
    
@@ -599,9 +595,9 @@ static int routing (Pp *pOr, Pp *pDest, double t, double dt, double *lastStepDur
       pDest->father = pOr->id;
       pDest->motor = motor;
       *lastStepDuration = timeToReach;
-      return 1;
+      return nIsoc + 1;
    }
-   isoDesc [nIsoc].size = buildNextIsochrone (pOr, pDest, tempList, 1, t, dt, isocArray [0], &bestVmg);
+   isoDesc [nIsoc].size = buildNextIsochrone (pOr, pDest, tempList, 1, t, dt, isocArray [nIsoc], &bestVmg);
    // printf ("%-20s%d, %d\n", "Isochrone no, len: ", 0, isoDesc [0].size);
    lastBestVmg = bestVmg;
    isoDesc [nIsoc].bestVmg = bestVmg;
@@ -655,7 +651,6 @@ void *routingLaunch () {
    lastClosest = par.pOr;
    route.kTime0 = (int) (par.startTimeInHours / (zone.timeStamp [1] - zone.timeStamp [0]));
    tDeltaCurrent = zoneTimeDiff (&currentZone, &zone); // global variable
-   Pp pFrom = par.pOr;
    Pp pNext;
    par.pOr.id = -1;
    par.pOr.father = -1;
@@ -673,72 +668,44 @@ void *routingLaunch () {
    gettimeofday (&t0, NULL);
    ut0 = t0.tv_sec * MILLION + t0.tv_usec;
    nIsoc = 0;
+   double wayPointStartTime = par.startTimeInHours;
 
    //Launch routing
    
    if (wayPoints.n == 0)
-      route.ret = routing (&par.pOr, &par.pDest, par.startTimeInHours, par.tStep, &lastStepDuration);
-   // printf ("After routingLaunch:  ret = %d\n", route.ret);
+      route.ret = routing (&par.pOr, &par.pDest, wayPointStartTime, par.tStep, &lastStepDuration);
    else {
-      //pNext = par.pDest;
-      pNext.lat = wayPoints.t[0].lat;
-      pNext.lon = wayPoints.t[0].lon;
-      pNext.id = pId++;
-      route.ret = routing (&par.pOr, &pNext, par.startTimeInHours, par.tStep, &lastStepDuration);
-      //isocArray [nIsoc][0] = pNext;
-      //isoDesc [nIsoc].size = 1;
-      //nIsoc += 1;
-      par.pDest.father = pNext.id;
-      pFrom.lat = wayPoints.t[0].lat;
-      pFrom.lon = wayPoints.t[0].lon;
-      pFrom.id = pId++;
-      pFrom.father = pNext.id;
-      //nIsoc -= 1;
-      
-      //route.ret = routing (&pFrom, &par.pDest, par.startTimeInHours, par.tStep, &lastStepDuration);
-      /*if (route.ret > 0) {
-         nIsoc -= 1;
-         pFrom = pNext;
-         //pFrom.id = pId++;
-         //pFrom.father = pNext.id;
-         printf ("pFrom id: %d, father: %d\n", pFrom.id, pFrom.father);
-         route.ret = routing (&pFrom, &par.pDest, par.startTimeInHours, par.tStep, &lastStepDuration);
-      }*/
+      for (int i = 0; i < wayPoints.n; i ++) {
+         pNext.lat = wayPoints.t[i].lat;
+         pNext.lon = wayPoints.t[i].lon;
+         pNext.id = 0;
+         if (i == 0) {
+            route.ret = routing (&par.pOr, &pNext, wayPointStartTime, par.tStep, &lastStepDuration);
+         }
+         else
+            route.ret = routing (&isocArray [nIsoc-1][0], &pNext, wayPointStartTime, par.tStep, &lastStepDuration);
+         if (route.ret > 0) {
+            wayPointStartTime = wayPointStartTime + (nIsoc * par.tStep) + lastStepDuration;
+            isocArray [nIsoc][0].lat = wayPoints.t[i].lat;
+            isocArray [nIsoc][0].lon = wayPoints.t[i].lon;
+            isocArray [nIsoc][0].father = pNext.father;
+            isocArray [nIsoc][0].id = pId++;
+            isoDesc [nIsoc].size = 1;
+            nIsoc += 1;
+         }
+         else break;
+      }
+      if (route.ret > 0)
+         route.ret = routing (&isocArray [nIsoc-1][0], &par.pDest, wayPointStartTime, par.tStep, &lastStepDuration);
    }
-   /*
-   for (int i = 0; i <= wayPoints.n; i++) {
-      if (i == wayPoints.n) {
-         pNext = par.pDest;
-      }
-      else {
-         pNext.lat = wayPoints.t[0].lat;
-         pNext.lon = wayPoints.t[0].lon;
-         pNext.father = 0;
-      }
-      route.ret = routing (&pFrom, &pNext, par.startTimeInHours, par.tStep, &lastStepDuration);
-      if ((route.ret > 0) && (i != wayPoints.n)){
-         nIsoc -= 1;
-         pFrom = pNext;
-         pFrom.id = pId++;
-         printf ("pFrom id: %d, father: %d\n", pFrom.id, pFrom.father);
-      }
-      else break;
-   }
-   */
+
    gettimeofday (&t1, NULL);
    ut1 = t1.tv_sec * MILLION + t1.tv_usec;
    route.calculationTime = (double) ((ut1-ut0)/MILLION);
    route.destinationReached = (route.ret > 0);
+   storeRoute (&par.pOr, &lastClosest, lastStepDuration);
 
-   if (route.destinationReached) {
-      storeRoute (&par.pOr, &lastClosest, lastStepDuration); //par.pDest should replace lastClosest
-      if (strlen (par.dumpRFileName) > 0) dumpRoute (par.dumpRFileName, par.pDest);
-   }
-   else {
-      storeRoute (&par.pOr, &lastClosest, lastStepDuration);
-      if (strlen (par.dumpRFileName) > 0) dumpRoute (par.dumpRFileName, lastClosest);
-   }
-
+   if (strlen (par.dumpRFileName) > 0) dumpRoute (par.dumpRFileName, lastClosest);
    if (strlen (par.dumpIFileName) > 0) dumpAllIsoc (par.dumpIFileName);
    return NULL;
 }

@@ -292,8 +292,8 @@ static void displayText (guint width, guint height, const char *text, const char
    
    // Obtenir l'itérateur pour le début et la fin de la première ligne
    GtkTextIter start_iter, end_iter;
-   gtk_text_buffer_get_start_iter(buffer, &start_iter);
-   gtk_text_buffer_get_iter_at_line(buffer, &end_iter, 1); // Ligne suivante après la première
+   gtk_text_buffer_get_start_iter (buffer, &start_iter);
+   gtk_text_buffer_get_iter_at_line (buffer, &end_iter, 1); // Ligne suivante après la première
 
    // Appliquer le style en gras à la première ligne
    apply_bold_style(buffer, &start_iter, &end_iter);
@@ -1944,14 +1944,13 @@ static void calendarResponse (GtkDialog *dialog, gint response_id, gpointer user
    gtk_window_destroy (GTK_WINDOW (dialog));
 }
 
-/*! year month da fot fCalendar */
+/*! year month date for fCalendar */
 void dateUpdate (GtkCalendar *calendar, gpointer user_data) {
    GDateTime *date = gtk_calendar_get_date (calendar);
    start->sec = 0;
    start->day = g_date_time_get_day_of_month (date);
    start->mon = g_date_time_get_month (date) - 1;
    start->year = g_date_time_get_year (date);
-   g_print ("Date sélectionnée : %d/%d/%d\n", start->year, start->mon+1, start->day);
 }
 
 /*! get start date and time for routing. Returns true if OK Response */
