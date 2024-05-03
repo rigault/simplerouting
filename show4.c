@@ -510,9 +510,9 @@ static void paintWind (cairo_t *cr, int width, int height) {
          pt.lon = xToLon (x);
          if (isInDispZone (pt)) {
             if (par.averageOrGustDisp == 0)
-               tws = findTwsByIt (pt, (MIN (kTime, zone.nTimeStamp -1)), tGribData  [WIND]);
+               tws = findTwsByIt (&pt, (MIN (kTime, zone.nTimeStamp -1)), tGribData  [WIND]);
             else
-               tws = MS_TO_KN * findGustByIt (pt, (MIN (kTime, zone.nTimeStamp -1)), tGribData  [WIND]);
+               tws = MS_TO_KN * findGustByIt (&pt, (MIN (kTime, zone.nTimeStamp -1)), tGribData  [WIND]);
             mapColors (tws, &r, &g, &b);
             cairo_set_source_rgba (cr, r/255.0, g/255.0, b/255.0, 0.5);
             cairo_rectangle (cr, x, y, 1, 1);
@@ -1282,9 +1282,9 @@ static void statusBarUpdate () {
    pt.lat = yToLat (whereIsMouse.y);
    pt.lon = xToLon (whereIsMouse.x);
    pt.lon = lonCanonize (pt.lon);
-	findWind (pt, zone.timeStamp [kTime], &u, &v, &g, &w, &twd, &tws);
+	findWind (&pt, zone.timeStamp [kTime], &u, &v, &g, &w, &twd, &tws);
    strcpy (seaEarth, (isSea (pt.lon, pt.lat)) ? "Authorized" : "Forbidden");
-	findCurrent (pt, zone.timeStamp [kTime] - tDeltaCurrent, &uCurr, &vCurr, &currTwd, &currTws);
+	findCurrent (&pt, zone.timeStamp [kTime] - tDeltaCurrent, &uCurr, &vCurr, &currTwd, &currTws);
    
    snprintf (sStatus, sizeof (sStatus), "%s         %d/%zu      %s %s, %s\
       Wind: %03d° %05.2lf Knots  Gust: %05.2lf Knots  Waves: %05.2lf  Current: %03d° %05.2lf Knots         %s      Zoom: %.2lf       %s",
@@ -1411,8 +1411,8 @@ static void drawGribCallback (GtkDrawingArea *area, cairo_t *cr, int width, int 
       pt.lon = dispZone.lonLeft;
       while (pt.lon <= dispZone.lonRight) {
 	      u = 0; v = 0; w = 0; uCurr = 0; vCurr = 0;
-         if (isInZone (pt, &zone)) {
-	         findWind (pt, theTime, &u, &v, &gust, &w, &twd, &tws);
+         if (isInZone (&pt, &zone)) {
+	         findWind (&pt, theTime, &u, &v, &gust, &w, &twd, &tws);
 	         if (par.windDisp == BARBULE) {
                barbule (cr, pt, u, v, (par.averageOrGustDisp == 0) ? tws : gust *MS_TO_KN, WIND);
             }
@@ -1424,7 +1424,7 @@ static void drawGribCallback (GtkDrawingArea *area, cairo_t *cr, int width, int 
             if (par.waveDisp) showWaves (cr, pt, w);
 
             if (par.currentDisp) {
-	            findCurrent (pt, theTime - tDeltaCurrent, &uCurr, &vCurr, &currTwd, &currTws);
+	            findCurrent (&pt, theTime - tDeltaCurrent, &uCurr, &vCurr, &currTwd, &currTws);
                barbule (cr, pt, uCurr, vCurr, currTws, CURRENT);
             }
 	      }
@@ -2115,11 +2115,11 @@ static gboolean routingCheck (gpointer data) {
 
 /*! launch routing */
 static void on_run_button_clicked () {
-   if (! isInZone (par.pOr, &zone)) {
+   if (! isInZone (&par.pOr, &zone)) {
      infoMessage ("Origin point not in wind zone", GTK_MESSAGE_WARNING);
      return;
    }
-   if (! isInZone (par.pDest, &zone)) {
+   if (! isInZone (&par.pDest, &zone)) {
      infoMessage ("Destination point not in wind zone", GTK_MESSAGE_WARNING);
      return;
    }
@@ -2181,11 +2181,11 @@ static void chooseDepartureResponse (GtkDialog *dialog, gint response_id, gpoint
 
 /*! launch all routing in ordor to choose best departure time */
 static void on_choose_departure_button_clicked (GtkWidget *widget, gpointer data) {
-   if (! isInZone (par.pOr, &zone)) {
+   if (! isInZone (&par.pOr, &zone)) {
      infoMessage ("Origin point not in wind zone", GTK_MESSAGE_WARNING);
      return;
    }
-   if (! isInZone (par.pDest, &zone)) {
+   if (! isInZone (&par.pDest, &zone)) {
      infoMessage ("Destination point not in wind zone", GTK_MESSAGE_WARNING);
      return;
    }
@@ -2546,14 +2546,6 @@ static void rteDump () {
       displayText (1000, 400, buffer, (route.destinationReached) ? "Destination reached" :\
          "Destination unreached. Route to best point");
    }
-}
-
-/*! print the orthodromic and loxo routes through waypoints */
-static void orthoDump () {
-   char buffer [MAX_SIZE_BUFFER] = "";
-   calculateOrthoRoute ();
-   wayPointToStr (buffer, MAX_SIZE_BUFFER);
-   displayText (750, 400, buffer, "Orthodomic and Loxdromic Waypoint routes");
 }
 
 /*! show parameters information */
@@ -4309,8 +4301,8 @@ static void on_meteogram_event (GtkDrawingArea *area, cairo_t *cr, int width, in
 
    // find max Tws max gust max waves max current and draw twa arrows
    for (int i = 0; i < tMax; i += 1) {
-      findWind (pt, i, &u, &v, &g, &w, &twd, &tws);
-	   findCurrent (pt, i- tDeltaCurrent, &uCurr, &vCurr, &currTwd, &currTws);
+      findWind (&pt, i, &u, &v, &g, &w, &twd, &tws);
+	   findCurrent (&pt, i- tDeltaCurrent, &uCurr, &vCurr, &currTwd, &currTws);
 
       head_x = X_LEFT + XK * i;
       if ((i % (tMax / 24)) == 0) {
@@ -4372,7 +4364,7 @@ static void on_meteogram_event (GtkDrawingArea *area, cairo_t *cr, int width, in
    CAIRO_SET_SOURCE_RGB_BLUE(cr);
    // draw tws 
    for (int i = 0; i < tMax; i += 1) {
-      findWind (pt, i, &u, &v, &g, &w, &twd, &tws);
+      findWind (&pt, i, &u, &v, &g, &w, &twd, &tws);
       x = X_LEFT + XK * i;
       y = Y_BOTTOM - YK * tws;
       if (i == 0) cairo_move_to (cr, x, y);
@@ -4384,7 +4376,7 @@ static void on_meteogram_event (GtkDrawingArea *area, cairo_t *cr, int width, in
    if (maxG > 0) { 
       CAIRO_SET_SOURCE_RGB_RED(cr);
       for (int i = 0; i < tMax; i += 1) {
-         findWind (pt, i, &u, &v, &g, &w, &twd, &tws);
+         findWind (&pt, i, &u, &v, &g, &w, &twd, &tws);
          x = X_LEFT + XK * i;
          y = Y_BOTTOM - YK * MAX (g * MS_TO_KN, tws);
          if (i == 0) cairo_move_to (cr, x, y);
@@ -4397,7 +4389,7 @@ static void on_meteogram_event (GtkDrawingArea *area, cairo_t *cr, int width, in
    if (maxWave > 0) { 
       CAIRO_SET_SOURCE_RGB_GREEN(cr);
       for (int i = 0; i < tMax; i += 1) {
-         findWind (pt, i, &u, &v, &g, &w, &twd, &tws);
+         findWind (&pt, i, &u, &v, &g, &w, &twd, &tws);
          x = X_LEFT + XK * i;
          y = Y_BOTTOM - YK * w;
          if (i == 0) cairo_move_to (cr, x, y);
@@ -4409,7 +4401,7 @@ static void on_meteogram_event (GtkDrawingArea *area, cairo_t *cr, int width, in
    if (maxCurrTws > 0) {
       CAIRO_SET_SOURCE_RGB_ORANGE(cr);
       for (int i = 0; i < tMax; i += 1) {
-	      findCurrent (pt, i - tDeltaCurrent, &uCurr, &vCurr, &currTwd, &currTws);
+	      findCurrent (&pt, i - tDeltaCurrent, &uCurr, &vCurr, &currTwd, &currTws);
          x = X_LEFT + XK * i;
          y = Y_BOTTOM - YK * currTws;
          if (i == 0) cairo_move_to (cr, x, y);
@@ -4650,7 +4642,6 @@ static void app_startup (GApplication *application) {
 
    createAction ("isochrones", isocDump);
    createAction ("isochronesDesc", isocDescDump);
-   createAction ("orthoRoute", orthoDump);
    createAction ("orthoReport", niceWayPointReport);
    createAction ("sailRoute", rteDump);
    createAction ("sailReport", rteReport);
@@ -4706,8 +4697,7 @@ static void app_startup (GApplication *application) {
    GMenu *display_menu_v = g_menu_new ();
    subMenu (display_menu_v, "Isochrones", "app.isochrones", "");
    subMenu (display_menu_v, "Isochrones Descriptors", "app.isochronesDesc", "");
-   subMenu (display_menu_v, "Ortho and Loxo Routes", "app.orthoRoute", "");
-   subMenu (display_menu_v, "Ortho and Loxo Report", "app.orthoReport", "");
+   subMenu (display_menu_v, "Way Points Report", "app.orthoReport", "");
    subMenu (display_menu_v, "Sail Route", "app.sailRoute", "");
    subMenu (display_menu_v, "Sail Report", "app.sailReport", "");
    subMenu (display_menu_v, "Sail History Routes", "app.sailHistory", "");

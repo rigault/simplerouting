@@ -196,6 +196,7 @@ typedef struct {
 
 /*! isochrone meta data */ 
 typedef struct {
+   int    toIndexWp; // index of waypoint targetted
    double distance;  // best distance from Isoc to pDest
    double bestVmg;   // best VMG (distance)
    int    closest;   // index in Iso of closest point to pDest
