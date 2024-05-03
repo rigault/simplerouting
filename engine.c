@@ -685,7 +685,7 @@ void *routingLaunch () {
          else
             route.ret = routing (&isocArray [nIsoc-1][0], &pNext, wayPointStartTime, par.tStep, &lastStepDuration);
          if (route.ret > 0) {
-            wayPointStartTime = wayPointStartTime + (nIsoc * par.tStep) + lastStepDuration;
+            wayPointStartTime = par.startTimeInHours + (nIsoc * par.tStep) + lastStepDuration;
             isocArray [nIsoc][0].lat = wayPoints.t[i].lat;
             isocArray [nIsoc][0].lon = wayPoints.t[i].lon;
             isocArray [nIsoc][0].father = pNext.father;
