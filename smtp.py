@@ -2,27 +2,37 @@ import smtplib, sys
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-smtp_server = "smtp.orange.fr"
-smtp_port = 25
-smtp_password = sys.argv [4]
+# Informations sur le serveur SMTP
+smtp_server = 'smtp.orange.fr'
+smtp_port = 465  # Port SSL pour Orange
+
+# Informations d'authentification
 smtp_username = "meteoinfoforrr@orange.fr"
+smtp_password = sys.argv [4]
+
+# Destinataire et expéditeur
 from_email = "meteoinfoforrr@orange.fr"
-message = MIMEMultipart()
-message["From"] = from_email
-message["To"] = sys.argv [1]
-message["Subject"] = sys.argv [2]
+to_email = "query@saildocs.com"
 
-message.attach(MIMEText(sys.argv [3], "plain"))
+# Création du message
+msg = MIMEMultipart()
+msg['From'] = from_email
+msg['To'] = sys.argv [1]
+msg['Subject'] = sys.argv [2]
 
-try:
-   with smtplib.SMTP(smtp_server, smtp_port) as server:
-      server.starttls()
-      server.login(smtp_username, smtp_password.strip())
-      server.send_message(message)
-   sys.exit (0) # success
+# Corps du message
+body = sys.argv [3]
+msg.attach(MIMEText(body, 'plain'))
 
-except Exception as e:
-   print(f"Erreur lors de l'envoi du message : {e}")
-   sys.exit (1)  # Échec
+# Connexion au serveur SMTP sécurisé
+server = smtplib.SMTP_SSL(smtp_server, smtp_port)
 
-print("Message sent to: ", sys.argv [1], " subject: ", sys.argv [2], " body: ", sys.argv [3])
+# Authentification
+server.login(smtp_username, smtp_password)
+
+# Envoi du message
+server.sendmail(from_email, to_email, msg.as_string())
+
+# Fermeture de la connexion
+server.quit()
+print ("In smtp.py: Message sent to: ", sys.argv [1], " subject: ", sys.argv [2], " body: ", sys.argv [3])

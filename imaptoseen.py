@@ -20,7 +20,7 @@ if status == 'OK':
     for num in messages[0].split():
         mail.store(num, '+FLAGS', '(\Seen)')
     
-    print("Tous les messages ont été marqués comme lus.")
+    print("In imaptoseen.py: Tous les messages ont été marqués comme lus.")
 
 # Fermer la connexion
 mail.logout()
