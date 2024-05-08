@@ -18,6 +18,7 @@
 #include <math.h>
 #include "eccodes.h"
 #include "rtypes.h"
+#include "inline.h"
 #include "shapefil.h"
 #include <locale.h>
 
@@ -531,6 +532,69 @@ bool writePoi (const char *fileName) {
       if (tPoi[i].type != PORT && tPoi [i].type != UNVISIBLE)
          fprintf (f, "%.2lf; %.2lf; %d; %d; %s\n", tPoi [i].lat, tPoi [i].lon, tPoi [i].type, tPoi [i].level, tPoi [i].name);
    }
+   fclose (f);
+   return true;
+}
+
+/*! add trace point to trace file */
+bool addTracePoint (const char *fileName) {
+   if (isnan (my_gps_data.lon) || isnan (my_gps_data.lat)) 
+      return false;
+   if (my_gps_data.lon == 0 && my_gps_data.lat == 0)
+      return false;
+   FILE *f = NULL;
+   if ((f = fopen (fileName, "a")) == NULL) {
+      fprintf (stderr, "Error in addTracePoint: cannot write: %s\n", fileName);
+      return false;
+   }
+   fprintf (f, "%.2lf; %.2lf; %ld; \n", my_gps_data.lat, my_gps_data.lon, my_gps_data.timestamp.tv_sec);
+   fclose (f);
+   return true;
+}
+
+/*! find last point in trace*/
+bool findLastTracePoint (const char *fileName, double *lat, double *lon, double *time) {
+   FILE *f = NULL;
+   char line [MAX_SIZE_LINE];
+   char lastLine [MAX_SIZE_LINE];
+   if ((f = fopen (fileName, "r")) == NULL) {
+      fprintf (stderr, "Error in findLastTracePoint: cannot read: %s\n", fileName);
+      return false;
+   }
+   while (fgets (line, MAX_SIZE_LINE, f) != NULL ) {
+      strncpy (lastLine, line, MAX_SIZE_LINE);
+   }
+   return (sscanf (lastLine, "%lf;%lf;%lf", lat, lon, time) >= 3);
+   fclose (f);
+   return true;
+}
+
+/*! calculate distance in number of miles 
+   od: orthodromic, ld: loxodromic, rd: real*/
+bool distanceTraceDone (const char *fileName, double *od, double *ld, double *rd) {
+   FILE *f = NULL;
+   bool first = true;
+   char line [MAX_SIZE_LINE];
+   double lat0 = 0.0, lon0 = 0.0, latLast, lonLast, lat, lon, time;
+   *rd = 0.0;
+   
+   if ((f = fopen (fileName, "r")) == NULL) {
+      fprintf (stderr, "Error in distanceTraceDone: cannot read: %s\n", fileName);
+      return false;
+   }
+   while (fgets (line, MAX_SIZE_LINE, f) != NULL ) {
+      if (sscanf (line, "%lf;%lf;%lf", &lat, &lon, &time) < 3) continue;
+      if (first) {
+         lat0 = lat, lon0 = lon;
+         first = false;
+      }
+      else {
+        *rd += orthoDist (lat, lon, latLast, lonLast);
+      }
+      latLast = lat, lonLast = lon;
+   }
+   *od = orthoDist (lat, lon, lat0, lon0);
+   *ld = loxoDist (lat, lon, lat0, lon0);
    fclose (f);
    return true;
 }
@@ -1255,11 +1319,11 @@ static inline int indexOf (int timeStep, double lat, double lon, Zone *zone) {
    return readGribRet */
 bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
    FILE* f = NULL;
-   int err = 0, iGrib = 0;
+   int err = 0, iGrib;
    long bitmapPresent  = 0, timeStep, oldTimeStep;
    double lat, lon, val, indicatorOfParameter;
    char shortName [MAX_SIZE_SHORT_NAME];
-   size_t lenName = MAX_SIZE_SHORT_NAME;
+   size_t lenName;
    const long GUST_GFS = 180;
    long timeInterval = 0;
    memset (zone, 0,  sizeof (Zone));
@@ -1296,13 +1360,13 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
    zone->allTimeStepOK = true;
    timeStep = zone->timeStamp [0];
    oldTimeStep = timeStep;
-   int nMes = 0;
+   //int nMes = 0;
 
    // Loop on all the messages in a file
    while ((h = codes_handle_new_from_file(0, f, PRODUCT_GRIB, &err)) != NULL) {
       if (err != CODES_SUCCESS) CODES_CHECK (err, 0);
       //printf ("message: %d\n", nMes);
-      nMes += 1;
+      //nMes += 1;
 
       // Check if a bitmap applies
       CODES_CHECK(codes_get_long(h, "bitmapPresent", &bitmapPresent), 0);
@@ -1676,6 +1740,8 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "GRIB_RESOLUTION:%lf", &par.gribResolution) > 0);
       else if (sscanf (pLine, "GRIB_TIME_STEP:%d", &par.gribTimeStep) > 0);
       else if (sscanf (pLine, "GRIB_TIME_MAX:%d", &par.gribTimeMax) > 0);
+      else if (sscanf (pLine, "TRACE:%255s", str) > 0)
+         buildRootName (str, par.traceFileName);
       else if (sscanf (pLine, "CGRIB:%255s", str) > 0)
          buildRootName (str, par.gribFileName);
       else if (sscanf (pLine, "CURRENT_GRIB:%255s", str) > 0)
@@ -1796,6 +1862,7 @@ bool writeParam (const char *fileName, bool header) {
       fprintf (f, "POR_NAME:        %s\n", par.pOrName);
    if (par.pDestName [0] != '\0')
       fprintf (f, "PDEST_NAME:        %s\n", par.pDestName);
+   fprintf (f, "TRACE:           %s\n", par.traceFileName);
    fprintf (f, "CGRIB:           %s\n", par.gribFileName);
    if (par.currentGribFileName [0] != '\0')
       fprintf (f, "CURRENT_GRIB:    %s\n", par.currentGribFileName);
@@ -1921,7 +1988,7 @@ void *gps_thread_function (void *data) {
          }
       }
       // Ajoutez un délai ou utilisez une approche plus avancée
-      usleep (MILLION); // Délai de 0.5 seconde
+      usleep (MILLION); // Délai de 1 seconde
    }
    return NULL;
 }

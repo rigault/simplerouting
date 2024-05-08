@@ -33,6 +33,7 @@
 #include "shapefil.h"
 #include "rtypes.h"
 #include "rutil.h"
+#include "inline.h"
 #include "engine.h"
 #include "option.h"
 
@@ -115,6 +116,7 @@ int    selectedPointInLastIsochrone = 0;
 int    iFlow = WIND;
 int    typeFlow = WIND;                   // for openGrib.. WIND or CURRENT.
 bool   simulationReportExist = false;
+bool   gpsTrace = false;                  // used to trace GPS position only one time per session
 
 /*! struct for url Request */
 struct {
@@ -174,7 +176,7 @@ static void on_run_button_clicked ();
 static gboolean routingCheck (gpointer data);
 
 /*! hide and terminate popover */
- void popoverFinish (GtkWidget *pop) {
+static void popoverFinish (GtkWidget *pop) {
    if (pop != NULL) {
       gtk_widget_hide (pop);
       gtk_widget_unparent (pop);
@@ -302,8 +304,9 @@ static void displayText (guint width, guint height, const char *text, const char
    gtk_window_present (GTK_WINDOW (window));
 }
 
-/*! display file with monochrome police */
-static void displayFile (char* fileName, char * title) {
+/*! display file with monochrome police 
+   first line is bold according to firstBold parameter */
+static void displayFile (char* fileName, char *title, bool firstBold) {
    FILE *f;
    char line [MAX_SIZE_LINE];
    GtkWidget *window, *scrolled_window, *text_view;
@@ -341,13 +344,15 @@ static void displayFile (char* fileName, char * title) {
    }
    fclose (f);
    
-   // Obtenir l'itérateur pour le début et la fin de la première ligne
-   GtkTextIter start_iter, end_iter;
-   gtk_text_buffer_get_start_iter(buffer, &start_iter);
-   gtk_text_buffer_get_iter_at_line(buffer, &end_iter, 1); // Ligne suivante après la première
+   // Si firstBold, Obtenir l'itérateur pour le début et la fin de la première ligne
+   if (firstBold) {
+      GtkTextIter start_iter, end_iter;
+      gtk_text_buffer_get_start_iter(buffer, &start_iter);
+      gtk_text_buffer_get_iter_at_line(buffer, &end_iter, 1); // Ligne suivante après la première
 
-   // Appliquer le style en gras à la première ligne
-   apply_bold_style(buffer, &start_iter, &end_iter);
+      // Appliquer le style en gras à la première ligne
+      apply_bold_style(buffer, &start_iter, &end_iter);
+   }
 
    // Affichage de la fenêtre
    gtk_window_present (GTK_WINDOW (window));
@@ -467,6 +472,34 @@ static void drawForbidArea (cairo_t *cr) {
    CAIRO_SET_SOURCE_RGBA_FORBID_AREA(cr);
    for (int i = 0; i < par.nForbidZone; i++)
       drawPolygon (cr, &forbidZones [i]);
+}
+
+/*! draw trace  */
+static void drawTrace (cairo_t *cr) {
+   FILE *f;
+   char line [MAX_SIZE_LINE];
+   double lat, lon, time, x, y;
+   bool first = true;
+   cairo_set_line_width (cr, 0.5);
+   CAIRO_SET_SOURCE_RGB_BLACK(cr);
+   if ((f = fopen (par.traceFileName, "r")) == NULL) {
+      fprintf (stderr, "In drawTrace: Error Impossible to open: %s\n", par.traceFileName);
+      return;
+   }
+   while (fgets (line, MAX_SIZE_LINE, f) != NULL ) {
+      if (sscanf (line, "%lf;%lf;%lf", &lat, &lon, &time) >= 3) {
+         x = getX (lon);
+         y = getY (lat);
+         if (first) {
+            cairo_move_to (cr, x, y);
+            first = false;
+         }
+         else
+            cairo_line_to (cr, x, y);
+      }
+   }
+   cairo_stroke (cr);
+   fclose (f);
 }
 
 /*! association of color r g b with wind speed twd */
@@ -624,17 +657,17 @@ static void orthoPoints (cairo_t *cr, double lat1, double lon1, double lat2, dou
    cairo_stroke (cr);
 }
 
-/*! reset way route with only pDest */
+/*! reset way route with only pDest
 static void initWayPoints () {
    wayPoints.n = 0;
    wayPoints.totOrthoDist = 0;
    wayPoints.totLoxoDist = 0;
    wayPoints.t [0].lat = par.pDest.lat;
    wayPoints.t [0].lon = par.pDest.lon;
-}
+}*/
 
 /*! return label associated to x */
-GtkWidget *doubleToLabel (double x) {
+static GtkWidget *doubleToLabel (double x) {
    char str [MAX_SIZE_LINE];
    snprintf (str, sizeof (str), "%.2lf", x);
    GtkWidget *label = gtk_label_new (str);
@@ -644,7 +677,7 @@ GtkWidget *doubleToLabel (double x) {
 }
 
 /*! return label associated to str with optionnally i*/
-GtkWidget *strToLabel (char *str0, int i) {
+static GtkWidget *strToLabel (char *str0, int i) {
    char str [MAX_SIZE_LINE];
    if (i >= 0) snprintf (str, sizeof (str), "%s %d", str0, i);
    else strncpy (str, str0, sizeof (str) - 1);
@@ -655,7 +688,7 @@ GtkWidget *strToLabel (char *str0, int i) {
 }
 
 /*! return label in bold associated to str */
-GtkWidget *strToLabelBold (char *str) {
+static GtkWidget *strToLabelBold (char *str) {
    GtkWidget *label = gtk_label_new (str);
    PangoAttrList *attrs = pango_attr_list_new();
    PangoAttribute *attr = pango_attr_weight_new(PANGO_WEIGHT_BOLD);
@@ -730,30 +763,6 @@ static void niceWayPointReport () {
    gtk_grid_attach (GTK_GRID (grid), strToLabel("Total Loxodromic Distance", -1),                 0, i+3, 3, 1);
    gtk_grid_attach (GTK_GRID (grid), doubleToLabel (wayPoints.totLoxoDist),                        3, i+3, 1, 1);
    gtk_window_present (GTK_WINDOW (dialog));
-}
-
-/*! dump orthodomic route into str */
-static void wayPointToStr (char *str, int maxLength) {
-   char line [MAX_SIZE_LINE];
-   char strLat [MAX_SIZE_LINE];
-   char strLon [MAX_SIZE_LINE];
-   snprintf (str, MAX_SIZE_BUFFER, " Point  Lat        Lon       Ortho cap   Ortho Dist   Loxo Cap   Loxo Dist\n");
-   snprintf (line, sizeof (line), " pOr:   %-12s%-12s%7.2lf°      %7.2lf   %7.2lf°     %7.2lf \n", \
-      latToStr (par.pOr.lat, par.dispDms, strLat), lonToStr (par.pOr.lon, par.dispDms, strLon), \
-      wayPoints.t [0].oCap,  wayPoints.t [0].od, wayPoints.t [0].lCap,  wayPoints.t [0].ld);
-   strncat (str, line, maxLength - strlen (str));
-   for (int i = 0; i <  wayPoints.n; i++) {
-      snprintf (line, sizeof (line), " WP %02d: %-12s%-12s%7.2lf°      %7.2lf   %7.2lf°     %7.2lf \n", i + 1,  \
-         latToStr (wayPoints.t[i].lat, par.dispDms, strLat), lonToStr (wayPoints.t[i].lon, par.dispDms, strLon),\
-         wayPoints.t [i+1].oCap,  wayPoints.t [i+1].od, wayPoints.t [i+1].lCap,  wayPoints.t [i+1].ld);
-      strncat (str, line, maxLength - strlen (str));
-   }
-   snprintf (line, sizeof (line), " pDest: %-12s%-12s\n\n", latToStr (par.pDest.lat, par.dispDms, strLat), lonToStr (par.pDest.lon, par.dispDms, strLon));
-   strncat (str, line, maxLength - strlen (str));
-   snprintf (line, sizeof (line), " Total orthodromic distance: %.2lf NM\n", wayPoints.totOrthoDist);
-   strncat (str, line, maxLength - strlen (str));
-   snprintf (line, sizeof (line), " Total loxodromic distance : %.2lf NM\n", wayPoints.totLoxoDist);
-   strncat (str, line, maxLength - strlen (str));
 }
 
 /*! draw loxodromie */
@@ -926,27 +935,6 @@ static gboolean drawAllIsochrones (cairo_t *cr, int style) {
    return FALSE;
 }
 
-GtkWidget *popInfo = NULL;
-void focusInfo (double lon, double lat) { 
-   GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 5);
-   GtkWidget *label0 = gtk_label_new ("Hello");
-   GtkWidget *label1 = gtk_label_new ("coucou");
-   gtk_box_append (GTK_BOX (box), label0);
-   gtk_box_append (GTK_BOX (box), label1);
-   popInfo = gtk_popover_new ();
-   //gtk_widget_set_parent (popInfo, drawing_area);
-   gtk_widget_set_parent (popInfo, window);
-   gtk_popover_set_child ((GtkPopover*) popInfo, (GtkWidget *) box);
-   //GdkRectangle rect = {getX (lon), getY (lat), 1, 1};
-   GdkRectangle rect = {300, 200, 1, 1};
-   //gtk_popover_set_has_arrow ((GtkPopover*) menuWindow, false);
-   gtk_popover_set_pointing_to ((GtkPopover*) popInfo, &rect);
-   //gtk_popover_popup ((GtkPopover *) menuWindow);
-   //gtk_popover_set_cascade_popdown ((GtkPopover*) menuWindow, TRUE);
-   //gtk_popover_set_autohide ((GtkPopover*) menuWindow, TRUE);
-   gtk_widget_show (popInfo);
-}
-
 /*! give the focus on point in route at kTime */
 static void focusOnPointInRoute (cairo_t *cr)  {
    int i;
@@ -963,7 +951,6 @@ static void focusOnPointInRoute (cairo_t *cr)  {
    lon = route.t[i].lon;
    showUnicode (cr, BOAT_UNICODE, lon, lat);
    circle (cr, lon, lat, 1.0, 0.0, 0.0); // red
-   // focusInfo (lon, lat);
 }
 
 /*! draw the routes based on route table, from pOr to pDest or best point */
@@ -1472,6 +1459,7 @@ static void drawGribCallback (GtkDrawingArea *area, cairo_t *cr, int width, int 
       on_run_button_clicked ();
       g_timeout_add (QUIT_TIME_OUT, exitOnTimeOut, NULL);
    }
+   drawTrace (cr);
    if (count <= 1) printf ("after all\n");
    count += 1;
 }
@@ -1945,7 +1933,7 @@ static void calendarResponse (GtkDialog *dialog, gint response_id, gpointer user
 }
 
 /*! year month date for fCalendar */
-void dateUpdate (GtkCalendar *calendar, gpointer user_data) {
+static void dateUpdate (GtkCalendar *calendar, gpointer user_data) {
    GDateTime *date = gtk_calendar_get_date (calendar);
    start->sec = 0;
    start->day = g_date_time_get_day_of_month (date);
@@ -2115,6 +2103,9 @@ static gboolean routingCheck (gpointer data) {
 
 /*! launch routing */
 static void on_run_button_clicked () {
+   if (! gpsTrace)
+      if (addTracePoint (par.traceFileName))
+         gpsTrace = true; // only one GPS trace per session
    if (! isInZone (&par.pOr, &zone)) {
      infoMessage ("Origin point not in wind zone", GTK_MESSAGE_WARNING);
      return;
@@ -2324,6 +2315,26 @@ static void isocDescDump () {
 }
 
 /*! display Points of Interest information */
+static void historyReset  () {
+   route.n = 0;
+   historyRoute.n = 0;
+   gtk_widget_queue_draw(drawing_area);
+}
+
+/*! display trace */
+static void traceDump () {
+   char fileName [MAX_SIZE_FILE_NAME];
+   char title [MAX_SIZE_LINE];
+   buildRootName (par.traceFileName, fileName);
+   double od, ld, rd;
+   if (distanceTraceDone (fileName, &od, &ld, &rd)) {
+      snprintf (title, MAX_SIZE_LINE, "Trace Ortho Dist: %.2lf, Loxo Dist: %.2lf, Real Dist: %.2lf", od, ld, rd);
+      displayFile (fileName, title, false);
+   }
+   else infoMessage ("Error in distance trace calculation", GTK_MESSAGE_ERROR);
+}
+
+/*! display Points of Interest information */
 static void poiDump () {
    char line [MAX_SIZE_LINE] = "Point of Interests";
    char strLat [MAX_SIZE_LINE];
@@ -2395,7 +2406,7 @@ static void historyRteDump (gpointer user_data) {
    else {
       routeToStr (&historyRoute.r[k], buffer, MAX_SIZE_BUFFER); 
       snprintf (title, MAX_SIZE_LINE, "History: %2d", k);
-      displayText (1000, 400, buffer, title);
+      displayText (1100, 400, buffer, title);
    }
 }
 
@@ -2543,22 +2554,22 @@ static void rteDump () {
       infoMessage ("No route calculated", GTK_MESSAGE_INFO);
    else {
       routeToStr (&route, buffer, MAX_SIZE_BUFFER); 
-      displayText (1000, 400, buffer, (route.destinationReached) ? "Destination reached" :\
+      displayText (1100, 400, buffer, (route.destinationReached) ? "Destination reached" :\
          "Destination unreached. Route to best point");
    }
 }
 
 /*! show parameters information */
 static void parDump () {
-   char str [MAX_SIZE_LINE];
+   char str [MAX_SIZE_FILE_NAME];
    writeParam (buildRootName (TEMP_FILE_NAME, str), true);
-   displayFile (buildRootName (TEMP_FILE_NAME, str), "Parameter Dump");
+   displayFile (buildRootName (TEMP_FILE_NAME, str), "Parameter Dump", true);
 }
 
 /*! show parameters information */
 static void parInfo () {
-   char str [MAX_SIZE_LINE];
-   displayFile (buildRootName (par.parInfoFileName, str), "Parameter Info");
+   char str [MAX_SIZE_FILE_NAME];
+   displayFile (buildRootName (par.parInfoFileName, str), "Parameter Info", true);
 }
 
 /*! Call back point of interest */
@@ -2662,6 +2673,7 @@ static void helpInfo () {
    gtk_window_present (GTK_WINDOW (p_about_dialog)); // ATT GTK4 CHANGE
 }
 
+/*! callback for URL change */
 static void url_entry_changed (GtkEditable *editable, gpointer user_data) {
    gchar *url = (gchar *) user_data;
    const gchar *text = gtk_editable_get_text (editable);
@@ -2901,6 +2913,7 @@ static void saveScenario () {
 /*! Make initialization following parameter file load */
 static void initScenario () {
    int poiIndex = -1;
+   double unusedTime;
    if (par.gribFileName [0] != '\0') {
       iFlow = WIND;
       readGrib (&iFlow);
@@ -2937,6 +2950,9 @@ static void initScenario () {
    if ((poiIndex = findPoiByName (par.pDestName, &par.pDest.lat, &par.pDest.lon)) != -1)
       strncpy (par.pDestName, tPoi [poiIndex].name, sizeof (par.pDestName) - 1);
    else par.pDestName [0] = '\0';
+
+   if (par.pOr.id != -1) // not initialized
+      findLastTracePoint (par.traceFileName, &par.pOr.lat, &par.pOr.lon, &unusedTime);
    
    nIsoc = 0;
    route.n = 0;
@@ -3131,7 +3147,7 @@ static void gribInfoDisplay (const char *fileName, Zone *zone) {
 }
 
 /*! provides meta information about grib file */
-void gribInfo (GSimpleAction *action, GVariant *parameter, gpointer *data) {
+static void gribInfo (GSimpleAction *action, GVariant *parameter, gpointer *data) {
    int *indexPtr = (int *) data;
    typeFlow = *indexPtr;
    g_print("Type Flow: %d\n", typeFlow);
@@ -3471,7 +3487,7 @@ static void radio_button_Wind_Disp (GtkToggleButton *button, gpointer user_data)
 }
 
 /*! Radio button for Wind disp */
-GtkWidget *createRadioButtonWindDisp (char *name, GtkWidget *hbox, GtkWidget *from, int i) {
+static GtkWidget *createRadioButtonWindDisp (char *name, GtkWidget *hbox, GtkWidget *from, int i) {
    GtkWidget *choice = gtk_check_button_new_with_label (name);
    g_object_set_data (G_OBJECT(choice), "index", GINT_TO_POINTER(i));
    g_signal_connect (choice, "toggled", G_CALLBACK (radio_button_Wind_Disp), NULL);
@@ -3490,7 +3506,7 @@ static void radio_button_average_or_gust_disp (GtkToggleButton *button, gpointer
 }
 
 /*! Radio button for average or gustt disp */
-GtkWidget *createRadioButtonAverageOrGustDisp (char *name, GtkWidget *hbox, GtkWidget *from, int i) {
+static GtkWidget *createRadioButtonAverageOrGustDisp (char *name, GtkWidget *hbox, GtkWidget *from, int i) {
    GtkWidget *choice = gtk_check_button_new_with_label (name);
    g_object_set_data (G_OBJECT(choice), "index", GINT_TO_POINTER(i));
    g_signal_connect (choice, "toggled", G_CALLBACK (radio_button_average_or_gust_disp), NULL);
@@ -3554,7 +3570,7 @@ static void on_level_poi_visible_changed (GtkScale *scale, gpointer user_data) {
 }
 
 /*! translate double to entry */
-GtkWidget *doubleToEntry (double x) {
+static GtkWidget *doubleToEntry (double x) {
    char str [MAX_SIZE_NAME];
    snprintf (str, sizeof (str), "%.2lf", x);
    GtkEntryBuffer *buffer = gtk_entry_buffer_new (str, -1);
@@ -3562,19 +3578,19 @@ GtkWidget *doubleToEntry (double x) {
 }
 
 /*! double update for change */
-void doubleUpdate (GtkWidget *widget, gpointer data) {
+static void doubleUpdate (GtkWidget *widget, gpointer data) {
    double *x_ptr = (double *)data;
    *x_ptr = atof (gtk_editable_get_text(GTK_EDITABLE(widget)));
 }
 
 /*! wind Twd update for change */
-void windTwdUpdate (GtkWidget *widget, gpointer data) {
+static void windTwdUpdate (GtkWidget *widget, gpointer data) {
    par.constWindTwd = atof (gtk_editable_get_text(GTK_EDITABLE(widget)));
    gtk_widget_queue_draw  (drawing_area); 
 }
 
 /*! wind Tws update for change */
-void windTwsUpdate (GtkWidget *widget, gpointer data) {
+static void windTwsUpdate (GtkWidget *widget, gpointer data) {
    par.constWindTws = atof (gtk_editable_get_text(GTK_EDITABLE(widget)));
    if (par.constWindTws != 0)
 	   initZone (&zone);
@@ -3585,8 +3601,8 @@ void windTwsUpdate (GtkWidget *widget, gpointer data) {
 static void OKChange (GtkDialog *dialog, gint response_id, gpointer user_data) {
    if (response_id == GTK_RESPONSE_ACCEPT) {
       gtk_widget_queue_draw  (drawing_area); 
-      const int EPSILON = 0.01;
-      /*if (G_APPROX_VALUE (oldPOr.lat, par.pOr.lat, EPSILON) || G_APPROX_VALUE(oldPOr.lon, par.pOr.lon, EPSILON) || 
+      /*const int EPSILON = 0.01;
+      if (G_APPROX_VALUE (oldPOr.lat, par.pOr.lat, EPSILON) || G_APPROX_VALUE(oldPOr.lon, par.pOr.lon, EPSILON) || 
          G_APPROX_VALUE (oldPDest.lat, par.pDest.lat, EPSILON) || G_APPROX_VALUE (oldPDest.lon, par.pDest.lon, EPSILON)) {
          //if ((oldPOr.lat != par.pOr.lat) || (oldPOr.lon != par.pOr.lon) || (oldPDest.lat != par.pDest.lat) || (oldPDest.lon != par.pDest.lon)) {
          initWayPoints ();
@@ -3596,8 +3612,6 @@ static void OKChange (GtkDialog *dialog, gint response_id, gpointer user_data) {
    gtk_window_destroy (GTK_WINDOW (dialog));
 }
    
-/*! url selection box */ 
-
 /*! change parameters and pOr and pDest coordinates */ 
 static void change () {
    GtkWidget *entry_origin_lat, *entry_origin_lon;
@@ -3610,10 +3624,6 @@ static void change () {
    GtkWidget *entry_penalty0, *entry_penalty1;
    GtkWidget *entry_sog, *entry_threshold;
    GtkWidget *entry_efficiency, *entry_max_wind;
-   //Pp oldPOr = par.pOr;
-   //Pp oldPDest = par.pDest;
-   
-   GtkCellRenderer *myRenderer;
 
    // Création de la boîte de dialogue
    GtkWidget *dialogBox = gtk_dialog_new_with_buttons("Change", GTK_WINDOW (window), GTK_DIALOG_DESTROY_WITH_PARENT,
@@ -3714,7 +3724,7 @@ static void change () {
    g_object_unref(liststore);
 
    // Créer un rendu de texte pour afficher le texte dans la combobox
-   myRenderer = gtk_cell_renderer_text_new();
+   GtkCellRenderer *myRenderer = gtk_cell_renderer_text_new();
    gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(opt_combo_box), myRenderer, TRUE);
    gtk_cell_layout_set_attributes(GTK_CELL_LAYOUT(opt_combo_box), myRenderer, "text", 0, NULL);
    gtk_combo_box_set_active(GTK_COMBO_BOX(opt_combo_box), par.minPt);
@@ -3804,7 +3814,7 @@ static void change () {
    labelCreate (tab_display, "Colors",                     0, 1);
    GtkWidget *choice0 = createRadioButtonColors ("None", hbox0, NULL, 0);
    GtkWidget *choice1 = createRadioButtonColors ("B.& W.", hbox0, choice0, 1);
-   GtkWidget *choice2 = createRadioButtonColors ("Colored", hbox0, choice1, 2);
+   createRadioButtonColors ("Colored", hbox0, choice1, 2);
    
    hbox0 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
    labelCreate (tab_display, "Wind",                       0, 2);
@@ -3819,7 +3829,7 @@ static void change () {
    labelCreate (tab_display, "Isochrones",                 0, 4);
    choice0 = createRadioButtonIsoc ("None", hbox0, NULL, 0);
    choice1 = createRadioButtonIsoc ("Points", hbox0, choice0, 1);
-   choice2 = createRadioButtonIsoc ("Segment", hbox0, choice1, 2);
+   GtkWidget* choice2 = createRadioButtonIsoc ("Segment", hbox0, choice1, 2);
    createRadioButtonIsoc ("Bézier", hbox0, choice2, 3);
    
    hbox0 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
@@ -4147,7 +4157,7 @@ static void on_right_click_event (GtkGestureClick *gesture, int n_press, double 
 static void on_left_release_event (GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data) {
    double lat1, lat2, lon1, lon2;
    if (n_press == 1) {
-      g_print("Clic gauche relache\n");
+      //g_print("Clic gauche relache\n");
       if (selecting && \
          ((whereIsMouse.x - whereWasMouse.x) > MIN_MOVE_FOR_SELECT) && \
          ((whereIsMouse.x - whereWasMouse.x) > MIN_MOVE_FOR_SELECT)) {
@@ -4191,8 +4201,14 @@ static gboolean on_key_event (GtkEventController *controller, guint keyval, guin
    char buffer [MAX_SIZE_BUFFER];
    switch (keyval) {
    case GDK_KEY_F1:
-      checkGribToStr (buffer, MAX_SIZE_BUFFER);
-      displayText (750, 400, buffer, "Grib Wind Check");
+      if (isnan (my_gps_data.lon) || isnan (my_gps_data.lat))
+         infoMessage ("No GPS position available", GTK_MESSAGE_WARNING);
+      else {
+         par.pOr.lat = my_gps_data.lat;
+         par.pOr.lon = my_gps_data.lon;
+         infoMessage ("Point of Origin = GPS position", GTK_MESSAGE_WARNING);
+         gtk_widget_queue_draw (drawing_area);
+      }
       break;
    case GDK_KEY_Escape:
       printf ("Exit success\n");
@@ -4440,7 +4456,7 @@ static void meteogram () {
    gtk_window_present (GTK_WINDOW (meteoWindow));   
 }
 
-/*! submenu with label and icon */
+/*! submenu with label and icon
 void try_subMenu(GMenu *vMenu, const char *str, const char *app, const gchar *iconName) {
    GMenuItem *menu_item = g_menu_item_new (str, app);
    g_menu_item_set_label(menu_item, str);
@@ -4452,6 +4468,7 @@ void try_subMenu(GMenu *vMenu, const char *str, const char *app, const gchar *ic
    g_menu_append_item(vMenu, menu_item);
    g_object_unref(menu_item);
 }
+*/
 
 /*! submenu with label and icon */
 void subMenu (GMenu *vMenu, const char *str, const char *app, const gchar *iconName) {
@@ -4504,11 +4521,12 @@ static void poi_save_activated (GSimpleAction *action, GVariant *parameter, GApp
 
 /*! for text read file */
 static void cli_activated (GSimpleAction *action, GVariant *parameter, GApplication *application) {
-   displayFile (par.cliHelpFileName, "CLI Info");
+   char str [MAX_SIZE_FILE_NAME];
+   displayFile (buildRootName (par.cliHelpFileName, str), "CLI Info", true);
 }
 
 /*! create a button within toolBow, with an icon and a callback function */
-void createButton (GtkWidget *toolBox, char *iconName, void *callBack) { 
+static void createButton (GtkWidget *toolBox, char *iconName, void *callBack) { 
    GtkWidget *button = gtk_button_new_from_icon_name (iconName);
    g_signal_connect (button, "clicked", G_CALLBACK (callBack), NULL);
    gtk_box_append (GTK_BOX (toolBox), button);
@@ -4647,8 +4665,10 @@ static void app_startup (GApplication *application) {
    createAction ("sailReport", rteReport);
    createAction ("sailHistory", rteHistory);
    createAction ("simulationReport", simulationReport);
+   createAction ("trace", traceDump);
    createAction ("gps", gpsDump);
 
+   createAction ("historyReset", historyReset);
    createAction ("poiDump", poiDump);
    createAction ("poiSave", poi_save_activated);
    createActionWithParam ("poiEdit", poiEdit, POI_SEL);
@@ -4665,6 +4685,7 @@ static void app_startup (GApplication *application) {
    GMenuItem *polar_menu = g_menu_item_new ("_Polar", NULL);
    GMenuItem *scenario_menu = g_menu_item_new ("_Scenario", NULL);
    GMenuItem *display_menu = g_menu_item_new ("_Display", NULL);
+   GMenuItem *history_menu = g_menu_item_new ("_History", NULL);
    GMenuItem *poi_menu = g_menu_item_new("PO_I", NULL);
    GMenuItem *help_menu = g_menu_item_new("_Help", NULL);
 
@@ -4700,9 +4721,14 @@ static void app_startup (GApplication *application) {
    subMenu (display_menu_v, "Way Points Report", "app.orthoReport", "");
    subMenu (display_menu_v, "Sail Route", "app.sailRoute", "");
    subMenu (display_menu_v, "Sail Report", "app.sailReport", "");
-   subMenu (display_menu_v, "Sail History Routes", "app.sailHistory", "");
    subMenu (display_menu_v, "Simulation Report", "app.simulationReport", "");
+   subMenu (display_menu_v, "Trace", "app.trace", "");
    subMenu (display_menu_v, "GPS", "app.gps", "");
+
+   // Ajout d'éléments dans le menu "History"
+   GMenu *history_menu_v = g_menu_new ();
+   subMenu (history_menu_v, "Reset", "app.historyReset", "document-open-symbolic");
+   subMenu (history_menu_v, "Sail History Routes", "app.sailHistory", "");
 
    // Ajout d'éléments dans le menu "Poi"
    GMenu *poi_menu_v = g_menu_new ();
@@ -4728,6 +4754,8 @@ static void app_startup (GApplication *application) {
    g_object_unref (scenario_menu_v);
    g_menu_item_set_submenu (display_menu, G_MENU_MODEL (display_menu_v));
    g_object_unref (display_menu_v);
+   g_menu_item_set_submenu (history_menu, G_MENU_MODEL (history_menu_v));
+   g_object_unref (history_menu_v);
    g_menu_item_set_submenu (poi_menu, G_MENU_MODEL (poi_menu_v));
    g_object_unref (poi_menu_v);
    g_menu_item_set_submenu (help_menu, G_MENU_MODEL (help_menu_v));
@@ -4737,6 +4765,7 @@ static void app_startup (GApplication *application) {
    g_menu_append_item (menubar, polar_menu);
    g_menu_append_item (menubar, scenario_menu);
    g_menu_append_item (menubar, display_menu);
+   g_menu_append_item (menubar, history_menu);
    g_menu_append_item (menubar, poi_menu);
    g_menu_append_item (menubar, help_menu);
 
@@ -4744,6 +4773,7 @@ static void app_startup (GApplication *application) {
    g_object_unref (polar_menu);
    g_object_unref (scenario_menu);
    g_object_unref (display_menu);
+   g_object_unref (history_menu);
    g_object_unref (poi_menu);
    g_object_unref (help_menu);
 

@@ -98,5 +98,7 @@ extern char   *buildMeteoUrl (int type, int i, char *url);
 extern bool   curlGet (char *url, char *outputFile); 
 extern void   updateIsSeaWithForbiddenAreas ();
 extern bool   isServerAccessible (const char *url);
-
+extern bool   addTracePoint (const char *fileName);
+extern bool   findLastTracePoint (const char *fileName, double *lat, double *lon, double *time);
+extern bool   distanceTraceDone (const char *fileName, double *od, double *ld, double *rd);
 

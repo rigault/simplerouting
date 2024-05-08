@@ -18,6 +18,7 @@
 #include <time.h>
 #include <math.h>
 #include "rtypes.h"
+#include "inline.h"
 #include "rutil.h"
 #include "engine.h"
 
@@ -442,10 +443,10 @@ bool routeToStr (SailRoute *route, char *str, size_t maxLength) {
    char line [MAX_SIZE_LINE];
    char strLat [MAX_SIZE_LINE];
    char strLon [MAX_SIZE_LINE];
-   strcpy (str, " No        Lat        Lon             Id Father  Motor     Cap       Dist     Twd      Tws    Gust   Waves\n");
-   snprintf (line, MAX_SIZE_LINE, " pOr:      %-12s%-12s %6d %6d %6d %7.2f°   %7.2lf  %6.0lf° %7.2lf %7.2lf %7.2lf\n", \
+   strcpy (str, " No        Lat        Lon             Id Father  Motor     Cap       Dist      SOG     Twd      Tws    Gust   Waves\n");
+   snprintf (line, MAX_SIZE_LINE, " pOr:      %-12s%-12s %6d %6d %6d %7.2f°   %7.2lf  %7.2lf  %6.0lf° %7.2lf %7.2lf %7.2lf\n", \
       latToStr (route->t[0].lat, par.dispDms, strLat), lonToStr (route->t[0].lon, par.dispDms, strLon), \
-      route->t[0].id, route->t[0].father, route->t[0].motor, route->t[0].lCap, route->t[0].ld,
+      route->t[0].id, route->t[0].father, route->t[0].motor, route->t[0].lCap, route->t[0].ld, route->t[0].ld/par.tStep,
       route->t[0].twd, route->t[0].tws, MS_TO_KN * route->t[0].g, route->t[0].w);
 
    strncat (str, line, maxLength - strlen (str));
@@ -453,17 +454,17 @@ bool routeToStr (SailRoute *route, char *str, size_t maxLength) {
       if ((fabs(route->t[i].lon) > 180.0) || (fabs (route->t[i].lat) > 90.0))
          snprintf (line, MAX_SIZE_LINE, " Isoc %3d: Erreur sur latitude ou longitude\n", i-1);   
       else
-         snprintf (line, MAX_SIZE_LINE, " Isoc %3d: %-12s%-12s %6d %6d %6d %7.2f°   %7.2f  %6.0lf° %7.2lf %7.2lf %7.2lf\n", \
+         snprintf (line, MAX_SIZE_LINE, " Isoc %3d: %-12s%-12s %6d %6d %6d %7.2f°   %7.2f  %7.2lf  %6.0lf° %7.2lf %7.2lf %7.2lf\n", \
             i-1, latToStr (route->t[i].lat, par.dispDms, strLat), lonToStr (route->t[i].lon, par.dispDms, strLon), \
             route->t[i].id, route->t[i].father, route->t[i].motor,\
-            route->t[i].lCap, route->t[i].ld, 
+            route->t[i].lCap, route->t[i].ld, route->t[i].ld/par.tStep,
             route->t[i].twd, route->t[i].tws, MS_TO_KN * route->t[i].g, route->t[i].w);
       strncat (str, line, maxLength - strlen (str));
    }
    
-   snprintf (line, MAX_SIZE_LINE, " Avr %76s  %7.2lf %7.2lf %7.2lf\n", " ", route->avrTws, MS_TO_KN * route->avrGust, route->avrWave); 
+   snprintf (line, MAX_SIZE_LINE, " Avr %85s  %7.2lf %7.2lf %7.2lf\n", " ", route->avrTws, MS_TO_KN * route->avrGust, route->avrWave); 
    strncat (str, line, maxLength - strlen (str));
-   snprintf (line, MAX_SIZE_LINE, " Max %76s  %7.2lf %7.2lf %7.2lf\n", " ", route->maxTws, MS_TO_KN * route->maxGust, route->maxWave); 
+   snprintf (line, MAX_SIZE_LINE, " Max %85s  %7.2lf %7.2lf %7.2lf\n", " ", route->maxTws, MS_TO_KN * route->maxGust, route->maxWave); 
    strncat (str, line, maxLength - strlen (str));
    snprintf (line, MAX_SIZE_LINE, "\n Total distance: %7.2lf NM,    Motor distance: %7.2lf NM\n", route->totDist, route->motorDist);
    strncat (str, line, maxLength - strlen (str));
@@ -584,7 +585,7 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
    int lTempList = 0;
    double timeLastStep;
    int index; // index of closest point to pDest in insochrone
-   double bestVmg;
+   double theBestVmg;
    pOr->dd = orthoDist (pOr->lat, pOr->lon, pDest->lat, pDest->lon);
    pOr->vmc = 0;
    pOrTtoPDestCog = orthoCap (pOr->lat, pOr->lon, pDest->lat, pDest->lon);
@@ -599,10 +600,10 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
       *lastStepDuration = timeToReach;
       return nIsoc + 1;
    }
-   isoDesc [nIsoc].size = buildNextIsochrone (pOr, pDest, tempList, 1, t, dt, isocArray [nIsoc], &bestVmg);
+   isoDesc [nIsoc].size = buildNextIsochrone (pOr, pDest, tempList, 1, t, dt, isocArray [nIsoc], &theBestVmg);
    // printf ("%-20s%d, %d\n", "Isochrone no, len: ", 0, isoDesc [0].size);
-   lastBestVmg = bestVmg;
-   isoDesc [nIsoc].bestVmg = bestVmg;
+   lastBestVmg = theBestVmg;
+   isoDesc [nIsoc].bestVmg = theBestVmg;
    isoDesc [nIsoc].first = 0; 
    lastClosest = closest (isocArray [nIsoc], isoDesc[nIsoc].size, pDest, &index);
    isoDesc [nIsoc].closest = index; 
@@ -625,13 +626,14 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
          isoDesc [nIsoc].first = findFirst (nIsoc);
          lastClosest = closest (isocArray [nIsoc], isoDesc[nIsoc].size, pDest, &index);
          isoDesc [nIsoc].closest = index; 
+         isoDesc [nIsoc].toIndexWp = toIndexWp; 
          *lastStepDuration = timeLastStep;
          return nIsoc + 1;
       }
-      lTempList = buildNextIsochrone (pOr, pDest, isocArray [nIsoc -1], isoDesc [nIsoc -1].size, t, dt, tempList, &bestVmg);
+      lTempList = buildNextIsochrone (pOr, pDest, isocArray [nIsoc -1], isoDesc [nIsoc -1].size, t, dt, tempList, &theBestVmg);
       if (lTempList == -1) return -1;
-      lastBestVmg = bestVmg;
-      isoDesc [nIsoc].bestVmg = bestVmg;
+      lastBestVmg = theBestVmg;
+      isoDesc [nIsoc].bestVmg = theBestVmg;
       isoDesc [nIsoc].size = optimize (pOr, pDest, nIsoc, par.opt, tempList, lTempList, isocArray [nIsoc]);
       if ((isoDesc [nIsoc].size == 0) /*|| (! movePossible)*/) { // no Wind ... we copy
          replicate (nIsoc);
@@ -639,6 +641,7 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
       isoDesc [nIsoc].first = findFirst (nIsoc);; 
       lastClosest = closest (isocArray [nIsoc], isoDesc [nIsoc].size, pDest, &index);
       isoDesc [nIsoc].closest = index;
+      isoDesc [nIsoc].toIndexWp = toIndexWp; 
       // printf ("Isoc: %d Biglist length: %d optimized size: %d\n", nIsoc, lTempList, isoDesc [nIsoc].size);
       nIsoc += 1;
    }
@@ -708,39 +711,6 @@ void *routingLaunch () {
    storeRoute (&par.pOr, &lastClosest, lastStepDuration);
 
    if (strlen (par.dumpRFileName) > 0) dumpRoute (par.dumpRFileName, lastClosest);
-   if (strlen (par.dumpIFileName) > 0) dumpAllIsoc (par.dumpIFileName);
-   return NULL;
-}
-
-/*! launch routing wih parameters */
-void *OroutingLaunch () {
-   struct timeval t0, t1;
-   long ut0, ut1;
-   double lastStepDuration;
-   lastClosest = par.pOr;
-   route.kTime0 = (int) (par.startTimeInHours / (zone.timeStamp [1] - zone.timeStamp [0]));
-
-   gettimeofday (&t0, NULL);
-   ut0 = t0.tv_sec * MILLION + t0.tv_usec;
-
-   //Launch routing !
-   route.ret = routing (&par.pOr, &par.pDest, -1, par.startTimeInHours, par.tStep, &lastStepDuration);
-   // printf ("After routingLaunch:  ret = %d\n", route.ret);
-
-   gettimeofday (&t1, NULL);
-   ut1 = t1.tv_sec * MILLION + t1.tv_usec;
-   route.calculationTime = (double) ((ut1-ut0)/MILLION);
-   route.destinationReached = (route.ret > 0);
-
-   if (route.destinationReached) {
-      storeRoute (&par.pOr, &lastClosest, lastStepDuration); //par.pDest should replace lastClosest
-      if (strlen (par.dumpRFileName) > 0) dumpRoute (par.dumpRFileName, par.pDest);
-   }
-   else {
-      storeRoute (&par.pOr, &lastClosest, lastStepDuration);
-      if (strlen (par.dumpRFileName) > 0) dumpRoute (par.dumpRFileName, lastClosest);
-   }
-
    if (strlen (par.dumpIFileName) > 0) dumpAllIsoc (par.dumpIFileName);
    return NULL;
 }
