@@ -536,69 +536,6 @@ bool writePoi (const char *fileName) {
    return true;
 }
 
-/*! add trace point to trace file */
-bool addTracePoint (const char *fileName) {
-   if (isnan (my_gps_data.lon) || isnan (my_gps_data.lat)) 
-      return false;
-   if (my_gps_data.lon == 0 && my_gps_data.lat == 0)
-      return false;
-   FILE *f = NULL;
-   if ((f = fopen (fileName, "a")) == NULL) {
-      fprintf (stderr, "Error in addTracePoint: cannot write: %s\n", fileName);
-      return false;
-   }
-   fprintf (f, "%.2lf; %.2lf; %ld; \n", my_gps_data.lat, my_gps_data.lon, my_gps_data.timestamp.tv_sec);
-   fclose (f);
-   return true;
-}
-
-/*! find last point in trace*/
-bool findLastTracePoint (const char *fileName, double *lat, double *lon, double *time) {
-   FILE *f = NULL;
-   char line [MAX_SIZE_LINE];
-   char lastLine [MAX_SIZE_LINE];
-   if ((f = fopen (fileName, "r")) == NULL) {
-      fprintf (stderr, "Error in findLastTracePoint: cannot read: %s\n", fileName);
-      return false;
-   }
-   while (fgets (line, MAX_SIZE_LINE, f) != NULL ) {
-      strncpy (lastLine, line, MAX_SIZE_LINE);
-   }
-   return (sscanf (lastLine, "%lf;%lf;%lf", lat, lon, time) >= 3);
-   fclose (f);
-   return true;
-}
-
-/*! calculate distance in number of miles 
-   od: orthodromic, ld: loxodromic, rd: real*/
-bool distanceTraceDone (const char *fileName, double *od, double *ld, double *rd) {
-   FILE *f = NULL;
-   bool first = true;
-   char line [MAX_SIZE_LINE];
-   double lat0 = 0.0, lon0 = 0.0, latLast, lonLast, lat, lon, time;
-   *rd = 0.0;
-   
-   if ((f = fopen (fileName, "r")) == NULL) {
-      fprintf (stderr, "Error in distanceTraceDone: cannot read: %s\n", fileName);
-      return false;
-   }
-   while (fgets (line, MAX_SIZE_LINE, f) != NULL ) {
-      if (sscanf (line, "%lf;%lf;%lf", &lat, &lon, &time) < 3) continue;
-      if (first) {
-         lat0 = lat, lon0 = lon;
-         first = false;
-      }
-      else {
-        *rd += orthoDist (lat, lon, latLast, lonLast);
-      }
-      latLast = lat, lonLast = lon;
-   }
-   *od = orthoDist (lat, lon, lat0, lon0);
-   *ld = loxoDist (lat, lon, lat0, lon0);
-   fclose (f);
-   return true;
-}
-
 /*! string to upper */
 static char* strToUpper (const char *name, char *upperName) {
    char *pt = upperName;
@@ -699,10 +636,19 @@ void initZone (Zone *zone) {
    zone->nbLon = 0;
 }
 
+/*! convert epech time to string */
+char *epochToStr (time_t t, char *str, size_t len) {
+   struct tm *utc = gmtime (&t);
+   snprintf (str, len, "%d/%02d/%02d %02d:%02d:%02d", 
+      utc->tm_year + 1900, utc->tm_mon + 1, utc->tm_mday,
+      utc->tm_hour, utc->tm_min, utc->tm_sec); 
+   return str;
+}
+
 /*! convert long date found in grib file in seconds time_t */
 time_t dateToTime_t (long date) {
    time_t seconds = 0;
-   struct tm *tm0 = gmtime (&seconds);;
+   struct tm *tm0 = gmtime (&seconds);
    tm0->tm_year = ((int ) date / 10000) - 1900;
    tm0->tm_mon = ((int) (date % 10000) / 100) - 1;
    tm0->tm_mday = (int) (date % 100);
@@ -1606,9 +1552,8 @@ void dollarReplace (char* str) {
 }
 
 /*! find name, lat and lon */
-static void analyseCoord (char *str, char* name, double *lat, double *lon) {
+static void analyseCoord (char *str, double *lat, double *lon) {
    char *pt = NULL;
-   name [0] = '\0';
    g_strstrip (str);
    if (isNumber (str)) {
       pt = strchr (str, ',');
@@ -1705,6 +1650,7 @@ bool readParam (const char *fileName) {
    par.windDisp = 1;
    par.xWind = 1.0;
    par.maxWind = 50.0;
+   wayPoints.n = 0;
    
    if ((f = fopen (fileName, "r")) == NULL) {
       fprintf (stderr, "Error in readParam: Cannot open: %s\n", fileName);
@@ -1724,16 +1670,24 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "PORT:%255s", str) > 0)
          buildRootName (str, par.portFileName);
       else if (strstr (pLine, "POR:") != NULL) {
-         analyseCoord (strchr (pLine, ':') + 1, par.pOrName, &par.pOr.lat, &par.pOr.lon);
+         analyseCoord (strchr (pLine, ':') + 1, &par.pOr.lat, &par.pOr.lon);
          par.pOr.lon = lonCanonize (par.pOr.lon);
          par.pOr.id = -1;
          par.pOr.father = -1;
       } 
       else if (strstr (pLine, "PDEST:") != NULL) {
-         analyseCoord (strchr (pLine, ':') + 1, par.pDestName, &par.pDest.lat, &par.pDest.lon);
+         analyseCoord (strchr (pLine, ':') + 1, &par.pDest.lat, &par.pDest.lon);
          par.pDest.lon = lonCanonize (par.pDest.lon);
          par.pDest.id = 0;
          par.pDest.father = 0;
+      }
+      else if (strstr (pLine, "WP:") != NULL) {
+         if (wayPoints.n > MAX_N_WAY_POINT)
+            fprintf (stderr, "Error in readParam: number of wayPoints exceeded; %d\n", MAX_N_WAY_POINT);
+         else {
+            analyseCoord (strchr (pLine, ':') + 1, &wayPoints.t [wayPoints.n].lat, &wayPoints.t [wayPoints.n].lon);
+            wayPoints.n += 1;
+         }
       }
       else if (sscanf (pLine, "POR_NAME:%255s", par.pOrName) > 0);
       else if (sscanf (pLine, "PDEST_NAME:%255s", par.pDestName) > 0);
@@ -1813,6 +1767,7 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "AVR_OR_GUST_DISP:%d", &par.averageOrGustDisp) > 0);
       else if (sscanf (pLine, "CURRENT_DISP:%d", &par.currentDisp) > 0);
       else if (sscanf (pLine, "WAVE_DISP:%d", &par.waveDisp) > 0);
+      else if (sscanf (pLine, "GRID_DISP:%d", &par.gridDisp) > 0);
       else if (sscanf (pLine, "LEVEL_POI_DISP:%d", &par.maxPoiVisible) > 0);
       else if (sscanf (pLine, "MAIL_PW:%255s", par.mailPw) > 0);
       else if (sscanf (pLine, "WEBKIT:%255s", str) > 0)
@@ -1862,6 +1817,8 @@ bool writeParam (const char *fileName, bool header) {
       fprintf (f, "POR_NAME:        %s\n", par.pOrName);
    if (par.pDestName [0] != '\0')
       fprintf (f, "PDEST_NAME:        %s\n", par.pDestName);
+   for (int i = 0; i < wayPoints.n; i++)
+      fprintf (f, "WP:              %.2lf,%.2lf\n", wayPoints.t [i].lat, wayPoints.t [i].lon);
    fprintf (f, "TRACE:           %s\n", par.traceFileName);
    fprintf (f, "CGRIB:           %s\n", par.gribFileName);
    if (par.currentGribFileName [0] != '\0')
@@ -1914,6 +1871,7 @@ bool writeParam (const char *fileName, bool header) {
    fprintf (f, "AVR_OR_GUST_DISP:%d\n", par.averageOrGustDisp);
    fprintf (f, "CURRENT_DISP:    %d\n", par.currentDisp);
    fprintf (f, "WAVE_DISP:       %d\n", par.waveDisp);
+   fprintf (f, "GRID_DISP:       %d\n", par.gridDisp);
    fprintf (f, "LEVEL_POI_DISP:  %d\n", par.maxPoiVisible);
    fprintf (f, "MAX_THETA:       %.2lf\n", par.maxTheta);
    fprintf (f, "J_FACTOR:        %d\n", par.jFactor);
@@ -1936,12 +1894,21 @@ bool writeParam (const char *fileName, bool header) {
    return true;
 }
 
+/*! check GPS data are valid */
+bool gpsOK () {
+   if (isnan (my_gps_data.lat) || isnan (my_gps_data.lon) ||
+      !isfinite (my_gps_data.lat) || ! isfinite (my_gps_data.lon))
+      return false;
+   else 
+      return (my_gps_data.lat != 0 || my_gps_data.lat != 0);
+}
+
 /*! write gps information in buffer */
 bool gpsToStr (char *buffer, size_t maxLength) {
    char line [MAX_SIZE_LINE];
    char strLat [MAX_SIZE_LINE];
    char strLon [MAX_SIZE_LINE];
-   if (isnan (my_gps_data.lon) || isnan (my_gps_data.lat)) {
+   if (!gpsOK ()) {
       strcpy (buffer, "No GPS data available\n");
       return false;
    }
@@ -1953,7 +1920,7 @@ bool gpsToStr (char *buffer, size_t maxLength) {
    strncat (buffer, line, maxLength - strlen (buffer));
    snprintf (line, MAX_SIZE_LINE, "Number of satellites: %d\n", my_gps_data.nSat);
    strncat (buffer, line, maxLength - strlen (buffer));
-   struct tm *timeinfo = gmtime (&my_gps_data.timestamp.tv_sec);
+   struct tm *timeinfo = gmtime (&my_gps_data.time);
 
    snprintf (line, MAX_SIZE_LINE, "GPS Time: %d-%02d-%02d %02d:%02d:%02d UTC\n", 
       timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday,
@@ -1968,7 +1935,6 @@ void *gps_thread_function (void *data) {
 
    while (true) {
       if (gps_waiting (&thread_data->gps_data, MILLION)) {
-         my_gps_data.ret = false;
          if (gps_read (&thread_data->gps_data, NULL, 0) == -1) {
             fprintf (stderr, "Error in gps_thread_function: GPS read failed.\n");
          } else if (thread_data->gps_data.set & PACKET_SET) {
@@ -1979,15 +1945,15 @@ void *gps_thread_function (void *data) {
             my_gps_data.lat = thread_data->gps_data.fix.latitude;
             my_gps_data.lon = thread_data->gps_data.fix.longitude;
             my_gps_data.alt = thread_data->gps_data.fix.altitude;
+            my_gps_data.cog = thread_data->gps_data.fix.track;
+            my_gps_data.sog = MS_TO_KN * thread_data->gps_data.fix.speed;
             my_gps_data.status = thread_data->gps_data.fix.status;
             my_gps_data.nSat = thread_data->gps_data.satellites_visible;
-            my_gps_data.timestamp = thread_data->gps_data.fix.time;
-            my_gps_data.ret = true;
+            my_gps_data.time = thread_data->gps_data.fix.time.tv_sec;
             // Déverrouillez la structure MyGpsData après la mise à jour
             pthread_mutex_unlock(&gps_data_mutex);
          }
       }
-      // Ajoutez un délai ou utilisez une approche plus avancée
       usleep (MILLION); // Délai de 1 seconde
    }
    return NULL;
@@ -1996,19 +1962,19 @@ void *gps_thread_function (void *data) {
 /*! GPS init */
 bool initGPS () {
    // Initialisez les données du thread
-   memset(&thread_data, 0, sizeof(struct ThreadData));
+   memset (&thread_data, 0, sizeof(struct ThreadData));
    thread_data.my_gps_data = my_gps_data;
 
    // Ouvrez la connexion GPS
-   if (gps_open("localhost", GPSD_TCP_PORT, &thread_data.gps_data) == -1) {
+   if (gps_open ("localhost", GPSD_TCP_PORT, &thread_data.gps_data) == -1) {
       fprintf (stderr, "Error in initGPS: Unable to connect to GPSD.\n");
       return false;
    }
 
-   gps_stream(&thread_data.gps_data, WATCH_ENABLE | WATCH_JSON, NULL);
+   gps_stream (&thread_data.gps_data, WATCH_ENABLE | WATCH_JSON, NULL);
 
    // Créez un thread pour la lecture du GPS
-   if (pthread_create(&gps_thread, NULL, gps_thread_function, &thread_data) != 0) {
+   if (pthread_create (&gps_thread, NULL, gps_thread_function, &thread_data) != 0) {
       fprintf (stderr, "Error in initGPS: Unable to create GPS thread.\n");
       return false;
    }
@@ -2018,10 +1984,10 @@ bool initGPS () {
 /*! GPS close */
 void closeGPS () {
    // Fermez la connexion GPS et terminez le thread GPS lors de la fermeture de l'application
-   gps_stream(&thread_data.gps_data, WATCH_DISABLE, NULL);
-   gps_close(&thread_data.gps_data);
-   pthread_cancel(gps_thread);
-   pthread_join(gps_thread, NULL);
+   gps_stream (&thread_data.gps_data, WATCH_DISABLE, NULL);
+   gps_close (&thread_data.gps_data);
+   pthread_cancel (gps_thread);
+   pthread_join (gps_thread, NULL);
 }
 
 /*! URL for METEO Consult Wind 4 hours before now at closest time 0Z, 6Z, 12Z, or 18Z 
@@ -2077,6 +2043,70 @@ bool curlGet (char *url, char* outputFile) {
       fprintf (stderr, "Errr in curlget: HTTP response code: %ld\n", http_code);
       return false;
    }
+   return true;
+}
+
+/*! add trace point to trace file */
+bool addTracePoint (const char *fileName) {
+   FILE *f = NULL;
+   char str [MAX_SIZE_LINE];
+   if (!gpsOK ()) 
+      return false;
+   if (my_gps_data.lon == 0 && my_gps_data.lat == 0)
+      return false;
+   if ((f = fopen (fileName, "a")) == NULL) {
+      fprintf (stderr, "Error in addTracePoint: cannot write: %s\n", fileName);
+      return false;
+   }
+   fprintf (f, "%.2lf; %.2lf; %ld; %s\n", my_gps_data.lat, my_gps_data.lon, my_gps_data.time, epochToStr (my_gps_data.time, str, sizeof (str)));
+   fclose (f);
+   return true;
+}
+
+/*! find last point in trace*/
+bool findLastTracePoint (const char *fileName, double *lat, double *lon, double *time) {
+   FILE *f = NULL;
+   char line [MAX_SIZE_LINE];
+   char lastLine [MAX_SIZE_LINE];
+   if ((f = fopen (fileName, "r")) == NULL) {
+      fprintf (stderr, "Error in findLastTracePoint: cannot read: %s\n", fileName);
+      return false;
+   }
+   while (fgets (line, MAX_SIZE_LINE, f) != NULL ) {
+      strncpy (lastLine, line, MAX_SIZE_LINE);
+   }
+   return (sscanf (lastLine, "%lf;%lf;%lf", lat, lon, time) >= 3);
+   fclose (f);
+   return true;
+}
+
+/*! calculate distance in number of miles 
+   od: orthodromic, ld: loxodromic, rd: real*/
+bool distanceTraceDone (const char *fileName, double *od, double *ld, double *rd) {
+   FILE *f = NULL;
+   bool first = true;
+   char line [MAX_SIZE_LINE];
+   double lat0 = 0.0, lon0 = 0.0, latLast, lonLast, lat, lon, time;
+   *rd = 0.0;
+   
+   if ((f = fopen (fileName, "r")) == NULL) {
+      fprintf (stderr, "Error in distanceTraceDone: cannot read: %s\n", fileName);
+      return false;
+   }
+   while (fgets (line, MAX_SIZE_LINE, f) != NULL ) {
+      if (sscanf (line, "%lf;%lf;%lf", &lat, &lon, &time) < 3) continue;
+      if (first) {
+         lat0 = lat, lon0 = lon;
+         first = false;
+      }
+      else {
+        *rd += orthoDist (lat, lon, latLast, lonLast);
+      }
+      latLast = lat, lonLast = lon;
+   }
+   *od = orthoDist (lat, lon, lat0, lon0);
+   *ld = loxoDist (lat, lon, lat0, lon0);
+   fclose (f);
    return true;
 }
 

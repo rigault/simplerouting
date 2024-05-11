@@ -455,7 +455,8 @@ bool routeToStr (SailRoute *route, char *str, size_t maxLength) {
          snprintf (line, MAX_SIZE_LINE, " Isoc %3d: Erreur sur latitude ou longitude\n", i-1);   
       else
          snprintf (line, MAX_SIZE_LINE, " Isoc %3d: %-12s%-12s %6d %6d %6d %7.2f°   %7.2f  %7.2lf  %6.0lf° %7.2lf %7.2lf %7.2lf\n", \
-            i-1, latToStr (route->t[i].lat, par.dispDms, strLat), lonToStr (route->t[i].lon, par.dispDms, strLon), \
+            i-1,
+            latToStr (route->t[i].lat, par.dispDms, strLat), lonToStr (route->t[i].lon, par.dispDms, strLon), \
             route->t[i].id, route->t[i].father, route->t[i].motor,\
             route->t[i].lCap, route->t[i].ld, route->t[i].ld/par.tStep,
             route->t[i].twd, route->t[i].tws, MS_TO_KN * route->t[i].g, route->t[i].w);

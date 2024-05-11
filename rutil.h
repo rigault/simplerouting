@@ -64,6 +64,7 @@ extern char   *latToStr (double lat, int type, char* str);
 extern char   *lonToStr (double lon, int type, char* str);
 extern void   initZone (Zone *zone);
 extern time_t dateToTime_t (long date);
+extern char   *epochToStr (time_t t, char *str, size_t len);
 extern bool   isInZone (Pp *pt, Zone *zone);
 extern double zoneTimeDiff (Zone *zone1, Zone *zone0);
 extern time_t diffNowGribTime0 (Zone *zone);
@@ -101,4 +102,4 @@ extern bool   isServerAccessible (const char *url);
 extern bool   addTracePoint (const char *fileName);
 extern bool   findLastTracePoint (const char *fileName, double *lat, double *lon, double *time);
 extern bool   distanceTraceDone (const char *fileName, double *od, double *ld, double *rd);
-
+extern bool   gpsOK ();

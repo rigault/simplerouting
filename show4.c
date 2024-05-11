@@ -28,6 +28,9 @@
 #include <time.h>
 #include <gtk/gtk.h>
 #include <cairo.h>
+#include <gps.h>
+#include <eccodes.h>
+#include <curl/curl.h>
 #include <pango/pangocairo.h>
 //#include <webkit2/webkit2.h>
 #include "shapefil.h"
@@ -61,6 +64,7 @@
 #define MIN_NAME_SIZE         3     // mimimum poi name length to be considered
 #define K_LON_LAT            (0.71) // lon deformation
 #define LON_LAT_RATIO         2.8   // not that useful
+#define GPS_TIME_OUT          10
 
 #define CAIRO_SET_SOURCE_RGB_BLACK(cr)             cairo_set_source_rgb (cr,0,0,0)
 #define CAIRO_SET_SOURCE_RGB_WHITE(cr)             cairo_set_source_rgb (cr,1.0,1.0,1.0)
@@ -144,23 +148,12 @@ GtkWidget *val_size_eval = NULL;
 GtkWidget *menuWindow = NULL;        // Pop up menu Right Click
 GtkWidget *menuGrib = NULL;          // Pop up menu Meteoconsult
 GtkWidget *menuHist = NULL;          // Pop up menu Hustory Routes
+GtkWidget *gpsDialog;                // window for GPS info
 
 Coordinates whereWasMouse, whereIsMouse, whereIsPopup;
 
 /*! displayed zone */
-struct {
-   guint xL;
-   guint xR;
-   guint yB;
-   guint yT;
-   double latMin;
-   double latMax;
-   double lonLeft;
-   double lonRight;
-   double latStep;
-   double lonStep;
-   double zoom;
-} dispZone;
+DispZone dispZone;
 
 /*! struct to memorize zone for mail request */
 struct {
@@ -395,7 +388,7 @@ static void dispZoom (double z) {
    double deltaLon = deltaLat * LON_LAT_RATIO;
    dispZone.zoom = 180 / deltaLat;
    if ((z < 1.0) && (deltaLat < 0.1)) return; // stop zoom
-   if ((z > 1.0) && (deltaLat > 60)) return; // stop zoom
+   if ((z > 1.0) && (deltaLat > 60)) return;  // stop zoom
 
    dispZone.latMin = latCenter - deltaLat * z;
    dispZone.latMax = latCenter + deltaLat * z;
@@ -788,7 +781,7 @@ static void drawLoxoRoute (cairo_t *cr) {
 static void drawOrthoRoute (cairo_t *cr, int n) {
    double prevLat = par.pOr.lat;
    double prevLon = par.pOr.lon;
-   for (int i = 0; i <  wayPoints.n; i++) {
+   for (int i = 0; i < wayPoints.n; i++) {
       orthoPoints (cr, prevLat, prevLon,  wayPoints.t [i].lat,  wayPoints.t [i].lon, n);
       prevLat =  wayPoints.t [i].lat;
       prevLon =  wayPoints.t [i].lon;
@@ -1289,44 +1282,75 @@ static void statusBarUpdate () {
 }
 
 /*! draw scale, scaleLen is for one degree. Modified if not ad hoc */
-static void drawScale (cairo_t *cr, bool vertical, guint scaleX, guint scaleY, int scaleLen, const char *str) {
+static void drawScale (cairo_t *cr, DispZone *dispZone) {
    const int DELTA = 4;
    char line [MAX_SIZE_LINE];
+   double scaleX, scaleY, scaleLen;;
    CAIRO_SET_SOURCE_RGB_BLACK (cr);
    cairo_set_line_width (cr, 2.0);
-   int val;
-   if (scaleLen > 200) {
-      scaleLen /= 10;
-      val = 6; 
-   }
-   else val = 60;
-   
+   int val = 60;
+   if ((dispZone->latMax - dispZone ->latMin) <= 2.0) return; // no scale for small zone
+
+   // vertical
+   scaleLen = (getY (dispZone->latMax - 1) - getY (dispZone->latMax)); 
+   //scaleX = getX (ceil (dispZone->lonLeft));
+   scaleX = 30;
+   scaleY = getY (ceil (dispZone->latMin));
    cairo_move_to (cr, scaleX, scaleY);
-   if (vertical)
-      cairo_line_to (cr, scaleX, scaleY - scaleLen);
-   else cairo_line_to (cr, scaleX + scaleLen, scaleY);
+   cairo_line_to (cr, scaleX, scaleY - scaleLen);
+   cairo_stroke(cr);
+   
+   cairo_move_to (cr, scaleX + 15, scaleY);
+   snprintf (line, MAX_SIZE_LINE, "Lat: %d miles", val);
+   cairo_show_text (cr, line);
    cairo_stroke(cr);
 
-   cairo_move_to (cr, scaleX, scaleY + 15);
-   snprintf (line, MAX_SIZE_LINE, "%s: %d miles", str, val);
+   cairo_move_to (cr, scaleX - DELTA, scaleY);
+   cairo_line_to (cr, scaleX + DELTA, scaleY);
+   cairo_stroke(cr);
+   cairo_move_to (cr, scaleX + DELTA, scaleY - scaleLen);
+   cairo_line_to (cr, scaleX - DELTA, scaleY - scaleLen);
+   cairo_stroke(cr);
+   
+
+   // horizontal
+   scaleLen = (getX (dispZone->lonRight) - getX (dispZone->lonRight - 1)) / MAX (0.1, cos (DEG_TO_RAD * (dispZone->latMax + dispZone->latMin)/2));
+   scaleX = getX (round ((dispZone->lonLeft + dispZone->lonRight) / 2.0 + 1));
+   scaleY = getY (ceil (dispZone->latMin));
+   cairo_move_to (cr, scaleX, scaleY);
+   cairo_line_to (cr, scaleX + scaleLen, scaleY);
+   cairo_stroke(cr);
+
+   cairo_move_to (cr, scaleX, scaleY - 15);
+   snprintf (line, MAX_SIZE_LINE, "Lon: %d miles", val);
    cairo_show_text (cr, line);
    cairo_stroke(cr);
     
-   if (vertical) {
-      cairo_move_to (cr, scaleX - DELTA, scaleY);
-      cairo_line_to (cr, scaleX + DELTA, scaleY);
-      cairo_stroke(cr);
-      cairo_move_to (cr, scaleX + DELTA, scaleY - scaleLen);
-      cairo_line_to (cr, scaleX - DELTA, scaleY - scaleLen);
-   }
-   else {
-      cairo_move_to (cr, scaleX, scaleY - DELTA);
-      cairo_line_to (cr, scaleX, scaleY + DELTA);
-      cairo_stroke(cr);
-      cairo_move_to (cr, scaleX + scaleLen, scaleY - DELTA);
-      cairo_line_to (cr, scaleX + scaleLen, scaleY + DELTA);
-   }
+   cairo_move_to (cr, scaleX, scaleY - DELTA);
+   cairo_line_to (cr, scaleX, scaleY + DELTA);
    cairo_stroke(cr);
+   cairo_move_to (cr, scaleX + scaleLen, scaleY - DELTA);
+   cairo_line_to (cr, scaleX + scaleLen, scaleY + DELTA);
+   cairo_stroke(cr);
+}
+
+/*! draw grid with meridians and parallels */
+static void drawGrid (cairo_t *cr, DispZone *dispZone, int step) {
+   const int MAX_LAT = 85;
+   CAIRO_SET_SOURCE_RGB_LIGHT_GRAY (cr);
+   cairo_set_line_width(cr, 0.5);
+   // meridians
+   for (int intLon = MAX (-180, dispZone->lonLeft); intLon < MIN (180, dispZone->lonRight); intLon += step) {
+      cairo_move_to (cr, getX (intLon), getY (MAX_LAT));
+      cairo_line_to (cr, getX (intLon), getY (-MAX_LAT));
+      cairo_stroke(cr);
+   }
+   // parallels
+   for (int intLat = MAX (-MAX_LAT, dispZone->latMin); intLat <= MIN (MAX_LAT, dispZone->latMax); intLat += MIN (step, MAX_LAT)) {
+      cairo_move_to (cr, dispZone->xR, getY (intLat));
+      cairo_line_to (cr, dispZone->xL, getY (intLat));
+      cairo_stroke(cr);
+   }
 }
 
 /*! exit when timeout expire */
@@ -1340,8 +1364,6 @@ static void drawGribCallback (GtkDrawingArea *area, cairo_t *cr, int width, int 
    // if (widget == NULL) return FALSE; //ATT
    double u, v, gust, w, twd, tws, uCurr, vCurr, currTwd, currTws, head_x, head_y;
    double tDeltaCurrent = zoneTimeDiff (&currentZone, &zone);
-   static int count = 2;
-   if (count <= 1) printf ("drawGribCallback count: %d\n", count);
    Pp pt;
    memset (&pt, 0, sizeof (Pp));
    guint8 r, g, b;
@@ -1353,44 +1375,28 @@ static void drawGribCallback (GtkDrawingArea *area, cairo_t *cr, int width, int 
    theTime = zone.timeStamp [kTime];
 
    CAIRO_SET_SOURCE_RGB_WHITE (cr);
-   cairo_paint(cr);                   // clear all
+   cairo_paint (cr);                         // clear all
    if (par.showColors != 0) {
-      if (par.constWindTws != 0) {
+      if (par.constWindTws != 0) {           // const Wind
          mapColors (par.constWindTws, &r, &g, &b);
          cairo_set_source_rgba (cr, r/255.0, g/255.0, b/255.0, 0.5);
          cairo_rectangle (cr, 1, 1, width, height);
          cairo_fill(cr);
       }
       else {
-         paintWind (cr, width, height);
+         paintWind (cr, width, height);      // Grib Wind
       }
    }
-   if (count <= 1) printf ("after paint\n");
 
-   draw_shp_map (cr);
-   if (count <= 1) printf ("after  draw_shp-map\n");
+   draw_shp_map (cr);                         // map
    
-   drawScale (cr, true, 100, dispZone.yB - 500, (getY (dispZone.latMax - 1) - getY (dispZone.latMax)), "Lat"); // Lat vertical 
-   drawScale (cr, false, 100, dispZone.yB - 150, 
-      (getX (dispZone.lonRight) - getX (dispZone.lonRight - 1)) / MAX (0.1, cos (DEG_TO_RAD * (dispZone.latMax + dispZone.latMin)/2)), 
-      "Lon");   // Lon horizontal
-   if (count <= 1) printf ("after  drawScale\n");
+   drawGrid (cr, &dispZone, (par.gridDisp) ? 1: 90);     // if gridDisp, every degree. Else only every 90°
+   drawScale (cr, &dispZone);  
 
-   // Quelques meridiens
-   CAIRO_SET_SOURCE_RGB_LIGHT_GRAY (cr);
-   cairo_set_line_width(cr, 0.5);
-   for (int intLon = -90; intLon <= 180; intLon += 90) {
-      cairo_move_to (cr, getX (intLon), getY (85.0));
-      cairo_line_to (cr, getX (intLon), getY (-85.0));
-      cairo_stroke(cr);
-   }
-   // Equateur
-   cairo_move_to (cr, dispZone.xR, getY (0.0));
-   cairo_line_to (cr, dispZone.xL, getY (0.0));
-   cairo_stroke(cr);
-   if (count <= 1) printf ("after Equateur\n");
 
-   //printf ("disp.latMin: %.2lf, disp.latMax: %.2lf, disp.lonLeft: %.2lf, disp.lonRight: %.2lf\ndisp.latStep: %.2lf, disp.latStep: %.2lf", dispZone.latMin, dispZone.latMax, dispZone.lonLeft, dispZone.lonRight, dispZone.latStep, dispZone.lonStep); 
+   //printf ("disp.latMin: %.2lf, disp.latMax: %.2lf, disp.lonLeft: %.2lf, disp.lonRight: %.2lf\
+   // ndisp.latStep: %.2lf, disp.latStep: %.2lf", dispZone.latMin, dispZone.latMax, dispZone.lonLeft,\
+   // dispZone.lonRight, dispZone.latStep, dispZone.lonStep); 
   
    // dessiner les barbules ou fleches de vent
    pt.lat = dispZone.latMin;
@@ -1419,12 +1425,11 @@ static void drawGribCallback (GtkDrawingArea *area, cairo_t *cr, int width, int 
       }
       pt.lat += (dispZone.latStep) / 2;
    }
-   if (count <= 1) printf ("after Barbules\n");
    calculateOrthoRoute ();
    drawOrthoRoute (cr, ORTHO_ROUTE_PARAM);
    drawLoxoRoute (cr);
    circle (cr, par.pOr.lon, par.pOr.lat, 0.0, 1.0, 0.0);
-   if (! isnan (my_gps_data.lon) && ! isnan (my_gps_data.lat))
+   if (gpsOK ())
       circle (cr, my_gps_data.lon, my_gps_data.lat , 1.0, 0.0, 0.0);
    if ((route.n != 0) && (isfinite(route.totDist)) && (route.totDist > 0)) { 
       drawAllIsochrones (cr, par.style);
@@ -1444,9 +1449,7 @@ static void drawGribCallback (GtkDrawingArea *area, cairo_t *cr, int width, int 
       }
       // cairo_fill_preserve(cr);
    }
-   if (count <= 1) printf ("after divers\n");
    drawPoi (cr);
-   if (count <= 1) printf ("after drawPoI\n");
    // Dessin egalement le rectangle de selection si en cours de selection
    if (selecting) {
       CAIRO_SET_SOURCE_RGBA_SELECTION(cr);
@@ -1454,14 +1457,11 @@ static void drawGribCallback (GtkDrawingArea *area, cairo_t *cr, int width, int 
       cairo_fill(cr);
    }
    drawForbidArea (cr);
-   if (count <= 1) printf ("after drawForbidArea\n");
    if (par.special) {
       on_run_button_clicked ();
       g_timeout_add (QUIT_TIME_OUT, exitOnTimeOut, NULL);
    }
    drawTrace (cr);
-   if (count <= 1) printf ("after all\n");
-   count += 1;
 }
 
 /*! draw the polar circles and scales */
@@ -1827,7 +1827,8 @@ static void polarDraw () {
 
    // Créer le widget GtkScale
   
-   int maxScale = ptMat->t[0][ptMat->nCol-1]; // max value of wind or waves
+   int maxScale = ptMat->t[0][ptMat->nCol-1];      // max value of wind or waves
+   // printf ("maxScale: %d\n", maxScale);
    GtkWidget *scale = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL, 0, maxScale, 1);
    gtk_scale_set_value_pos(GTK_SCALE(scale), GTK_POS_TOP);
    gtk_range_set_value(GTK_RANGE(scale), selectedTws);
@@ -1902,7 +1903,7 @@ static double getDepartureTimeInHour (MyDate *start) {
    return (startTime - theTime0)/3600.0;         // calcul ajout en secondes
 } 
    
-/*! Response for URL change */
+/*! Response when calendar choice done */
 static void calendarResponse (GtkDialog *dialog, gint response_id, gpointer user_data) {
    time_t currentTime = time (NULL);
    struct tm *gmtTime = gmtime (&currentTime);
@@ -2601,19 +2602,17 @@ static void poiEdit (GSimpleAction *action, GVariant *parameter, gpointer *data)
 
 /*! show GPS information */
 static void gpsDump () {
-   char line [MAX_SIZE_LINE];
-   char strLat [MAX_SIZE_LINE];
-   char strLon [MAX_SIZE_LINE];
-   if (isnan (my_gps_data.lon) || isnan (my_gps_data.lat)) {
+   char line [MAX_SIZE_LINE], strLat [MAX_SIZE_LINE], strLon [MAX_SIZE_LINE], str [MAX_SIZE_LINE];
+   if (!gpsOK ()) {
       infoMessage ("No GPS Data available", GTK_MESSAGE_INFO);
       return;
    }
 
-   GtkWidget *dialog = gtk_dialog_new_with_buttons ("GPS Information", GTK_WINDOW (window), GTK_DIALOG_DESTROY_WITH_PARENT,
+   gpsDialog = gtk_dialog_new_with_buttons ("GPS Information", GTK_WINDOW (window), GTK_DIALOG_DESTROY_WITH_PARENT,
                           NULL, NULL, NULL, NULL, NULL);
 
    GtkWidget *grid = gtk_grid_new();   
-   gtk_window_set_child (GTK_WINDOW (dialog), (GtkWidget *) grid);
+   gtk_window_set_child (GTK_WINDOW (gpsDialog), (GtkWidget *) grid);
 
    gtk_grid_set_column_spacing(GTK_GRID(grid), 10);
    gtk_grid_set_row_spacing(GTK_GRID(grid), 5);
@@ -2624,16 +2623,25 @@ static void gpsDump () {
       latToStr (my_gps_data.lat, par.dispDms, strLat), lonToStr (my_gps_data.lon, par.dispDms, strLon));
    lineReport (grid, 0, "network-workgroup-symbolic", "Position", line);
 
-   snprintf (line, sizeof (line), "%.2f\n", my_gps_data.alt);
-   lineReport (grid, 2, "airplane-mode-symbolic", "Altitude", line);
+   snprintf (line, sizeof (line), "%.2f°\n", my_gps_data.cog);
+   lineReport (grid, 2, "view-refresh-symbolic", "COG", line);
+
+   snprintf (line, sizeof (line), "%.2f Knots\n", my_gps_data.sog);
+   lineReport (grid, 4, "media-playlist-consecutive-symbolic", "SOG", line);
+
+   snprintf (line, sizeof (line), "%.2f meters\n", my_gps_data.alt);
+   lineReport (grid, 6, "airplane-mode-symbolic", "Altitude", line);
 
    snprintf (line, sizeof (line), "%d\n", my_gps_data.status);
-   lineReport (grid, 4, "dialog-information-symbolic", "Status", line);
+   lineReport (grid, 8, "dialog-information-symbolic", "Status", line);
 
    snprintf (line, sizeof (line), "%d\n", my_gps_data.nSat);
-   lineReport (grid, 6, "preferences-system-network-symbolic", "Number of satellites", line);
+   lineReport (grid, 10, "preferences-system-network-symbolic", "Number of satellites", line);
 
-   gtk_window_present (GTK_WINDOW (dialog));
+   snprintf (line, sizeof (line), "%s\n", epochToStr (my_gps_data.time, str, sizeof (str)));
+   lineReport (grid, 12, "alarm-symbolic", "UTC", line);
+
+   gtk_window_present (GTK_WINDOW (gpsDialog));
 }
 
 /*! launch help HTML file */
@@ -2653,13 +2661,16 @@ static void helpInfo () {
    char str [MAX_SIZE_LINE];
    char strVersion [MAX_SIZE_LINE];
   
-   snprintf (strVersion, sizeof (strVersion), "%s\nGTK version: %d.%d.%d\nGlib version: %d.%d.%d\nCairo Version:%s\nCompilation date: %s\n", 
-      PROG_VERSION, gtk_get_major_version(), gtk_get_minor_version(), gtk_get_micro_version(),
+   snprintf (strVersion, sizeof (strVersion), "%s\nGTK version: %d.%d.%d\nGlib version: %d.%d.%d\nCairo Version:%s\n \
+      GPSD version: %d.%d\nECCODES version from ECMWF: %s\n Curl version: %s\n Shapefil version: %s\n Compilation date: %s\n", 
+      PROG_VERSION,
+      gtk_get_major_version(), gtk_get_minor_version(), gtk_get_micro_version(),
       // webkit_get_major_version (), webkit_get_minor_version (),webkit_get_micro_version (), // ATT GTK4 CHANGE
       GLIB_MAJOR_VERSION, GLIB_MINOR_VERSION, GLIB_MICRO_VERSION,
-      CAIRO_VERSION_STRING,
+      CAIRO_VERSION_STRING, 
+      GPSD_API_MAJOR_VERSION, GPSD_API_MINOR_VERSION,
+      ECCODES_VERSION_STR, LIBCURL_VERSION, "1.56", 
       __DATE__);
-   strncat (strVersion, LIBRAIRIES, MAX_SIZE_LINE - strlen (strVersion));
    GtkWidget *p_about_dialog = gtk_about_dialog_new ();
    gtk_about_dialog_set_version (GTK_ABOUT_DIALOG (p_about_dialog), strVersion);
    gtk_about_dialog_set_program_name  (GTK_ABOUT_DIALOG (p_about_dialog), PROG_NAME);
@@ -2957,9 +2968,6 @@ static void initScenario () {
    nIsoc = 0;
    route.n = 0;
    route.destinationReached = false;
-   wayPoints.n = 0;
-   wayPoints.t[0].lat = par.pDest.lat;
-   wayPoints.t[0].lon = par.pDest.lon;
 }
 
 /*! Call back editScenario */
@@ -3674,12 +3682,14 @@ static void change () {
    // Création des éléments pour cog et cog step
    GtkWidget *spin_cog = gtk_spin_button_new_with_range(1, 20, 1);
    gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin_cog), par.cogStep);
-   GtkWidget *spin_range = gtk_spin_button_new_with_range(50, 100, 5);
+   GtkWidget *spin_range = gtk_spin_button_new_with_range(50, 150, 5);
    gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin_range), par.rangeCog);
    labelCreate (tab_tec, "Cog Step",                   0, 2);
    gtk_grid_attach(GTK_GRID(tab_tec), spin_cog,        1, 2, 1, 1);
    labelCreate (tab_tec, "Cog Range",                  2, 2);
    gtk_grid_attach(GTK_GRID(tab_tec), spin_range,      3, 2, 1, 1);
+   g_signal_connect (spin_cog, "value-changed", G_CALLBACK (intSpinUpdate), &par.cogStep);
+   g_signal_connect (spin_range, "value-changed", G_CALLBACK (intSpinUpdate), &par.rangeCog);
 
    entry_start_time = doubleToEntry (par.startTimeInHours);
    entry_time_step = doubleToEntry (par.tStep);
@@ -3697,13 +3707,14 @@ static void change () {
    gtk_grid_attach(GTK_GRID(tab_tec), spin_opt,          1, 4, 1, 1);
    g_signal_connect (spin_opt, "value-changed", G_CALLBACK (intSpinUpdate), &par.opt);
    
+   // Création des éléments pour Max Isoc
    labelCreate (tab_tec, "Max Isoc",                     2, 4);
    GtkWidget *spin_max_iso = gtk_spin_button_new_with_range(0, MAX_N_ISOC, 1);
    gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin_max_iso), par.maxIso);
    gtk_grid_attach(GTK_GRID(tab_tec), spin_max_iso,      3, 4, 1, 1);
    g_signal_connect (spin_max_iso, "value-changed", G_CALLBACK (intSpinUpdate), &par.maxIso);
 
-   // Création des éléments pour minPt et Isoc
+   // Création des éléments pour minPt
    labelCreate (tab_tec, "xWind",                         0, 5);
    entry_x_wind = doubleToEntry (par.xWind);
    gtk_grid_attach (GTK_GRID (tab_tec), entry_x_wind,     1, 5, 1, 1);
@@ -3730,13 +3741,14 @@ static void change () {
    gtk_combo_box_set_active(GTK_COMBO_BOX(opt_combo_box), par.minPt);
    gtk_grid_attach(GTK_GRID(tab_tec), opt_combo_box,      1, 5, 1, 1);
    */
+   // Création des éléments pour JFactor
    labelCreate (tab_tec, "jFactor",                    2, 5);
    GtkWidget *spin_jFactor = gtk_spin_button_new_with_range (0, 1000, 10);
    gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin_jFactor), par.jFactor);
    gtk_grid_attach(GTK_GRID(tab_tec), spin_jFactor,       3, 5, 1, 1);
    g_signal_connect (spin_jFactor, "value-changed", G_CALLBACK (intSpinUpdate), &par.jFactor);
    
-   // Création des éléments pour sector
+   // Création des éléments pour k Factor & N sector
    GtkWidget *spin_kFactor = gtk_spin_button_new_with_range(0, 4, 1);
    gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin_kFactor), par.kFactor);
    GtkWidget *spin_n_sectors = gtk_spin_button_new_with_range(0, 1000, 10);
@@ -3852,19 +3864,25 @@ static void change () {
    g_signal_connect (G_OBJECT(checkboxCurrent), "toggled", G_CALLBACK (on_checkbox_toggled), &par.currentDisp);
    gtk_grid_attach(GTK_GRID (tab_display), checkboxCurrent,        2, 6, 1, 1);
 
+   // Boîte à cocher pour "grille"
+   GtkWidget *checkboxGrid = gtk_check_button_new_with_label("Grid");
+   gtk_check_button_set_active ((GtkCheckButton *) checkboxGrid, par.gridDisp);
+   g_signal_connect (G_OBJECT(checkboxGrid), "toggled", G_CALLBACK (on_checkbox_toggled), &par.gridDisp);
+   gtk_grid_attach(GTK_GRID (tab_display), checkboxGrid,        0, 7, 1, 1);
+
    // Boîte à cocher pour "closest"
    GtkWidget *checkboxClosest = gtk_check_button_new_with_label("Closest");
    gtk_check_button_set_active ((GtkCheckButton *) checkboxClosest, par.closestDisp);
    g_signal_connect(G_OBJECT(checkboxClosest), "toggled", G_CALLBACK (on_checkbox_toggled), &par.closestDisp);
-   gtk_grid_attach(GTK_GRID (tab_display), checkboxClosest,        0, 7, 1, 1);
+   gtk_grid_attach(GTK_GRID (tab_display), checkboxClosest,        0, 8, 1, 1);
 
    // Boîte à cocher pour "focal point"
    GtkWidget *checkboxFocal = gtk_check_button_new_with_label("Focal Point");
    gtk_check_button_set_active ((GtkCheckButton *) checkboxFocal, par.focalDisp);
    g_signal_connect(G_OBJECT(checkboxFocal), "toggled", G_CALLBACK (on_checkbox_toggled), &par.focalDisp);
-   gtk_grid_attach(GTK_GRID (tab_display), checkboxFocal,          2, 7, 1, 1);
+   gtk_grid_attach(GTK_GRID (tab_display), checkboxFocal,          2, 8, 1, 1);
 
-   gtk_grid_attach(GTK_GRID(tab_display), separator, 0, 8, 10, 1);
+   gtk_grid_attach(GTK_GRID(tab_display), separator, 0, 9, 10, 1);
 
    // Créer le widget GtkScale
    const int MAX_LEVEL_POI_VISIBLE = 5; 
@@ -3926,7 +3944,8 @@ static void on_right_button_clicked (GtkWidget *widget, gpointer data) {
 
 /*! center the map on GPS position */ 
 static void on_gps_button_clicked (GtkWidget *widget, gpointer data) {
-   if (isnan (my_gps_data.lon) || isnan (my_gps_data.lat))
+   initGPS ();
+   if (!gpsOK ())
       infoMessage ("No GPS position available", GTK_MESSAGE_WARNING);
    else {
       centerDispZone (my_gps_data.lon, my_gps_data.lat);
@@ -4201,7 +4220,7 @@ static gboolean on_key_event (GtkEventController *controller, guint keyval, guin
    char buffer [MAX_SIZE_BUFFER];
    switch (keyval) {
    case GDK_KEY_F1:
-      if (isnan (my_gps_data.lon) || isnan (my_gps_data.lat))
+      if (!gpsOK ())
          infoMessage ("No GPS position available", GTK_MESSAGE_WARNING);
       else {
          par.pOr.lat = my_gps_data.lat;
@@ -4532,6 +4551,20 @@ static void createButton (GtkWidget *toolBox, char *iconName, void *callBack) {
    gtk_box_append (GTK_BOX (toolBox), button);
 }
 
+/*! update info GPS */ 
+gboolean update_GPS_callback (gpointer data) {
+   char str [MAX_SIZE_LINE], strLat [MAX_SIZE_LINE], strLon [MAX_SIZE_LINE];
+   GtkWidget *label = GTK_WIDGET(data);
+   if (gpsOK ())
+      snprintf (str, sizeof (str), "   Lat: %s Lon: %s  COG: %.2lf°  SOG: %.2lf Kn",
+         latToStr (my_gps_data.lat, par.dispDms, strLat), lonToStr (my_gps_data.lon, par.dispDms, strLon),
+         my_gps_data.cog, my_gps_data.sog);
+   else 
+      snprintf (str, sizeof (str), "   No GPS Info");
+   gtk_label_set_text(GTK_LABEL(label), str);
+   return G_SOURCE_CONTINUE;
+}
+
 /*! main window set up */
 static void app_activate (GApplication *application) {
    app = GTK_APPLICATION (application);
@@ -4564,6 +4597,9 @@ static void app_activate (GApplication *application) {
    createButton (toolBox, "find-location-symbolic", on_gps_button_clicked);
    createButton (toolBox, "edit-select-all", paletteDraw);
    createButton (toolBox, "applications-engineering-symbolic", testFunction);
+   
+   GtkWidget *gpsInfo = gtk_label_new (" GPS Info coming...");
+   gtk_box_append (GTK_BOX (toolBox), gpsInfo);
   
    // Création de la barre d'état
    statusbar = gtk_statusbar_new();
@@ -4607,6 +4643,8 @@ static void app_activate (GApplication *application) {
    GtkEventController *key_controller = gtk_event_controller_key_new();
    gtk_widget_add_controller (window, key_controller); // window and not drawing_area required !!!
    g_signal_connect(key_controller, "key-pressed", G_CALLBACK (on_key_event), NULL);
+ 
+   guint timeout_id = g_timeout_add_seconds (GPS_TIME_OUT, update_GPS_callback, gpsInfo);
    
    gtk_box_append (GTK_BOX (vBox), toolBox);
    gtk_box_append (GTK_BOX (vBox), drawing_area);
@@ -4785,8 +4823,7 @@ int main (int argc, char *argv[]) {
    char fileName [MAX_SIZE_FILE_NAME];
    bool ret = true;
    // initialisations
-   my_gps_data.ret = initGPS ();
-   printf ("initGPS        : %d\n", my_gps_data.ret);
+   initGPS ();
    if (setlocale (LC_ALL, "C") == NULL) {              // very important for scanf decimal numbers
       fprintf (stderr, "Error in main: setlocale failed");
       return EXIT_FAILURE;

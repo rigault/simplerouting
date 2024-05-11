@@ -29,7 +29,6 @@
 #define PROG_AUTHOR           "René Rigault"
 #define DESCRIPTION           "Routing calculates best route from pOr (Origin) to pDest (Destination) \
    taking into account grib files and boat polars"
-#define LIBRAIRIES            "eccodes from ECMWF\ncurl\ngpsd\nshapelib\n"
 #define MILLION               1000000
 #define NIL                   (-100000)
 #define MAX_N_ISOC            512               // max number of isochrones in isocArray
@@ -79,6 +78,21 @@ typedef struct {
     double x;
     double y;
 } Coordinates;
+
+/*! displayed zone */
+typedef struct {
+   guint xL;
+   guint xR;
+   guint yB;
+   guint yT;
+   double latMin;
+   double latMax;
+   double lonLeft;
+   double lonRight;
+   double latStep;
+   double lonStep;
+   double zoom;
+} DispZone;
 
 /*! Structure for SHP and forbid zones */
 typedef struct {
@@ -338,6 +352,7 @@ typedef struct {
    int currentDisp;                          // display current
    int waveDisp;                             // display wave height
    int averageOrGustDisp;                    // display wave height
+   int gridDisp;                             // display meridian and parallels
    int closestDisp;                          // display closest point to pDest in isochrones
    int focalDisp;                            // display focal point 
    double penalty0;                          // penalty in hours when amure change front
@@ -351,7 +366,7 @@ typedef struct {
    char webkit [MAX_SIZE_NAME];              // name of webkit application
    char spreadsheet [MAX_SIZE_NAME];         // name of spreadshhet application
    char mailPw [MAX_SIZE_NAME];              // password for smtp and imap
-   int nForbidZone;                          // number of forbidden zones
+   int  nForbidZone;                         // number of forbidden zones
    char forbidZone [MAX_N_FORBID_ZONE][MAX_SIZE_LINE]; // array of forbid zones
 } Par;
 
@@ -372,8 +387,9 @@ typedef struct {
    double lat;
    double lon;
    double alt;
+   double cog;    // degrees
+   double sog;    // Knots
    int    status;
    int    nSat;
-   struct timespec timestamp;
-   int    ret;
+   time_t time;   // epoch time
 } MyGpsData;
