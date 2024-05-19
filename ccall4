@@ -7,7 +7,7 @@ gcc -c show4.c `pkg-config --cflags gtk4`
 
 #gcc show.o option.o rutil.o engine.o -o routing -lcurl -pthread -lgps -lshp -leccodes -lm $(pkg-config --cflags --libs webkit2gtk-4.1) `pkg-config --cflags --libs gtk4`
 gcc show4.o option.o rutil.o engine.o -o routing -lcurl -pthread -lgps -lshp -leccodes -lm `pkg-config --cflags --libs gtk4`
-
+# -lnova required if libnova used
 rm -f *.o
 mv routing ../.
 

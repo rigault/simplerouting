@@ -6,6 +6,7 @@
 #include <sys/time.h>
 #include "rtypes.h"
 #include "rutil.h"
+#include "inline.h"
 #include "engine.h"
 
 /*! Manage command line option reduced to one character */

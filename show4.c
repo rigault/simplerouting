@@ -42,7 +42,6 @@
 
 #define MAIN_WINDOW_DEFAULT_WIDTH  1200
 #define MAIN_WINDOW_DEFAULT_HEIGHT 600
-//#define APPLICATION_ID        "com.github.ToshioCP.menu1"  // NEW WITH GTK4
 #define APPLICATION_ID        "com.routing"  // NEW WITH GTK4
 #define MIN_ZOOM_POI_VISIBLE  30
 #define BOAT_UNICODE          "⛵"
@@ -54,7 +53,7 @@
 #define POLAR_HEIGHT          500
 #define DISP_NB_LAT_STEP      10
 #define DISP_NB_LON_STEP      10
-#define ANIMATION_TEMPO       100
+#define ANIMATION_TEMPO       10
 #define QUIT_TIME_OUT         1000
 #define ROUTING_TIME_OUT      1000
 #define GRIB_TIME_OUT         2000
@@ -64,7 +63,7 @@
 #define MIN_NAME_SIZE         3     // mimimum poi name length to be considered
 #define K_LON_LAT            (0.71) // lon deformation
 #define LON_LAT_RATIO         2.8   // not that useful
-#define GPS_TIME_OUT          10
+#define GPS_TIME_INTERVAL     2     // seconds
 
 #define CAIRO_SET_SOURCE_RGB_BLACK(cr)             cairo_set_source_rgb (cr,0,0,0)
 #define CAIRO_SET_SOURCE_RGB_WHITE(cr)             cairo_set_source_rgb (cr,1.0,1.0,1.0)
@@ -83,6 +82,8 @@
 #define CAIRO_SET_SOURCE_RGBA_FORBID_AREA(cr)      cairo_set_source_rgba (cr,0.5,0.5,0.5,0.5)                        // forbid area in gray
 #define CAIRO_SET_SOURCE_RGBA_SELECTION(cr)        cairo_set_source_rgba (cr,1.0,0.0,0.0,0.5)                        // selection in semi-transparent red
 #define CAIRO_SET_SOURCE_RGBA_POLAR_TWS(cr)        cairo_set_source_rgba (cr,1.0,0.0,0.0,1.0)                        // specific tws polar red
+
+double vOffsetLocalUTC; 
 
 GdkRGBA colors [] = {{1.0,0,0,1}, {0,1.0,0,1},  {0,0,1.0,1},{0.5,0.5,0,1},{0,0.5,0.5,1},{0.5,0,0.5,1},{0.2,0.2,0.2,1},{0.4,0.4,0.4,1},{0.8,0,0.2,1},{0.2,0,0.8,1}}; // Colors for Polar curve
 const int nColors = 10;
@@ -109,11 +110,8 @@ bool   gribRequestRunning = false;
 bool   selecting = FALSE;
 bool   updatedColors = false; 
 int    provider = SAILDOCS_GFS;
-MyDate vStart;
-MyDate *start = &vStart;    
-struct tm *timeInfos;                     // conversion en struct tm
-long   theTime;
-int    kTime = 0;
+struct tm startInfo;
+long   theTime = 0;
 int    polarType = POLAR;
 int    segmentOrBezier = SEGMENT;
 int    selectedPointInLastIsochrone = 0;
@@ -148,7 +146,7 @@ GtkWidget *val_size_eval = NULL;
 GtkWidget *menuWindow = NULL;        // Pop up menu Right Click
 GtkWidget *menuGrib = NULL;          // Pop up menu Meteoconsult
 GtkWidget *menuHist = NULL;          // Pop up menu Hustory Routes
-GtkWidget *gpsDialog;                // window for GPS info
+GtkWidget *labelInfoRoute;           // label line for route info
 
 Coordinates whereWasMouse, whereIsMouse, whereIsPopup;
 
@@ -221,7 +219,24 @@ static void infoMessage (char *message, GtkMessageType typeMessage) {
    g_signal_connect_swapped (dialogBox, "response", G_CALLBACK (gtk_window_destroy), dialogBox);
 }
 
-/*! open map using open street map or open sea map*/
+/*! open windy
+   Example: https://www.windytv.com/?36.908,-93.049,8,d:picker 
+*/
+static void windy (GSimpleAction *action, GVariant *parameter, gpointer *data) {
+   const char *URL = "https://www.windy.com";
+   const int zoom = 8; // CLAMP (9 - log2 (diffLat), 2, 19);
+
+   char command [MAX_SIZE_LINE * 2];
+   char mapUrl [MAX_SIZE_LINE];
+   
+   snprintf (mapUrl, sizeof (mapUrl), "%s?%.2lf%%2C%.2lf%%2C%d%%2Cd:picker", URL, par.pOr.lat, par.pOr.lon, zoom);
+   snprintf (command, MAX_SIZE_LINE * 2, "%s %s", par.webkit, mapUrl);
+   printf ("popen %s\n", command);
+   if (popen (command, "r") == NULL)
+      fprintf (stderr, "Error in windy: popen call: %s\n", command);
+}
+
+/*! open map using open street map or open sea map */
 static void openMap (GSimpleAction *action, GVariant *parameter, gpointer *data) {
    int *comportement = (int *) data;
    const char* OSM_URL [] = {"https://www.openstreetmap.org/export/", "https://map.openseamap.org/"};
@@ -516,31 +531,40 @@ static void mapColors (double tws, guint8 *r, guint8 *g, guint8 *b) {
    *g = wColors [i-1][1] + ratio * (wColors [i][1] - wColors [i-1][1]);
    *b = wColors [i-1][2] + ratio * (wColors [i][2] - wColors [i-1][2]);
 }
- 
-/*! true if P is both within the zone and the display zone */
-static bool isInDispZone (Pp pt) {
-   if (par.constWindTws > 0) return true;
-   return (pt.lat >= zone.latMin) && (pt.lat <= zone.latMax) && (pt.lon >= zone.lonLeft) && (pt.lon <= zone.lonRight) &&
-          (pt.lat >= dispZone.latMin) && (pt.lat <= dispZone.latMax) && (pt.lon >= dispZone.lonLeft) && (pt.lon <= dispZone.lonRight);
+
+/*! gray if night  */
+static void paintDayNight (cairo_t *cr, int width, int height) {
+   double lat, lon;
+   for (int x = 0; x < width; x++) {
+      for (int y = 0; y < height; y++) {
+         lat = yToLat (y);
+         lon = xToLon (x);
+         if (! isDayLight (theTime, lat, lon)) {
+            cairo_set_source_rgba (cr, 0.5, 0.5, 0.5, 0.5);
+            cairo_rectangle (cr, x, y, 1, 1);
+            cairo_fill (cr);
+         }
+      }
+   }
 }
  
 /*! update colors for wind */
 static void paintWind (cairo_t *cr, int width, int height) {
+   double u, v, gust, w, twd;
    double tws;
    Pp pt;
-   guint8 r, g, b;
+   guint8 red, green, blue;
    for (int x = 0; x < width; x++) {
       for (int y = 0; y < height; y++) {
          memset (&pt, 0, sizeof (Pp));
          pt.lat = yToLat (y);
          pt.lon = xToLon (x);
-         if (isInDispZone (pt)) {
-            if (par.averageOrGustDisp == 0)
-               tws = findTwsByIt (&pt, (MIN (kTime, zone.nTimeStamp -1)), tGribData  [WIND]);
-            else
-               tws = MS_TO_KN * findGustByIt (&pt, (MIN (kTime, zone.nTimeStamp -1)), tGribData  [WIND]);
-            mapColors (tws, &r, &g, &b);
-            cairo_set_source_rgba (cr, r/255.0, g/255.0, b/255.0, 0.5);
+         if (isInZone (&pt, &zone)) {
+	         findWind (&pt, theTime, &u, &v, &gust, &w, &twd, &tws);
+            if (par.averageOrGustDisp != 0)
+               tws = MAX (tws, MS_TO_KN * gust);
+            mapColors (tws, &red, &green, &blue);
+            cairo_set_source_rgba (cr, red/255.0, green/255.0, blue/255.0, 0.5);
             cairo_rectangle (cr, x, y, 1, 1);
             cairo_fill (cr);
          }
@@ -650,22 +674,22 @@ static void orthoPoints (cairo_t *cr, double lat1, double lon1, double lat2, dou
    cairo_stroke (cr);
 }
 
-/*! reset way route with only pDest
+/*! reset way route with only pDest */
 static void initWayPoints () {
    wayPoints.n = 0;
    wayPoints.totOrthoDist = 0;
    wayPoints.totLoxoDist = 0;
    wayPoints.t [0].lat = par.pDest.lat;
    wayPoints.t [0].lon = par.pDest.lon;
-}*/
+}
 
 /*! return label associated to x */
 static GtkWidget *doubleToLabel (double x) {
    char str [MAX_SIZE_LINE];
    snprintf (str, sizeof (str), "%.2lf", x);
    GtkWidget *label = gtk_label_new (str);
-   gtk_label_set_yalign(GTK_LABEL(label), 0);
-   gtk_label_set_xalign(GTK_LABEL(label), 0);   
+   gtk_label_set_yalign (GTK_LABEL(label), 0);
+   gtk_label_set_xalign (GTK_LABEL(label), 0);   
    return label;
 }
 
@@ -928,21 +952,55 @@ static gboolean drawAllIsochrones (cairo_t *cr, int style) {
    return FALSE;
 }
 
-/*! give the focus on point in route at kTime */
-static void focusOnPointInRoute (cairo_t *cr)  {
+/*! find index in route with closest time to t 
+   -1 if terminated */
+static int findIndexInRoute (double t) {
    int i;
-   double lat, lon, deltaKtime;
-   double deltaTimeStamp = (double) (zone.timeStamp [1] - zone.timeStamp [0]);
-   if (route.n == 0) return;
-   if (kTime < route.kTime0) i = 0;
+   if (t < route.t[0].time) return 0;
+   if (t > route.t[route.n - 1].time) return -1;
+   for (i = 0; i < route.n; i++) {
+      if (route.t[i].time > t) break;
+   }
+   if ((t - route.t[i-1].time) < (route.t[i].time - t))
+      return i - 1;
+   else return i;
+}
+
+/*! give the focus on point in route at theTime  */
+static void focusOnPointInRoute (cairo_t *cr)  {
+   char strDate [MAX_SIZE_LINE], strLat [MAX_SIZE_NAME] = "", strLon [MAX_SIZE_NAME] = "";
+   char sInfoRoute [MAX_SIZE_LINE] = "";
+   int i;
+   double lat, lon;
+   if (route.n == 0) {
+      gtk_label_set_text (GTK_LABEL(labelInfoRoute), sInfoRoute);
+      return;
+   }
+   i = findIndexInRoute (theTime);
+    
+   if (route.destinationReached && (i == -1)) {   
+      lat = par.pDest.lat;
+      lon = par.pDest.lon;
+      snprintf (sInfoRoute, sizeof (sInfoRoute), 
+         "Destination Reached on: %s Lat: %-12s Lon: %-12s", \
+         newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours + route.duration, strDate), \
+         latToStr (lat, par.dispDms, strLat), lonToStr (lon, par.dispDms, strLon));
+   }
    else {
-      deltaKtime = (double) (kTime - route.kTime0);
-      i = (int) (deltaKtime * deltaTimeStamp / par.tStep);
-   }  
-   if (i >= route.n) i = route.n -1;
-   lat = route.t[i].lat;
-   lon = route.t[i].lon;
+      if (i >= route.n) i = route.n - 1;
+      lat = route.t[i].lat;
+      lon = route.t[i].lon;
+      snprintf (sInfoRoute, sizeof (sInfoRoute), 
+         "Route Date: %s Lat: %-12s Lon: %-12s   COG: %6.2f°   SOG:%5.2lfKn   TWD:%03d° TWS:%5.2lfKn   Gust: %5.2lfKn   Wave: %5.2lfm   %s", \
+         newDate (zone.dataDate [0], (zone.dataTime [0]/100) + route.t[i].time, strDate), \
+         latToStr (route.t[i].lat, par.dispDms, strLat), lonToStr (route.t[i].lon, par.dispDms, strLon), \
+         route.t[i].lCap, route.t[i].ld/par.tStep, \
+         (int) (route.t[i].twd + 360) % 360, route.t[i].tws, \
+         MS_TO_KN * route.t[i].g, route.t[i].w,
+         (isDayLight (route.t[i].time, lat, lon)) ? "Day" : "Night");
+   }
    showUnicode (cr, BOAT_UNICODE, lon, lat);
+   gtk_label_set_text (GTK_LABEL(labelInfoRoute), sInfoRoute);
    circle (cr, lon, lat, 1.0, 0.0, 0.0); // red
 }
 
@@ -1262,14 +1320,14 @@ static void statusBarUpdate () {
    pt.lat = yToLat (whereIsMouse.y);
    pt.lon = xToLon (whereIsMouse.x);
    pt.lon = lonCanonize (pt.lon);
-	findWind (&pt, zone.timeStamp [kTime], &u, &v, &g, &w, &twd, &tws);
+	findWind (&pt, theTime, &u, &v, &g, &w, &twd, &tws);
    strcpy (seaEarth, (isSea (pt.lon, pt.lat)) ? "Authorized" : "Forbidden");
-	findCurrent (&pt, zone.timeStamp [kTime] - tDeltaCurrent, &uCurr, &vCurr, &currTwd, &currTws);
+	findCurrent (&pt, theTime - tDeltaCurrent, &uCurr, &vCurr, &currTwd, &currTws);
    
-   snprintf (sStatus, sizeof (sStatus), "%s         %d/%zu      %s %s, %s\
+   snprintf (sStatus, sizeof (sStatus), "%s         %ld/%ld      %s %s, %s\
       Wind: %03d° %05.2lf Knots  Gust: %05.2lf Knots  Waves: %05.2lf  Current: %03d° %05.2lf Knots         %s      Zoom: %.2lf       %s",
-      newDate (zone.dataDate [0], (zone.dataTime [0]/100)+ zone.timeStamp [kTime], pDate),\
-      kTime + 1, zone.nTimeStamp, " ",\
+      newDate (zone.dataDate [0], (zone.dataTime [0]/100) + theTime, pDate),\
+      theTime, zone.timeStamp [zone.nTimeStamp-1], " ",\
       latToStr (pt.lat, par.dispDms, strLat),\
       lonToStr (pt.lon, par.dispDms, strLon),\
       (int) (twd + 360) % 360, tws, MS_TO_KN * g, w, 
@@ -1334,6 +1392,40 @@ static void drawScale (cairo_t *cr, DispZone *dispZone) {
    cairo_stroke(cr);
 }
 
+/* Provide resume of information */
+void static drawInfo (cairo_t *cr, int width, int height) {
+   char str [MAX_SIZE_BUFFER];
+   char strDate [MAX_SIZE_LINE];
+   const guint INFO_X = 30;
+   const guint INFO_Y = 50;
+   const int DELTA = 50;
+   cairo_select_font_face(cr, "Courier", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+   CAIRO_SET_SOURCE_RGB_DARK_GRAY(cr);
+
+   cairo_set_font_size(cr, 30.0); // Taille de la police en points
+   char fileName [MAX_SIZE_FILE_NAME];
+   buildRootName (par.traceFileName, fileName);
+   double od, ld, rd;
+   if (distanceTraceDone (fileName, &od, &ld, &rd)) {
+      snprintf (str, MAX_SIZE_LINE, "Miles from Origin...: %8.2lf, Real Dist.......: %.2lf", od, rd);
+   }
+   else fprintf (stderr, "Error in distance trace calculation");
+   cairo_move_to (cr, INFO_X, INFO_Y);
+   cairo_show_text (cr, str);
+   
+   calculateOrthoRoute ();
+   snprintf (str, MAX_SIZE_LINE, "Miles to Destination: %8.2lf", wayPoints.totOrthoDist);
+   cairo_move_to (cr, INFO_X, INFO_Y + DELTA);
+   cairo_show_text (cr, str);
+   
+   if (route.n > 0) {
+      newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours + route.duration, strDate);
+      snprintf (str, MAX_SIZE_BUFFER, "By Sail to Dest.....: %8.2lf, Expected arrival: %s", route.totDist, strDate);
+      cairo_move_to (cr, INFO_X, INFO_Y + 2 * DELTA);
+      cairo_show_text (cr, str);
+   }
+}
+
 /*! draw grid with meridians and parallels */
 static void drawGrid (cairo_t *cr, DispZone *dispZone, int step) {
    const int MAX_LAT = 85;
@@ -1361,7 +1453,6 @@ static gboolean exitOnTimeOut (gpointer data) {
 
 /*! draw the main window */
 static void drawGribCallback (GtkDrawingArea *area, cairo_t *cr, int width, int height, gpointer user_data) {
-   // if (widget == NULL) return FALSE; //ATT
    double u, v, gust, w, twd, tws, uCurr, vCurr, currTwd, currTws, head_x, head_y;
    double tDeltaCurrent = zoneTimeDiff (&currentZone, &zone);
    Pp pt;
@@ -1372,7 +1463,6 @@ static void drawGribCallback (GtkDrawingArea *area, cairo_t *cr, int width, int 
    dispZone.xR = width;  // left
    dispZone.yT = 0;      // top
    dispZone.yB = height; // bottom
-   theTime = zone.timeStamp [kTime];
 
    CAIRO_SET_SOURCE_RGB_WHITE (cr);
    cairo_paint (cr);                         // clear all
@@ -1387,6 +1477,7 @@ static void drawGribCallback (GtkDrawingArea *area, cairo_t *cr, int width, int 
          paintWind (cr, width, height);      // Grib Wind
       }
    }
+   // paintDayNight (cr, width, height);
 
    draw_shp_map (cr);                         // map
    
@@ -1429,15 +1520,15 @@ static void drawGribCallback (GtkDrawingArea *area, cairo_t *cr, int width, int 
    drawOrthoRoute (cr, ORTHO_ROUTE_PARAM);
    drawLoxoRoute (cr);
    circle (cr, par.pOr.lon, par.pOr.lat, 0.0, 1.0, 0.0);
-   if (gpsOK ())
+   if (my_gps_data.OK)
       circle (cr, my_gps_data.lon, my_gps_data.lat , 1.0, 0.0, 0.0);
    if ((route.n != 0) && (isfinite(route.totDist)) && (route.totDist > 0)) { 
       drawAllIsochrones (cr, par.style);
       drawAllRoutes (cr);
-      focusOnPointInRoute (cr);
       Pp selectedPt = isocArray [nIsoc - 1][selectedPointInLastIsochrone]; // selected point in last isochrone
       circle (cr, selectedPt.lon, selectedPt.lat, 1.0, 0.0, 1.1);
    }
+   focusOnPointInRoute (cr);
    if (destPressed) {
       showUnicode (cr, DESTINATION_UNICODE, par.pDest.lon, par.pDest.lat);
       circle (cr, par.pDest.lon, par.pDest.lat, 0.0, 0.0, 1.0);
@@ -1462,6 +1553,8 @@ static void drawGribCallback (GtkDrawingArea *area, cairo_t *cr, int width, int 
       g_timeout_add (QUIT_TIME_OUT, exitOnTimeOut, NULL);
    }
    drawTrace (cr);
+   if (par.infoDisp)
+      drawInfo (cr, width, height);
 }
 
 /*! draw the polar circles and scales */
@@ -1865,60 +1958,56 @@ static void polarDraw () {
 }
 
 /*! time management init */
-static void initStart (MyDate *start) {
+static void initStart (struct tm *start) {
    long intDate = zone.dataDate [0];
    long intTime = zone.dataTime [0];
-   double forecastTime = par.startTimeInHours;
-   //double forecastTime = zone.timeStamp [route.kTime0];
-   time_t seconds = 0;
-   struct tm *tm0 = localtime (&seconds);;
-   tm0->tm_year = ((int ) intDate / 10000) - 1900;
-   tm0->tm_mon = ((int) (intDate % 10000) / 100) - 1;
-   tm0->tm_mday = (int) (intDate % 100);
-   tm0->tm_hour = 0; tm0->tm_min = 0; tm0->tm_sec = 0;
-   time_t theTime = mktime (tm0);                        // converion struct tm en time_t
-   theTime += 3600 * (intTime/100 + forecastTime);       // calcul ajout en secondes
-   timeInfos = localtime (&theTime);                     // conversion en struct tm
-   start->year = timeInfos->tm_year + 1900;
-   start->mon = timeInfos->tm_mon;
-   start->day=  timeInfos->tm_mday;
-   start->hour = timeInfos->tm_hour;
-   start->min = timeInfos->tm_min;
-   start->sec = 0;
+   struct tm tm0 = {0};
+   start->tm_year = (intDate / 10000) - 1900;
+   start->tm_mon = ((intDate % 10000) / 100) - 1;
+   start->tm_mday = intDate % 100;
+   start->tm_hour = intTime / 100;
+   start->tm_min = intTime % 100;
+   start->tm_isdst = -1;                                       // avoid adjustments with hours summer winter
+   start->tm_sec += 3600 * par.startTimeInHours;               // calcul ajout en secondes
+   mktime (start);
+}
+
+/*! time management init */
+static void OinitStart (struct tm *start) {
+   long intDate = zone.dataDate [0];
+   long intTime = zone.dataTime [0];
+   struct tm tm0 = {0};
+   tm0.tm_year = (intDate / 10000) - 1900;
+   tm0.tm_mon = ((intDate % 10000) / 100) - 1;
+   tm0.tm_mday = intDate % 100;
+   tm0.tm_hour = intTime / 100;
+   tm0.tm_min = intTime % 100;
+   tm0.tm_isdst = -1;                                       // avoid adjustments with hours summer winter
+   tm0.tm_sec += 3600 * par.startTimeInHours;               // calcul ajout en secondes
+   mktime (&tm0);
+   memcpy (start, &tm0, sizeof (*start));
 }
 
 /*! calculate difference in hours between departure time and time 0 */
-static double getDepartureTimeInHour (MyDate *start) {
-   time_t seconds = 0;
-   struct tm *tmStart = gmtime (&seconds);
-   time_t theTime0 = dateToTime_t (zone.dataDate [0]) + 3600 * (zone.dataTime [0])/100;
-  
-   tmStart->tm_year = start->year - 1900;
-   tmStart->tm_mon = start->mon;
-   tmStart->tm_mday = start->day;
-   tmStart->tm_hour = start->hour;; 
-   tmStart->tm_min = start->min; 
-   tmStart->tm_sec = start->sec;;
-   time_t startTime = mktime (tmStart);          // conversion struct tm en time_t
-   return (startTime - theTime0)/3600.0;         // calcul ajout en secondes
+static double getDepartureTimeInHour (struct tm *start) {
+   time_t theTime0 = gribDateTimeToEpoch (zone.dataDate [0], zone.dataTime [0]);
+   start->tm_isdst = -1;                                       // avoid adjustments with hours summer winter
+   time_t startTime = mktime (start);                          // conversion struct tm en time_t
+   return (startTime - theTime0)/3600.0;                       // calcul ajout en heures
 } 
-   
+
 /*! Response when calendar choice done */
 static void calendarResponse (GtkDialog *dialog, gint response_id, gpointer user_data) {
    time_t currentTime = time (NULL);
    struct tm *gmtTime = gmtime (&currentTime);
-   if (response_id == GTK_RESPONSE_NONE) {      // select right button with curent date
-      start->day = gmtTime->tm_mday;
-      start->mon = gmtTime->tm_mon;
-      start->year = gmtTime->tm_year + 1900;    // tm_year est le nombre d'années depuis 1900
-      start->hour = gmtTime->tm_hour;
-      start->min = gmtTime->tm_min;
-      start->sec = gmtTime->tm_sec;
+   if (response_id == -1) {      // select left button with current date
+      startInfo = *gmtTime;
    }
         
    if ((response_id == GTK_RESPONSE_ACCEPT) || (response_id == -1)) {
-      //printf ("Before launching date : %d/%d/%d\n", start->year, start->mon, start->day);
-      par.startTimeInHours = getDepartureTimeInHour (start); 
+      // printf ("startInfo before: %s, startTime: %lf\n", asctime (&startInfo), par.startTimeInHours);
+      par.startTimeInHours = getDepartureTimeInHour (&startInfo); 
+      // printf ("startInfo after: %s, startTime: %lf\n", asctime (&startInfo), par.startTimeInHours);
       if ((par.startTimeInHours < 0) || (par.startTimeInHours > zone.timeStamp [zone.nTimeStamp -1])) {
          gtk_window_destroy (GTK_WINDOW (dialog));
          infoMessage ("start time should be within grib window time !", GTK_MESSAGE_WARNING);
@@ -1936,17 +2025,19 @@ static void calendarResponse (GtkDialog *dialog, gint response_id, gpointer user
 /*! year month date for fCalendar */
 static void dateUpdate (GtkCalendar *calendar, gpointer user_data) {
    GDateTime *date = gtk_calendar_get_date (calendar);
-   start->sec = 0;
-   start->day = g_date_time_get_day_of_month (date);
-   start->mon = g_date_time_get_month (date) - 1;
-   start->year = g_date_time_get_year (date);
+   startInfo.tm_sec = 0;
+   startInfo.tm_sec = 0;
+   startInfo.tm_isdst = -1;                                       // avoid adjustments with hours summer winter
+   startInfo.tm_mday = g_date_time_get_day_of_month (date);
+   startInfo.tm_mon = g_date_time_get_month (date) - 1;
+   startInfo.tm_year = g_date_time_get_year (date) - 1900;
 }
 
 /*! get start date and time for routing. Returns true if OK Response */
-static void fCalendar (MyDate *start) {
+static void fCalendar (struct tm *start) {
    char str [MAX_SIZE_LINE];
    time_t currentTime = time (NULL);
-   struct tm *gmtTime = gmtime (&currentTime);
+   struct tm *gmtTime = gmtime(&currentTime);
 
    snprintf (str, sizeof (str), "%d/%02d/%02d %02d:%02d UTC", gmtTime->tm_year + 1900, gmtTime->tm_mon + 1, 
       gmtTime->tm_mday, gmtTime->tm_hour, gmtTime->tm_min);
@@ -1961,7 +2052,7 @@ static void fCalendar (MyDate *start) {
 
    GtkWidget *vBox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 5);
    GtkWidget *calendar = gtk_calendar_new();
-   GDateTime *date = g_date_time_new_utc (start->year, start->mon + 1, start->day, 0, 0, 0);
+   GDateTime *date = g_date_time_new_utc (start->tm_year + 1900, start->tm_mon + 1, start->tm_mday, 0, 0, 0);
    gtk_calendar_select_day (GTK_CALENDAR(calendar), date);
    g_signal_connect(calendar, "day-selected", G_CALLBACK (dateUpdate), NULL);
    g_date_time_unref (date);
@@ -1969,13 +2060,13 @@ static void fCalendar (MyDate *start) {
    // Créer les libellés et les boutons de sélection
    GtkWidget *labelHour = gtk_label_new("Hour");
    GtkWidget *spinHour = gtk_spin_button_new_with_range(0, 23, 1);
-   gtk_spin_button_set_value(GTK_SPIN_BUTTON(spinHour), start->hour);
-   g_signal_connect (spinHour, "value-changed", G_CALLBACK (intSpinUpdate), &start->hour);
+   gtk_spin_button_set_value(GTK_SPIN_BUTTON(spinHour), start->tm_hour);
+   g_signal_connect (spinHour, "value-changed", G_CALLBACK (intSpinUpdate), &start->tm_hour);
 
    GtkWidget *labelMinutes = gtk_label_new("Minutes");
    GtkWidget *spinMinutes = gtk_spin_button_new_with_range(0, 59, 1);
-   gtk_spin_button_set_value(GTK_SPIN_BUTTON(spinMinutes), start->min);
-   g_signal_connect (spinMinutes, "value_changed", G_CALLBACK (intSpinUpdate), &start->min);
+   gtk_spin_button_set_value(GTK_SPIN_BUTTON(spinMinutes), start->tm_min);
+   g_signal_connect (spinMinutes, "value_changed", G_CALLBACK (intSpinUpdate), &start->tm_min);
 
    // Créer une boîte de disposition horizontale
    GtkWidget *hBox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 5);
@@ -2009,8 +2100,23 @@ static void lineReport (GtkWidget *grid, int l, const char* iconName, const char
    gtk_widget_set_margin_end(GTK_WIDGET(labelValue), 20);
 }
 
+/*! convert hours in string with days, hours, minutes */
+char *durationToStr (double duration, char *res, size_t len) {
+   int nDays, nHours, nMin;
+   nDays = duration / 24;
+   nHours = fmod (duration, 24.0);
+   nMin = 60 * fmod (duration, 1.0);
+   if (nDays == 0)
+      snprintf (res, len, "%02d:%02d", nHours, nMin); 
+   else
+      snprintf (res, len, "%d Days %02d:%02d", nDays, nHours, nMin);
+   // printf ("Duration: %.2lf hours, equuvalent to %d days, %02d:%02d\n", duration, nDays, nHours, nMin);
+   return res;
+} 
+
 /*! display nice report */
 static void niceReport (SailRoute *route, double computeTime) {
+   char str [MAX_SIZE_LINE];
    char totalDate [MAX_SIZE_DATE]; 
    char *pDate = &totalDate [0];
    char line [MAX_SIZE_LINE];
@@ -2035,11 +2141,12 @@ static void niceReport (SailRoute *route, double computeTime) {
    gtk_grid_set_row_homogeneous(GTK_GRID(grid), FALSE);
    gtk_grid_set_column_homogeneous(GTK_GRID(grid), FALSE);
    
-   snprintf (line, sizeof (line), "%4d/%02d/%02d %02d:%02d\n", start->year, start->mon+1, start->day, start->hour, start->min);
+   snprintf (line, sizeof (line), "%4d/%02d/%02d %02d:%02d\n", 
+      startInfo.tm_year + 1900, startInfo.tm_mon+1, startInfo.tm_mday, startInfo.tm_hour, startInfo.tm_min);
    lineReport (grid, 0, "document-open-recent", "Departure Date and Time", line);
 
-   snprintf (line, sizeof (line), "%.2lf\n", route->startTimeInHours);
-   lineReport (grid, 2, "dialog-information-symbolic", "Nb hours after origin of grib", line);
+   snprintf (line, sizeof (line), "%02d:%02d\n", (int) par.startTimeInHours, (int) (60 * fmod (par.startTimeInHours, 1.0)));
+   lineReport (grid, 2, "dialog-information-symbolic", "Nb hours:minutes after origin of grib", line);
    
    snprintf (line, sizeof (line), "%d\n", route->nIsoc);
    lineReport (grid, 4, "accessories-text-editor-symbolic", "Nb of isochrones", line);
@@ -2052,7 +2159,7 @@ static void niceReport (SailRoute *route, double computeTime) {
    lineReport (grid, 8, "mail-forward-symbolic", "Distance To Destination", line);
 
    snprintf (line, sizeof (line), "%s\n",\
-      newDate (zone.dataDate [0], zone.dataTime [0]/100 + route->startTimeInHours + route->duration, pDate));
+      newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours + route->duration, pDate));
    lineReport (grid, 10, "alarm-symbolic", "Arrival Date and Time", line);
 
    snprintf (line, sizeof (line), "%.2lf\n", route->totDist);
@@ -2061,11 +2168,11 @@ static void niceReport (SailRoute *route, double computeTime) {
    snprintf (line, sizeof (line), "%.2lf\n", route->motorDist);
    lineReport (grid, 14, "emblem-important-symbolic", "Motor Distance in Nautical Miles", line);
    
-   snprintf (line, sizeof (line), "%.2lf\n", route->duration);
-   lineReport (grid, 16, "user-away", "Duration in Hours", line);
+   snprintf (line, sizeof (line), "%s\n", durationToStr (route->duration, str, sizeof (str)));
+   lineReport (grid, 16, "user-away", "Duration", line);
    
-   snprintf (line, sizeof (line), "%.2lf\n", route->motorDuration);
-   lineReport (grid, 18, "user-away", "Motor Duration in Hours", line);
+   snprintf (line, sizeof (line), "%s\n", durationToStr (route->motorDuration, str, sizeof (str)));
+   lineReport (grid, 18, "user-away", "Motor Duration", line);
    
    snprintf (line, sizeof (line), "%.2lf\n", route->totDist/route->duration);
    lineReport (grid, 20, "utilities-system-monitor-symbolic", "Mean Speed Over Ground", line);
@@ -2115,9 +2222,9 @@ static void on_run_button_clicked () {
      infoMessage ("Destination point not in wind zone", GTK_MESSAGE_WARNING);
      return;
    }
-   initStart (start);
+   initStart (&startInfo);
    if (par.special == 0)
-      fCalendar (start);
+      fCalendar (&startInfo);
 }
 
 /*! check if bestDepartureTime is terminated */
@@ -2146,7 +2253,7 @@ static gboolean bestDepartureCheck (gpointer data) {
       snprintf (str, MAX_SIZE_LINE, "The quickest trip lasts %.2lf hours, start time: %d hours after beginning of Grib\nSee simulation Report for details", 
          chooseDeparture.minDuration, chooseDeparture.bestTime);
       infoMessage (str, GTK_MESSAGE_WARNING);
-      initStart (start);
+      initStart (&startInfo);
       selectedPointInLastIsochrone = (nIsoc <= 1) ? 0 : isoDesc [nIsoc -1].closest; 
       niceReport (&route, route.calculationTime);
       gtk_widget_queue_draw (drawing_area);
@@ -2232,10 +2339,12 @@ static void on_stop_button_clicked(GtkWidget *widget, gpointer data) {
 
 /*! Callback for animation update */
 static gboolean on_play_timeout(gpointer user_data) {
-   //long deltaPlus = 3 * par.tStep / (zone.timeStamp [1]-zone.timeStamp [0]);
-   //if (kTime < zone.nTimeStamp - 1 + deltaPlus) kTime += 1;
-   if (kTime < zone.nTimeStamp - 1) kTime += 1;
-   else animation_active = false;
+   //theTime += zone.timeStamp [1]-zone.timeStamp [0];
+   theTime += par.tStep;
+   if (theTime > zone.timeStamp [zone.nTimeStamp - 1]) {
+      theTime = zone.timeStamp [zone.nTimeStamp - 1]; 
+      animation_active = false;
+   }
    gtk_widget_queue_draw(drawing_area);
    statusBarUpdate ();
    return animation_active;
@@ -2253,31 +2362,32 @@ static void on_play_button_clicked(GtkWidget *widget, gpointer user_data) {
 
 /*! Callback for to start button */
 static void on_to_start_button_clicked(GtkWidget *widget, gpointer data) {
-   kTime = 0;
-   theTime = zone.timeStamp [0];
+   theTime = 0;
    gtk_widget_queue_draw(drawing_area);
    statusBarUpdate ();
 }
 
 static void on_to_end_button_clicked(GtkWidget *widget, gpointer data) {
-   kTime = zone.nTimeStamp - 1;
    theTime = zone.timeStamp [zone.nTimeStamp - 1];
    gtk_widget_queue_draw(drawing_area);
-   statusBarUpdate ();
+   statusBarUpdate (route.n -1);
 }
 
 /*! Callback for reward button */
 static void on_reward_button_clicked(GtkWidget *widget, gpointer data) {
-   if (kTime > 0) kTime -= 1; 
+   // theTime -= zone.timeStamp [1]-zone.timeStamp [0];
+   theTime -= par.tStep;
+   if (theTime < 0) theTime = 0;
    gtk_widget_queue_draw(drawing_area);
    statusBarUpdate ();
 }
 
 /*! Callback for Forward button */
 static void on_forward_button_clicked(GtkWidget *widget, gpointer data) {
-   //long deltaPlus = 3 * par.tStep / (zone.timeStamp [1]-zone.timeStamp [0]);
-   //if (kTime < zone.nTimeStamp - 1 + deltaPlus) kTime += 1; 
-   if (kTime < zone.nTimeStamp - 1) kTime += 1; 
+   //theTime += zone.timeStamp [1]-zone.timeStamp [0];
+   theTime += par.tStep;
+   if (theTime > zone.timeStamp [zone.nTimeStamp - 1])
+      theTime = zone.timeStamp [zone.nTimeStamp - 1]; 
    gtk_widget_queue_draw(drawing_area);
    statusBarUpdate ();
 }
@@ -2320,6 +2430,88 @@ static void historyReset  () {
    route.n = 0;
    historyRoute.n = 0;
    gtk_widget_queue_draw(drawing_area);
+}
+
+char traceName [MAX_SIZE_FILE_NAME];
+/*! Response for URL change */
+static void newTraceResponse (GtkDialog *dialog, gint response_id, gpointer user_data) {
+   if (response_id == GTK_RESPONSE_ACCEPT) {
+      printf ("Trace name OK: %s\n", traceName);
+      strncpy (par.traceFileName, traceName, MAX_SIZE_FILE_NAME);
+   }
+   gtk_window_destroy (GTK_WINDOW (dialog));
+}
+   
+
+/*! callback for newTrace change */
+static void traceChange (GtkEditable *editable, gpointer user_data) {
+   gchar *name = (gchar *) user_data;
+   const gchar *text = gtk_editable_get_text (editable);
+   g_strlcpy (name, text, MAX_SIZE_BUFFER);
+   printf ("Trace name: %s\n", name);
+}
+
+/*! new Trace */
+static void newTrace () {
+   strncpy (traceName, par.traceFileName, MAX_SIZE_FILE_NAME);
+   GtkWidget *dialogBox = gtk_dialog_new_with_buttons("New Trace", GTK_WINDOW(window), GTK_DIALOG_MODAL, "_OK", GTK_RESPONSE_ACCEPT,
+                                           "_Cancel", GTK_RESPONSE_CANCEL, NULL);
+   GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialogBox));
+
+   int min_width = MAX (300, strlen (traceName) * 10);
+   gtk_widget_set_size_request(dialogBox, min_width, -1);
+   GtkEntryBuffer *buffer = gtk_entry_buffer_new (traceName, -1);
+   GtkWidget *trace_entry = gtk_entry_new_with_buffer (buffer);
+
+   // g_signal_connect(dialogBox, "destroy", G_CALLBACK(urlWindowDestroy), NULL);
+   g_signal_connect_swapped (dialogBox, "response", G_CALLBACK (newTraceResponse), dialogBox);
+   g_signal_connect (trace_entry, "changed", G_CALLBACK (traceChange), traceName);
+
+   gtk_box_append(GTK_BOX(content_area), trace_entry);
+   gtk_widget_show (dialogBox);
+}
+
+/*! display trace report */
+static void traceReport () {
+   char fileName [MAX_SIZE_FILE_NAME];
+   double od, ld, rd;
+   char str [MAX_SIZE_LINE];
+   char line [MAX_SIZE_LINE];
+   char strLat [MAX_SIZE_LINE];
+   char strLon [MAX_SIZE_LINE];
+   double lat, lon, time;
+   GtkWidget *dialog = gtk_dialog_new_with_buttons ("Trace Report", GTK_WINDOW (window), GTK_DIALOG_DESTROY_WITH_PARENT,
+                       NULL, NULL, NULL, NULL, NULL);
+
+   //gtk_widget_set_size_request(dialog, 400, -1);
+
+   GtkWidget *grid = gtk_grid_new();   
+   gtk_window_set_child (GTK_WINDOW (dialog), (GtkWidget *) grid);
+   gtk_grid_set_column_spacing(GTK_GRID(grid), 10);
+   gtk_grid_set_row_spacing(GTK_GRID(grid), 5);
+   gtk_grid_set_row_homogeneous(GTK_GRID(grid), FALSE);
+   gtk_grid_set_column_homogeneous(GTK_GRID(grid), FALSE);
+
+   buildRootName (par.traceFileName, fileName);
+   if (! distanceTraceDone (fileName, &od, &ld, &rd)) {
+      infoMessage ("Error in distance trace calculation", GTK_MESSAGE_ERROR);
+      return;
+   }
+   snprintf (line, sizeof (line), "%.2lf", od);
+   lineReport (grid, 0, "mail-forward-symbolic", "Trace Ortho Dist", line);
+   snprintf (line, sizeof (line), "%.2lf", ld);
+   lineReport (grid, 2, "mail-forward-symbolic", "Trace Loxo Dist", line);
+   snprintf (line, sizeof (line), "%.2lf", rd);
+   lineReport (grid, 4, "emblem-important-symbolic", "Trace Real Dist", line);
+
+   if (findLastTracePoint (fileName, &lat, &lon, &time)) {
+      snprintf (line, sizeof (line), "%s %s", latToStr (par.pOr.lat, par.dispDms, strLat), lonToStr (par.pOr.lon, par.dispDms, strLon));
+      lineReport (grid, 6, "preferences-desktop-locale-symbolic", "Last Position", line);
+      snprintf (line, sizeof (line), "%s", epochToStr (time, false, str, sizeof (str)));
+      lineReport (grid, 8, "document-open-recent", "Last Time", line);
+   }
+
+   gtk_window_present (GTK_WINDOW (dialog));
 }
 
 /*! display trace */
@@ -2403,7 +2595,7 @@ static void historyRteDump (gpointer user_data) {
    char buffer [MAX_SIZE_BUFFER];
    char title [MAX_SIZE_LINE];
    if (historyRoute.r[k].n <= 0)
-      infoMessage ("No route calculated", GTK_MESSAGE_INFO);
+      infoMessage ("No route calteculated", GTK_MESSAGE_INFO);
    else {
       routeToStr (&historyRoute.r[k], buffer, MAX_SIZE_BUFFER); 
       snprintf (title, MAX_SIZE_LINE, "History: %2d", k);
@@ -2603,15 +2795,15 @@ static void poiEdit (GSimpleAction *action, GVariant *parameter, gpointer *data)
 /*! show GPS information */
 static void gpsDump () {
    char line [MAX_SIZE_LINE], strLat [MAX_SIZE_LINE], strLon [MAX_SIZE_LINE], str [MAX_SIZE_LINE];
-   if (!gpsOK ()) {
-      infoMessage ("No GPS Data available", GTK_MESSAGE_INFO);
-      return;
-   }
 
-   gpsDialog = gtk_dialog_new_with_buttons ("GPS Information", GTK_WINDOW (window), GTK_DIALOG_DESTROY_WITH_PARENT,
+   GtkWidget *gpsDialog = gtk_dialog_new_with_buttons ("GPS Information", GTK_WINDOW (window), GTK_DIALOG_DESTROY_WITH_PARENT,
                           NULL, NULL, NULL, NULL, NULL);
 
    GtkWidget *grid = gtk_grid_new();   
+   if (!my_gps_data.OK) {
+      infoMessage ("No GPS position available", GTK_MESSAGE_WARNING);
+      return;
+   }
    gtk_window_set_child (GTK_WINDOW (gpsDialog), (GtkWidget *) grid);
 
    gtk_grid_set_column_spacing(GTK_GRID(grid), 10);
@@ -2638,7 +2830,7 @@ static void gpsDump () {
    snprintf (line, sizeof (line), "%d\n", my_gps_data.nSat);
    lineReport (grid, 10, "preferences-system-network-symbolic", "Number of satellites", line);
 
-   snprintf (line, sizeof (line), "%s\n", epochToStr (my_gps_data.time, str, sizeof (str)));
+   snprintf (line, sizeof (line), "%s\n", epochToStr (my_gps_data.time, true, str, sizeof (str)));
    lineReport (grid, 12, "alarm-symbolic", "UTC", line);
 
    gtk_window_present (GTK_WINDOW (gpsDialog));
@@ -2705,7 +2897,7 @@ static gboolean readGribCheck (gpointer data) {
       infoMessage ("Error in readGribCheck (wind)", GTK_MESSAGE_ERROR);
    }
    else {
-      kTime = 0;
+      theTime = 0;
       par.constWindTws = 0;
       initDispZone ();
       updatedColors = false;
@@ -2812,7 +3004,7 @@ static void on_open_grib_response (GtkDialog *dialog, int response) {
 static void openGrib (GSimpleAction *action, GVariant *parameter, gpointer *data) {
    int *indexPtr = (int *) data;
    typeFlow = *indexPtr;
-   g_print("Type Flow: %d\n", typeFlow);
+   // g_print("Type Flow: %d\n", typeFlow);
    char directory [MAX_SIZE_DIR_NAME];
    snprintf (directory, sizeof (directory), (typeFlow == WIND) ? "%sgrib": "%scurrentgrib", par.workingDir);
    GtkWidget *dialog = gtk_file_chooser_dialog_new ("Open Grib", GTK_WINDOW (window), GTK_FILE_CHOOSER_ACTION_OPEN,
@@ -2923,6 +3115,7 @@ static void saveScenario () {
 
 /*! Make initialization following parameter file load */
 static void initScenario () {
+   char str [MAX_SIZE_LINE];
    int poiIndex = -1;
    double unusedTime;
    if (par.gribFileName [0] != '\0') {
@@ -2933,6 +3126,7 @@ static void initScenario () {
          return;
       }
       printf ("Grib loaded    : %s\n", par.gribFileName);
+      printf ("Grib DateTime0 : %s\n", gribDateTimeToStr (zone.dataDate [0], zone.dataTime [0], str, sizeof (str)));
       theTime = zone.timeStamp [0];
       updatedColors = false; 
       initDispZone ();
@@ -2942,6 +3136,7 @@ static void initScenario () {
       iFlow = CURRENT;
       readGrib (&iFlow);
       printf ("Cur grib loaded: %s\n", par.currentGribFileName);
+      printf ("Grib DateTime0 : %s\n", gribDateTimeToStr (currentZone.dataDate [0], currentZone.dataTime [0], str, sizeof (str)));
    }
    if (readPolar (par.polarFileName, &polMat))
       printf ("Polar loaded   : %s\n", par.polarFileName);
@@ -2968,6 +3163,7 @@ static void initScenario () {
    nIsoc = 0;
    route.n = 0;
    route.destinationReached = false;
+   initWayPoints ();
 }
 
 /*! Call back editScenario */
@@ -3158,7 +3354,6 @@ static void gribInfoDisplay (const char *fileName, Zone *zone) {
 static void gribInfo (GSimpleAction *action, GVariant *parameter, gpointer *data) {
    int *indexPtr = (int *) data;
    typeFlow = *indexPtr;
-   g_print("Type Flow: %d\n", typeFlow);
    if (typeFlow == WIND) {
       if (zone.nbLat == 0)
          infoMessage ("No wind data grib available", GTK_MESSAGE_ERROR);
@@ -3185,6 +3380,7 @@ static gboolean mailGribRead (gpointer data) {
    char buffer[MAX_SIZE_BUFFER] = "\n";
    int n = 0;
    char *fileName, *end;
+   
    snprintf (command, sizeof (command), "%s %s%s %s", par.imapScript, par.workingDir, (provider == SAILDOCS_CURR) ? "currentgrib" : "grib", par.mailPw); 
    if ((fp = popen (command, "r")) == NULL) {
       fprintf (stderr, "Error in mailGribRead. popen command: %s\n", command);
@@ -3256,7 +3452,7 @@ static void updateMailRequestBox () {
       formatThousandSep (str, evalSize ());
       gtk_label_set_text(GTK_LABEL (val_size_eval), str);
    }
-   gtk_widget_queue_draw(dialog);
+   //gtk_widget_queue_draw (dialog);
 }
 
 /*! Callback Time Step value */
@@ -3277,9 +3473,7 @@ static void time_max_changed (GtkSpinButton *spin_button, gpointer user_data) {
 static void resolution_changed (GtkSpinButton *spin_button, gpointer user_data) {
    par.gribResolution = gtk_spin_button_get_value (spin_button);
    par.gribTimeMax = maxTimeRange ();
-   printf ("resol\n");
    updateMailRequestBox ();
-   printf ("resol after update\n");
 }
 
 /*! Callback model combo box indice */
@@ -3313,6 +3507,7 @@ static void mailRequestBoxResponse (GtkDialog *dialog, gint response_id, gpointe
             infoMessage ("Error running imapToSeen script", GTK_MESSAGE_ERROR);;
             return;
          }
+         // printf ("ImapToSeen: command:%s\n", command);
          gribRequestRunning = true;
          gribMailTimeout = g_timeout_add (GRIB_TIME_OUT, mailGribRead, NULL);
       }
@@ -3631,7 +3826,8 @@ static void change () {
    GtkWidget *entry_wave;
    GtkWidget *entry_penalty0, *entry_penalty1;
    GtkWidget *entry_sog, *entry_threshold;
-   GtkWidget *entry_efficiency, *entry_max_wind;
+   GtkWidget *entry_max_wind;
+   GtkWidget *entry_day_efficiency, *entry_night_efficiency;
 
    // Création de la boîte de dialogue
    GtkWidget *dialogBox = gtk_dialog_new_with_buttons("Change", GTK_WINDOW (window), GTK_DIALOG_DESTROY_WITH_PARENT,
@@ -3800,22 +3996,28 @@ static void change () {
    g_signal_connect (entry_sog, "changed", G_CALLBACK (doubleUpdate), &par.motorSpeed);
    g_signal_connect (entry_threshold, "changed", G_CALLBACK (doubleUpdate), &par.threshold);
 
-   // Création des éléments pour constWave, efficiency
+   // Création des éléments pour constWave, maxWind
    entry_wave = doubleToEntry (par.constWave);
-   entry_efficiency = doubleToEntry (par.efficiency);
+   entry_max_wind = doubleToEntry (par.maxWind);
    labelCreate (tab_tec, "Const Wave Height",            0, 11);
    gtk_grid_attach(GTK_GRID(tab_tec), entry_wave,        1, 11, 1, 1);
-   labelCreate (tab_tec, "Efficiency",                   2, 11);
-   gtk_grid_attach(GTK_GRID(tab_tec), entry_efficiency,  3, 11, 1, 1);
+   labelCreate (tab_tec, "Max Wind",                     2, 11);
+   gtk_grid_attach(GTK_GRID(tab_tec), entry_max_wind,    3, 11, 1, 1);
    g_signal_connect (entry_wave, "changed", G_CALLBACK (doubleUpdate), &par.constWave);
-   g_signal_connect (entry_efficiency, "changed", G_CALLBACK (doubleUpdate), &par.efficiency);
-
-   // Création des éléments pour maxWind
-   entry_max_wind = doubleToEntry (par.maxWind);
-   labelCreate (tab_tec, "Max Wind",                     0, 12);
-   gtk_grid_attach(GTK_GRID(tab_tec), entry_max_wind,    1, 12, 1, 1);
    g_signal_connect (entry_max_wind, "changed", G_CALLBACK (doubleUpdate), &par.maxWind);
 
+   // Création des éléments pour day_efficiency night_efficiency
+   entry_day_efficiency = doubleToEntry (par.dayEfficiency);
+   labelCreate (tab_tec, "Day Efficiency",                    0, 12);
+   gtk_grid_attach(GTK_GRID(tab_tec), entry_day_efficiency,   1, 12, 1, 1);
+   g_signal_connect (entry_day_efficiency, "changed", G_CALLBACK (doubleUpdate), &par.dayEfficiency);
+
+   entry_night_efficiency = doubleToEntry (par.nightEfficiency);
+   labelCreate (tab_tec, "Night Efficiency",                  2, 12);
+   gtk_grid_attach(GTK_GRID(tab_tec), entry_night_efficiency, 3, 12, 1, 1);
+   g_signal_connect (entry_night_efficiency, "changed", G_CALLBACK (doubleUpdate), &par.nightEfficiency);
+
+   // Création des éléments pour maxWind
    GtkWidget *hbox0 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
 
    labelCreate (tab_display, "",              0, 0); // just for space on top
@@ -3882,17 +4084,23 @@ static void change () {
    g_signal_connect(G_OBJECT(checkboxFocal), "toggled", G_CALLBACK (on_checkbox_toggled), &par.focalDisp);
    gtk_grid_attach(GTK_GRID (tab_display), checkboxFocal,          2, 8, 1, 1);
 
-   gtk_grid_attach(GTK_GRID(tab_display), separator, 0, 9, 10, 1);
+   // Boîte à cocher pour "info display"
+   GtkWidget *checkboxInfoDisp = gtk_check_button_new_with_label("Info Display");
+   gtk_check_button_set_active ((GtkCheckButton *) checkboxInfoDisp, par.infoDisp);
+   g_signal_connect(G_OBJECT(checkboxInfoDisp), "toggled", G_CALLBACK (on_checkbox_toggled), &par.infoDisp);
+   gtk_grid_attach(GTK_GRID (tab_display), checkboxInfoDisp,       0, 9, 1, 1);
+
+   gtk_grid_attach(GTK_GRID(tab_display), separator, 0, 10, 10, 1);
 
    // Créer le widget GtkScale
    const int MAX_LEVEL_POI_VISIBLE = 5; 
-   labelCreate (tab_display, "level Poi Visible",     0, 9);
+   labelCreate (tab_display, "level Poi Visible",     0, 11);
    GtkWidget *levelVisible = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL, 1, MAX_LEVEL_POI_VISIBLE, 1);
    gtk_range_set_value(GTK_RANGE(levelVisible), par.maxPoiVisible);
    gtk_scale_set_value_pos (GTK_SCALE(levelVisible), GTK_POS_TOP);
    gtk_widget_set_size_request (levelVisible, 200, -1);  // Ajuster la largeur du GtkScale
    g_signal_connect(levelVisible, "value-changed", G_CALLBACK(on_level_poi_visible_changed), NULL);
-   gtk_grid_attach(GTK_GRID(tab_display), levelVisible, 1, 9, 2, 1);
+   gtk_grid_attach(GTK_GRID(tab_display), levelVisible, 1, 11, 2, 1);
   
    // Affichage de la boîte de dialogue et récupération de la réponse
    g_signal_connect_swapped (dialogBox, "response", G_CALLBACK (OKChange), dialogBox);
@@ -3943,14 +4151,9 @@ static void on_right_button_clicked (GtkWidget *widget, gpointer data) {
 }
 
 /*! center the map on GPS position */ 
-static void on_gps_button_clicked (GtkWidget *widget, gpointer data) {
-   initGPS ();
-   if (!gpsOK ())
-      infoMessage ("No GPS position available", GTK_MESSAGE_WARNING);
-   else {
-      centerDispZone (my_gps_data.lon, my_gps_data.lat);
-      gtk_widget_queue_draw (drawing_area);
-   }
+static void on_center_map (GtkWidget *widget, gpointer data) {
+   centerDispZone (par.pOr.lon, par.pOr.lat);
+   gtk_widget_queue_draw (drawing_area);
 }
 
 /*! poi Name change */
@@ -4217,10 +4420,9 @@ static gboolean on_scroll_event (GtkEventController *controller, double delta_x,
 
 /*! Callback when keyboard key  pressed */
 static gboolean on_key_event (GtkEventController *controller, guint keyval, guint keycode, GdkModifierType modifiers, gpointer user_data) {
-   char buffer [MAX_SIZE_BUFFER];
    switch (keyval) {
    case GDK_KEY_F1:
-      if (!gpsOK ())
+      if (!my_gps_data.OK)
          infoMessage ("No GPS position available", GTK_MESSAGE_WARNING);
       else {
          par.pOr.lat = my_gps_data.lat;
@@ -4300,7 +4502,11 @@ static void on_meteogram_event (GtkDrawingArea *area, cairo_t *cr, int width, in
    cairo_show_text (cr, "Current");
    
    // graphical difference between up to now and after now 
-   tDeltaNow = diffNowGribTime0 (&zone) / 3600.0;
+   // dDeltaNow is the number of hours between beginning of grib to now */
+   time_t now = time (NULL);
+   tDeltaNow = (now - vOffsetLocalUTC)/ 3600.0; // offset between local and UTC in hours
+   tDeltaNow -= gribDateTimeToEpoch (zone.dataDate [0], zone.dataTime [0]) / 3600.0;
+   printf ("tDeltaNow: %.2lf\n", tDeltaNow);
    CAIRO_SET_SOURCE_RGB_YELLOW(cr);
    if (tDeltaNow > 0) {
       x = X_LEFT + XK * tDeltaNow;
@@ -4462,7 +4668,7 @@ static void meteogram () {
    pt.lon = xToLon (whereIsPopup.x);
    snprintf (line, sizeof (line), "Meteogram (Wind, Gust, Wave, Current) for %s %s beginning %s during %ld hours", latToStr (pt.lat, par.dispDms, strLat), 
       lonToStr (pt.lon, par.dispDms, strLon),
-      newDate (zone.dataDate [0], (zone.dataTime [0]/100)+ zone.timeStamp [kTime], pDate),
+      newDate (zone.dataDate [0], (zone.dataTime [0]/100), pDate),
       zone.timeStamp [zone.nTimeStamp -1]);
 
    GtkWidget *meteoWindow = gtk_application_window_new (GTK_APPLICATION (app));
@@ -4499,7 +4705,6 @@ void subMenu (GMenu *vMenu, const char *str, const char *app, const gchar *iconN
 static void grib_url (GSimpleAction *action, GVariant *parameter, gpointer *data) {
    int *indexPtr = (int *) data;
    typeFlow = *indexPtr;
-   g_print("Type Flow: %d\n", typeFlow);
    GtkWidget *itemUrl; 
    GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 5);
 
@@ -4553,15 +4758,16 @@ static void createButton (GtkWidget *toolBox, char *iconName, void *callBack) {
 
 /*! update info GPS */ 
 gboolean update_GPS_callback (gpointer data) {
-   char str [MAX_SIZE_LINE], strLat [MAX_SIZE_LINE], strLon [MAX_SIZE_LINE];
+   char str [MAX_SIZE_LINE], strDate [MAX_SIZE_LINE], strLat [MAX_SIZE_LINE], strLon [MAX_SIZE_LINE];
    GtkWidget *label = GTK_WIDGET(data);
-   if (gpsOK ())
-      snprintf (str, sizeof (str), "   Lat: %s Lon: %s  COG: %.2lf°  SOG: %.2lf Kn",
+   if (my_gps_data.OK)
+      snprintf (str, sizeof (str), "%s UTC   Lat: %s Lon: %s  COG: %.2lf°  SOG: %.2lf Kn",
+         epochToStr (my_gps_data.time, false, strDate, sizeof (strDate)),
          latToStr (my_gps_data.lat, par.dispDms, strLat), lonToStr (my_gps_data.lon, par.dispDms, strLon),
          my_gps_data.cog, my_gps_data.sog);
    else 
       snprintf (str, sizeof (str), "   No GPS Info");
-   gtk_label_set_text(GTK_LABEL(label), str);
+   gtk_label_set_text (GTK_LABEL(label), str);
    return G_SOURCE_CONTINUE;
 }
 
@@ -4594,13 +4800,24 @@ static void app_activate (GApplication *application) {
    createButton (toolBox, "pan-up-symbolic", on_up_button_clicked);
    createButton (toolBox, "pan-down-symbolic", on_down_button_clicked);
    createButton (toolBox, "pan-end-symbolic", on_right_button_clicked);
-   createButton (toolBox, "find-location-symbolic", on_gps_button_clicked);
+   createButton (toolBox, "find-location-symbolic", on_center_map);
    createButton (toolBox, "edit-select-all", paletteDraw);
    createButton (toolBox, "applications-engineering-symbolic", testFunction);
    
    GtkWidget *gpsInfo = gtk_label_new (" GPS Info coming...");
    gtk_box_append (GTK_BOX (toolBox), gpsInfo);
-  
+
+   // ligne label pouer info route en gras, rouge, justifié à gauche
+   labelInfoRoute = gtk_label_new ("");
+   //gtk_label_set_justify (GTK_LABEL(labelInfoRoute), GTK_JUSTIFY_LEFT);
+   PangoAttrList *attrs = pango_attr_list_new();
+   PangoAttribute *attr = pango_attr_weight_new(PANGO_WEIGHT_BOLD);
+   pango_attr_list_insert(attrs, attr);
+   attr = pango_attr_foreground_new (65535, 0, 0); //red
+   pango_attr_list_insert(attrs, attr);
+   gtk_label_set_attributes (GTK_LABEL(labelInfoRoute), attrs);
+   gtk_label_set_xalign(GTK_LABEL (labelInfoRoute), 0); // Justifier à gauche
+
    // Création de la barre d'état
    statusbar = gtk_statusbar_new();
    gtk_widget_set_size_request (statusbar, -1, 30);
@@ -4644,9 +4861,10 @@ static void app_activate (GApplication *application) {
    gtk_widget_add_controller (window, key_controller); // window and not drawing_area required !!!
    g_signal_connect(key_controller, "key-pressed", G_CALLBACK (on_key_event), NULL);
  
-   guint timeout_id = g_timeout_add_seconds (GPS_TIME_OUT, update_GPS_callback, gpsInfo);
+   g_timeout_add_seconds (GPS_TIME_INTERVAL, update_GPS_callback, gpsInfo);
    
    gtk_box_append (GTK_BOX (vBox), toolBox);
+   gtk_box_append (GTK_BOX (vBox), labelInfoRoute);
    gtk_box_append (GTK_BOX (vBox), drawing_area);
    gtk_box_append (GTK_BOX (vBox), statusbar);
    statusBarUpdate ();
@@ -4703,7 +4921,6 @@ static void app_startup (GApplication *application) {
    createAction ("sailReport", rteReport);
    createAction ("sailHistory", rteHistory);
    createAction ("simulationReport", simulationReport);
-   createAction ("trace", traceDump);
    createAction ("gps", gpsDump);
 
    createAction ("historyReset", historyReset);
@@ -4712,9 +4929,14 @@ static void app_startup (GApplication *application) {
    createActionWithParam ("poiEdit", poiEdit, POI_SEL);
    createActionWithParam ("portsEdit", poiEdit, PORT_SEL);
    
+   createAction ("traceReport", traceReport);
+   createAction ("traceDump", traceDump);
+   createAction ("newTrace", newTrace);
+
    createAction ("help", help);
    createActionWithParam ("OSM0", openMap, 0); // open Street Map
    createActionWithParam ("OSM1", openMap, 1); // open Sea Map
+   createAction ("windy", windy);
    createAction ("CLI", cli_activated);
    createAction ("info", helpInfo);
 
@@ -4725,6 +4947,7 @@ static void app_startup (GApplication *application) {
    GMenuItem *display_menu = g_menu_item_new ("_Display", NULL);
    GMenuItem *history_menu = g_menu_item_new ("_History", NULL);
    GMenuItem *poi_menu = g_menu_item_new("PO_I", NULL);
+   GMenuItem *trace_menu = g_menu_item_new("_Trace", NULL);
    GMenuItem *help_menu = g_menu_item_new("_Help", NULL);
 
    // Ajout d'éléments dans le menu "Grib"
@@ -4760,7 +4983,6 @@ static void app_startup (GApplication *application) {
    subMenu (display_menu_v, "Sail Route", "app.sailRoute", "");
    subMenu (display_menu_v, "Sail Report", "app.sailReport", "");
    subMenu (display_menu_v, "Simulation Report", "app.simulationReport", "");
-   subMenu (display_menu_v, "Trace", "app.trace", "");
    subMenu (display_menu_v, "GPS", "app.gps", "");
 
    // Ajout d'éléments dans le menu "History"
@@ -4770,14 +4992,21 @@ static void app_startup (GApplication *application) {
 
    // Ajout d'éléments dans le menu "Poi"
    GMenu *poi_menu_v = g_menu_new ();
-   subMenu (poi_menu_v, "Dump", "app.poiDump", "document-open-symbolic");
+   subMenu (poi_menu_v, "Report", "app.poiDump", "document-open-symbolic");
    subMenu (poi_menu_v, "Save", "app.poiSave", "media-floppy-symbolic-symbolic");
    subMenu (poi_menu_v, "Edit PoI", "app.poiEdit", "document-edit-symbolic");
    subMenu (poi_menu_v, "Edit Ports", "app.portsEdit", "document-edit-symbolic");
 
+   // Ajout d'éléments dans le menu "Poi"
+   GMenu *trace_menu_v = g_menu_new ();
+   subMenu (trace_menu_v, "Report", "app.traceReport", "");
+   subMenu (trace_menu_v, "Dump", "app.traceDump", "");
+   subMenu (trace_menu_v, "New", "app.newTrace", "");
+
    // Ajout d'éléments dans le menu "Help"
    GMenu *help_menu_v = g_menu_new ();
    subMenu (help_menu_v, "Help", "app.help", "");
+   subMenu (help_menu_v, "Windy", "app.windy", "");
    subMenu (help_menu_v, "Open Street Map", "app.OSM0", "");
    subMenu (help_menu_v, "Open Sea Map", "app.OSM1", "");
    subMenu (help_menu_v, "CLI mode", "app.CLI", "text-x-generic");
@@ -4796,6 +5025,8 @@ static void app_startup (GApplication *application) {
    g_object_unref (history_menu_v);
    g_menu_item_set_submenu (poi_menu, G_MENU_MODEL (poi_menu_v));
    g_object_unref (poi_menu_v);
+   g_menu_item_set_submenu (trace_menu, G_MENU_MODEL (trace_menu_v));
+   g_object_unref (trace_menu_v);
    g_menu_item_set_submenu (help_menu, G_MENU_MODEL (help_menu_v));
    g_object_unref (help_menu_v);
 
@@ -4805,6 +5036,7 @@ static void app_startup (GApplication *application) {
    g_menu_append_item (menubar, display_menu);
    g_menu_append_item (menubar, history_menu);
    g_menu_append_item (menubar, poi_menu);
+   g_menu_append_item (menubar, trace_menu);
    g_menu_append_item (menubar, help_menu);
 
    g_object_unref (file_menu);
@@ -4813,6 +5045,7 @@ static void app_startup (GApplication *application) {
    g_object_unref (display_menu);
    g_object_unref (history_menu);
    g_object_unref (poi_menu);
+   g_object_unref (trace_menu);
    g_object_unref (help_menu);
 
    gtk_application_set_menubar (GTK_APPLICATION (app), G_MENU_MODEL (menubar));
@@ -4822,8 +5055,10 @@ static void app_startup (GApplication *application) {
 int main (int argc, char *argv[]) {
    char fileName [MAX_SIZE_FILE_NAME];
    bool ret = true;
-   // initialisations
+   vOffsetLocalUTC = offsetLocalUTC ();
+   printf ("LocalTime - UTC: %.0lf\n", vOffsetLocalUTC);
    initGPS ();
+
    if (setlocale (LC_ALL, "C") == NULL) {              // very important for scanf decimal numbers
       fprintf (stderr, "Error in main: setlocale failed");
       return EXIT_FAILURE;

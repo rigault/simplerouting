@@ -50,6 +50,7 @@ extern bool   mostRecentFile (const char *directory, const char *pattern, char *
 extern double lonCanonize (double lon);
 extern char   *formatThousandSep (char *buffer, int value);
 extern bool   gpsToStr (char *buffer, size_t maxLength);
+extern void   *getGPS (void *data);
 extern void   *gps_thread_function(void *data);
 extern bool   initGPS ();
 extern void   closeGPS ();
@@ -63,11 +64,12 @@ extern long   getFileSize (const char *fileName);
 extern char   *latToStr (double lat, int type, char* str);
 extern char   *lonToStr (double lon, int type, char* str);
 extern void   initZone (Zone *zone);
-extern time_t dateToTime_t (long date);
-extern char   *epochToStr (time_t t, char *str, size_t len);
+extern double offsetLocalUTC ();
+extern char   *epochToStr (time_t t, bool seconds, char *str, size_t len);
+extern time_t gribDateTimeToEpoch (long date, long time);
+extern char   *gribDateTimeToStr (long date, long time, char *str, size_t len);
 extern bool   isInZone (Pp *pt, Zone *zone);
 extern double zoneTimeDiff (Zone *zone1, Zone *zone0);
-extern time_t diffNowGribTime0 (Zone *zone);
 extern bool   readPolar (char *fileName, PolMat *mat);
 extern char   *polToStr (char*str, PolMat *mat, size_t maxLength);
 extern void   *readGrib (void *data);
@@ -102,4 +104,6 @@ extern bool   isServerAccessible (const char *url);
 extern bool   addTracePoint (const char *fileName);
 extern bool   findLastTracePoint (const char *fileName, double *lat, double *lon, double *time);
 extern bool   distanceTraceDone (const char *fileName, double *od, double *ld, double *rd);
-extern bool   gpsOK ();
+extern bool   isDayLight (double t, double lat, double lon);
+
+

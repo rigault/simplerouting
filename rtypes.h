@@ -7,6 +7,7 @@
 #include <time.h>
 #include <pthread.h>
 #include <math.h>
+#define GPS_TIME_OUT          2000000           // 2 s
 #define N_WIND_URL            6
 #define N_CURRENT_URL         6
 #define ROOT_GRIB_URL         "https://static1.mclcm.net/mc2020/int/cartes/marine/grib/" // Meteoconsult
@@ -119,16 +120,6 @@ typedef struct {
    double maxDuration;
    int bestTime;
 } ChooseDeparture;
-
-/*! My date */
-typedef struct {
-   int year;
-   int mon;
-   int day;
-   int hour;
-   int min;
-   int sec;
-} MyDate;
 
 /*! For geo map shputil */
 typedef struct {
@@ -276,8 +267,6 @@ typedef struct {
    int    nIsoc;                            // number of Isochrones
    int    n;                                // number of steps
    double calculationTime;                  // compute time to calculate the route
-   long   kTime0;                           // relative index time of departure
-   double startTimeInHours;                 // time of beginning of routing after time0Grib
    double duration;                         // total time in hours of the route
    double motorDuration;                    // total time in hours using motor
    double totDist;                          // total distance in NM
@@ -355,11 +344,13 @@ typedef struct {
    int gridDisp;                             // display meridian and parallels
    int closestDisp;                          // display closest point to pDest in isochrones
    int focalDisp;                            // display focal point 
+   int infoDisp;                             // display digest information
    double penalty0;                          // penalty in hours when amure change front
    double penalty1;                          // penalty in hours when amure change back
    double motorSpeed;                        // motor speed if used
    double threshold;                         // threshold for motor use
-   double efficiency;                        // efficiency of team 
+   double nightEfficiency;                   // efficiency of team at night
+   double dayEfficiency;                     // efficiency of team at day
    double xWind;                             // multiply factor for wind
    double maxWind;                           // max Wind supported
    char editor [MAX_SIZE_NAME];              // name of text file editor
@@ -392,4 +383,5 @@ typedef struct {
    int    status;
    int    nSat;
    time_t time;   // epoch time
+   bool   OK;
 } MyGpsData;

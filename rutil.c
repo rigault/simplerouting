@@ -331,18 +331,17 @@ long getFileSize (const char *fileName) {
 }
 
 /*! return date and time using ISO notation after adding myTime (hours) to the Date */
-char *newDate (long intDate, double myTime, char *res) {
-   time_t seconds = 0;
-   struct tm *tm0 = localtime (&seconds);;
-   tm0->tm_year = ((int ) intDate / 10000) - 1900;
-   tm0->tm_mon = ((int) (intDate % 10000) / 100) - 1;
-   tm0->tm_mday = (int) (intDate % 100);
-   tm0->tm_hour = 0; tm0->tm_min = 0; tm0->tm_sec = 0;
-   time_t theTime = mktime (tm0);                      // converion struct tm en time_t
-   theTime += 3600 * myTime;                           // calcul ajout en secondes
-   struct tm *timeInfos = localtime (&theTime);        // conversion en struct tm
-   snprintf (res, MAX_SIZE_LINE, "%4d/%02d/%02d %02d:%02d", timeInfos->tm_year + 1900, timeInfos->tm_mon + 1, timeInfos->tm_mday,\
-      timeInfos->tm_hour, timeInfos->tm_min);
+char *newDate (long intDate, double nHours, char *res) {
+   struct tm tm0 = {0};
+   tm0.tm_year = (intDate / 10000) - 1900;
+   tm0.tm_mon = ((intDate % 10000) / 100) - 1;
+   tm0.tm_mday = intDate % 100;
+   tm0.tm_isdst = -1;                     // avoid adjustments with hours summer winter
+   int totalMinutes = (int)(nHours * 60);
+   tm0.tm_min += totalMinutes;
+   mktime (&tm0);                         // adjust tm0 struct (manage day, mon year overflow)
+   snprintf (res, MAX_SIZE_LINE, "%4d/%02d/%02d %02d:%02d", tm0.tm_year + 1900, tm0.tm_mon + 1, tm0.tm_mday,\
+      tm0.tm_hour, tm0.tm_min);
    return res;
 }
 
@@ -636,43 +635,68 @@ void initZone (Zone *zone) {
    zone->nbLon = 0;
 }
 
-/*! convert epech time to string */
-char *epochToStr (time_t t, char *str, size_t len) {
+/*! return offset Local UTC in seconds */
+double offsetLocalUTC () {
+   time_t now;
+   time (&now);                           // Obtenir le temps actuel en time_t
+   struct tm local_tm = *localtime(&now); // Convertir en struct tm en temps local
+   struct tm utc_tm = *gmtime(&now);      // Convertir en struct tm en temps UTC
+   time_t local_time = mktime(&local_tm); // Convertir ces struct tm en time_t
+   time_t utc_time = mktime(&utc_tm);
+   double offsetSeconds = difftime(local_time, utc_time); // Calculer la différence en secondes
+   if (local_tm.tm_isdst > 0)
+        offsetSeconds += 3600;            // Ajouter une heure supplémentaire si heure d'été
+   return offsetSeconds;
+}
+      
+/*! convert epoch time to string with or without seconds */
+char *epochToStr (time_t t, bool seconds, char *str, size_t len) {
    struct tm *utc = gmtime (&t);
-   snprintf (str, len, "%d/%02d/%02d %02d:%02d:%02d", 
-      utc->tm_year + 1900, utc->tm_mon + 1, utc->tm_mday,
-      utc->tm_hour, utc->tm_min, utc->tm_sec); 
+   if (seconds)
+      snprintf (str, len, "%d/%02d/%02d %02d:%02d:%02d", 
+         utc->tm_year + 1900, utc->tm_mon + 1, utc->tm_mday,
+         utc->tm_hour, utc->tm_min, utc->tm_sec);
+   else
+      snprintf (str, len, "%d/%02d/%02d %02d:%02d", 
+         utc->tm_year + 1900, utc->tm_mon + 1, utc->tm_mday,
+         utc->tm_hour, utc->tm_min);
+      
+   return str;
+}
+
+/*! return str representing grib date */
+char *gribDateTimeToStr (long date, long time, char *str, size_t len) {
+   int year = date / 10000;
+   int mon = (date % 10000) / 100;
+   int day = date % 100;
+   int hour = time / 100;
+   int min = time % 100;
+   snprintf (str, len, "%4d/%02d/%02d %02d:%02d", year, mon, day, hour, min);
    return str;
 }
 
 /*! convert long date found in grib file in seconds time_t */
-time_t dateToTime_t (long date) {
-   time_t seconds = 0;
-   struct tm *tm0 = gmtime (&seconds);
-   tm0->tm_year = ((int ) date / 10000) - 1900;
-   tm0->tm_mon = ((int) (date % 10000) / 100) - 1;
-   tm0->tm_mday = (int) (date % 100);
-   tm0->tm_hour = 0; 
-   tm0->tm_min = 0; 
-   tm0->tm_sec = 0;
-   return (mktime (tm0));                      // converion struct tm en time_t
+time_t gribDateTimeToEpoch (long date, long time) {
+   struct tm tm0 = {0};
+   tm0.tm_year = (date / 10000) - 1900;
+   tm0.tm_mon = ((date % 10000) / 100) - 1;
+   tm0.tm_mday = date % 100;
+   tm0.tm_hour = time / 100;
+   tm0.tm_min = time % 100;
+   tm0.tm_isdst = -1;                                       // avoid adjustments with hours summer winter
+   //return timegm (&tm0);                                  // converion struct tm en time_t NON PORTABLE
+   return mktime (&tm0);                                  // converion struct tm en time_t
 }
 
 /*! return difference in hours between two zones (current zone and Wind zone) */
 double zoneTimeDiff (Zone *zone1, Zone *zone0) {
    if (zone1->wellDefined && zone0->wellDefined) {
-      time_t time1 = dateToTime_t (zone1->dataDate [0]) + 3600 * (zone1->dataTime [0] / 100);
-      time_t time0 = dateToTime_t (zone0->dataDate [0]) + 3600 * (zone0->dataTime [0] /100);   // add seconds
+      time_t time1 = gribDateTimeToEpoch (zone1->dataDate [0], zone1->dataTime [0]);
+      time_t time0 = gribDateTimeToEpoch (zone0->dataDate [0], zone0->dataTime [0]);
       return (time1 - time0) / 3600.0;
    }
    else return 0;
 } 
-
-/*! return number of second between beginning of grib to now */
-time_t diffNowGribTime0 (Zone *zone) {
-   time_t now;
-   return time (&now) - (dateToTime_t (zone->dataDate [0]) + 3600 * (zone->dataTime [0] / 100));
-}
 
 /*! print Grib u v for all lat lon time information */
 void printGrib (Zone *zone, FlowP *gribData) {
@@ -731,8 +755,8 @@ static bool geoIntersectGrib (Zone *zone1, Zone *zone2) {
 
 /*! true if (wind) zone and zone 2 intersect in time */
 static bool timeIntersectGrib (Zone *zone1, Zone *zone2) {
-	time_t timeMin1 = dateToTime_t (zone1->dataDate [0]) + 3600 * (zone1->dataTime [0] / 100);
-	time_t timeMin2 = dateToTime_t (zone2->dataDate [0]) + 3600 * (zone2->dataTime [0] / 100);
+	time_t timeMin1 = gribDateTimeToEpoch (zone1->dataDate [0], zone1->dataTime [0]);
+	time_t timeMin2 = gribDateTimeToEpoch (zone2->dataDate [0], zone2->dataTime [0]);
 	time_t timeMax1 = timeMin1 + 3600 * (zone1-> timeStamp [zone1 -> nTimeStamp -1]);
 	time_t timeMax2 = timeMin2 + 3600 * (zone2-> timeStamp [zone2 -> nTimeStamp -1]);
 	
@@ -1640,7 +1664,8 @@ bool readParam (const char *fileName) {
    par.cogStep = 5;
    par.rangeCog = 90;
    par.maxIso = MAX_SIZE_ISOC;
-   par.efficiency = 1;
+   par.dayEfficiency = 1;
+   par.nightEfficiency = 1;
    par.kFactor = 1;
    par.jFactor = 300;
    par.nSectors = 720;
@@ -1738,7 +1763,8 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "SPECIAL:%d", &par.special) > 0);
       else if (sscanf (pLine, "MOTOR_S:%lf", &par.motorSpeed) > 0);
       else if (sscanf (pLine, "THRESHOLD:%lf", &par.threshold) > 0);
-      else if (sscanf (pLine, "EFFICIENCY:%lf", &par.efficiency) > 0);
+      else if (sscanf (pLine, "DAY_EFFICIENCY:%lf", &par.dayEfficiency) > 0);
+      else if (sscanf (pLine, "NIGHT_EFFICIENCY:%lf", &par.nightEfficiency) > 0);
       else if (sscanf (pLine, "X_WIND:%lf", &par.xWind) > 0);
       else if (sscanf (pLine, "MAX_WIND:%lf", &par.maxWind) > 0);
       else if (sscanf (pLine, "CONST_WAVE:%lf", &par.constWave) > 0);
@@ -1764,6 +1790,7 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "COLOR_DISP:%d", &par.showColors) > 0);
       else if (sscanf (pLine, "DMS_DISP:%d", &par.dispDms) > 0);
       else if (sscanf (pLine, "WIND_DISP:%d", &par.windDisp) > 0);
+      else if (sscanf (pLine, "INFO_DISP:%d", &par.infoDisp) > 0);
       else if (sscanf (pLine, "AVR_OR_GUST_DISP:%d", &par.averageOrGustDisp) > 0);
       else if (sscanf (pLine, "CURRENT_DISP:%d", &par.currentDisp) > 0);
       else if (sscanf (pLine, "WAVE_DISP:%d", &par.waveDisp) > 0);
@@ -1844,7 +1871,8 @@ bool writeParam (const char *fileName, bool header) {
    fprintf (f, "PENALTY1:        %.2lf\n", par.penalty1);
    fprintf (f, "MOTOR_S:         %.2lf\n", par.motorSpeed);
    fprintf (f, "THRESHOLD:       %.2lf\n", par.threshold);
-   fprintf (f, "EFFICIENCY:      %.2lf\n", par.efficiency);
+   fprintf (f, "DAY_EFFICIENCY:  %.2lf\n", par.dayEfficiency);
+   fprintf (f, "NIGHT_EFFICIENCY:%.2lf\n", par.nightEfficiency);
    fprintf (f, "X_WIND:          %.2lf\n", par.xWind);
    fprintf (f, "MAX_WIND:        %.2lf\n", par.maxWind);
 
@@ -1868,6 +1896,7 @@ bool writeParam (const char *fileName, bool header) {
    fprintf (f, "COLOR_DISP:      %d\n", par.showColors);
    fprintf (f, "DMS_DISP:        %d\n", par.dispDms);
    fprintf (f, "WIND_DISP:       %d\n", par.windDisp);
+   fprintf (f, "INFO_DISP:       %d\n", par.infoDisp);
    fprintf (f, "AVR_OR_GUST_DISP:%d\n", par.averageOrGustDisp);
    fprintf (f, "CURRENT_DISP:    %d\n", par.currentDisp);
    fprintf (f, "WAVE_DISP:       %d\n", par.waveDisp);
@@ -1894,87 +1923,64 @@ bool writeParam (const char *fileName, bool header) {
    return true;
 }
 
-/*! check GPS data are valid */
-bool gpsOK () {
-   if (isnan (my_gps_data.lat) || isnan (my_gps_data.lon) ||
-      !isfinite (my_gps_data.lat) || ! isfinite (my_gps_data.lon))
-      return false;
-   else 
-      return (my_gps_data.lat != 0 || my_gps_data.lat != 0);
-}
-
-/*! write gps information in buffer */
-bool gpsToStr (char *buffer, size_t maxLength) {
-   char line [MAX_SIZE_LINE];
-   char strLat [MAX_SIZE_LINE];
-   char strLon [MAX_SIZE_LINE];
-   if (!gpsOK ()) {
-      strcpy (buffer, "No GPS data available\n");
-      return false;
-   }
-   snprintf (buffer, MAX_SIZE_BUFFER, "Position: %s %s\n", \
-      latToStr (my_gps_data.lat, par.dispDms, strLat), lonToStr (my_gps_data.lon, par.dispDms, strLon));
-   snprintf (line, MAX_SIZE_LINE, "Altitude: %.2f\n", my_gps_data.alt);
-   strncat (buffer, line, maxLength - strlen (buffer));
-   snprintf (line, MAX_SIZE_LINE, "Status: %d\n", my_gps_data.status);
-   strncat (buffer, line, maxLength - strlen (buffer));
-   snprintf (line, MAX_SIZE_LINE, "Number of satellites: %d\n", my_gps_data.nSat);
-   strncat (buffer, line, maxLength - strlen (buffer));
-   struct tm *timeinfo = gmtime (&my_gps_data.time);
-
-   snprintf (line, MAX_SIZE_LINE, "GPS Time: %d-%02d-%02d %02d:%02d:%02d UTC\n", 
-      timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday,
-      timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
-   strncat (buffer, line, maxLength - strlen (buffer));
-   return true;
-}
-
-/*! Fonction de lecture du GPS exécutée dans un thread */
-void *gps_thread_function (void *data) {
-   struct ThreadData *thread_data = (struct ThreadData *)data;
-
+/*! get GPS information */
+void *getGPS () {
+   struct gps_data_t gps_data;
+   const int MODE_STR_NUM = 4;
+   my_gps_data.OK = false;
    while (true) {
-      if (gps_waiting (&thread_data->gps_data, MILLION)) {
-         if (gps_read (&thread_data->gps_data, NULL, 0) == -1) {
-            fprintf (stderr, "Error in gps_thread_function: GPS read failed.\n");
-         } else if (thread_data->gps_data.set & PACKET_SET) {
-            // Verrouillez la structure MyGpsData avant la mise à jour
-            pthread_mutex_lock(&gps_data_mutex);
+      my_gps_data.OK = false;
+      if (gps_open ("localhost", GPSD_TCP_PORT, &gps_data) == -1) {
+         fprintf (stderr, "Error in getGPS: Unable to connect to GPSD.\n");
+         my_gps_data.OK = false;
+         return NULL;
+      }
 
-            // Mise à jour des données GPS
-            my_gps_data.lat = thread_data->gps_data.fix.latitude;
-            my_gps_data.lon = thread_data->gps_data.fix.longitude;
-            my_gps_data.alt = thread_data->gps_data.fix.altitude;
-            my_gps_data.cog = thread_data->gps_data.fix.track;
-            my_gps_data.sog = MS_TO_KN * thread_data->gps_data.fix.speed;
-            my_gps_data.status = thread_data->gps_data.fix.status;
-            my_gps_data.nSat = thread_data->gps_data.satellites_visible;
-            my_gps_data.time = thread_data->gps_data.fix.time.tv_sec;
-            // Déverrouillez la structure MyGpsData après la mise à jour
-            pthread_mutex_unlock(&gps_data_mutex);
+      (void) gps_stream (&gps_data, WATCH_ENABLE | WATCH_JSON, NULL);
+
+      while (gps_waiting (&gps_data, GPS_TIME_OUT)) {
+         if (gps_read (&gps_data, NULL, 0) == -1) {
+            fprintf (stderr, "Error in getGPS: gps_read\n");
+            break;
+         }
+         if (MODE_SET != (MODE_SET & gps_data.set)) {
+            // did not even get mode, nothing to see here
+            continue;
+         }
+         if (gps_data.fix.mode < 0 || MODE_STR_NUM <= gps_data.fix.mode) {
+            gps_data.fix.mode = 0;
+         }
+         //if (isfinite(gps_data.fix.latitude) && isfinite(gps_data.fix.longitude)) {
+         if (isfinite(gps_data.fix.latitude) && isfinite(gps_data.fix.longitude) &&
+            ((gps_data.fix.latitude != 0 || gps_data.fix.longitude != 0))) {
+            // printf("Lat: %.2f, Lon: %.2f\n", gps_data.fix.latitude, gps_data.fix.longitude);
+            // update GPS data
+            my_gps_data.lat = gps_data.fix.latitude;
+            my_gps_data.lon = gps_data.fix.longitude;
+            my_gps_data.alt = gps_data.fix.altitude;
+            my_gps_data.cog = gps_data.fix.track;
+            my_gps_data.sog = MS_TO_KN * gps_data.fix.speed;
+            my_gps_data.status = gps_data.fix.status;
+            my_gps_data.nSat = gps_data.satellites_visible;
+            my_gps_data.time = gps_data.fix.time.tv_sec;
+            my_gps_data.OK = true;
+            break;
+         }
+         else {
+            my_gps_data.OK = false;
+            // printf("No GPS Info\n");
          }
       }
-      usleep (MILLION); // Délai de 1 seconde
+      (void) gps_stream (&gps_data, WATCH_DISABLE, NULL);
+      (void) gps_close (&gps_data);
+      sleep (20);
    }
    return NULL;
 }
 
 /*! GPS init */
 bool initGPS () {
-   // Initialisez les données du thread
-   memset (&thread_data, 0, sizeof(struct ThreadData));
-   thread_data.my_gps_data = my_gps_data;
-
-   // Ouvrez la connexion GPS
-   if (gps_open ("localhost", GPSD_TCP_PORT, &thread_data.gps_data) == -1) {
-      fprintf (stderr, "Error in initGPS: Unable to connect to GPSD.\n");
-      return false;
-   }
-
-   gps_stream (&thread_data.gps_data, WATCH_ENABLE | WATCH_JSON, NULL);
-
-   // Créez un thread pour la lecture du GPS
-   if (pthread_create (&gps_thread, NULL, gps_thread_function, &thread_data) != 0) {
+   if (pthread_create (&gps_thread, NULL, getGPS, NULL) != 0) {
       fprintf (stderr, "Error in initGPS: Unable to create GPS thread.\n");
       return false;
    }
@@ -1983,18 +1989,16 @@ bool initGPS () {
 
 /*! GPS close */
 void closeGPS () {
-   // Fermez la connexion GPS et terminez le thread GPS lors de la fermeture de l'application
-   gps_stream (&thread_data.gps_data, WATCH_DISABLE, NULL);
-   gps_close (&thread_data.gps_data);
    pthread_cancel (gps_thread);
    pthread_join (gps_thread, NULL);
 }
 
-/*! URL for METEO Consult Wind 4 hours before now at closest time 0Z, 6Z, 12Z, or 18Z 
+/*! URL for METEO Consult Wind delay hours before now at closest time 0Z, 6Z, 12Z, or 18Z 
 	Current 12 hours before new at 0Z */
 char *buildMeteoUrl (int type, int i, char *url) {
    time_t meteoTime = time (NULL) - (3600 * delay [type]);
-   struct tm * timeInfos = gmtime(&meteoTime);  // time 4 hours ago
+   struct tm * timeInfos = gmtime (&meteoTime);  // time 4 hours ago
+   // printf ("Delay: %d hours ago: %s\n", delay [type], asctime (timeInfos));
    int mm = timeInfos->tm_mon + 1;
    int dd = timeInfos->tm_mday;
    int hh = (timeInfos->tm_hour / 6) * 6;    // select 0 or 6 or 12 por 18
@@ -2050,7 +2054,7 @@ bool curlGet (char *url, char* outputFile) {
 bool addTracePoint (const char *fileName) {
    FILE *f = NULL;
    char str [MAX_SIZE_LINE];
-   if (!gpsOK ()) 
+   if (!my_gps_data.OK) 
       return false;
    if (my_gps_data.lon == 0 && my_gps_data.lat == 0)
       return false;
@@ -2058,12 +2062,12 @@ bool addTracePoint (const char *fileName) {
       fprintf (stderr, "Error in addTracePoint: cannot write: %s\n", fileName);
       return false;
    }
-   fprintf (f, "%.2lf; %.2lf; %ld; %s\n", my_gps_data.lat, my_gps_data.lon, my_gps_data.time, epochToStr (my_gps_data.time, str, sizeof (str)));
+   fprintf (f, "%.2lf; %.2lf; %ld; %s\n", my_gps_data.lat, my_gps_data.lon, my_gps_data.time, epochToStr (my_gps_data.time, true, str, sizeof (str)));
    fclose (f);
    return true;
 }
 
-/*! find last point in trace*/
+/*! find last point in trace */
 bool findLastTracePoint (const char *fileName, double *lat, double *lon, double *time) {
    FILE *f = NULL;
    char line [MAX_SIZE_LINE];
@@ -2075,9 +2079,8 @@ bool findLastTracePoint (const char *fileName, double *lat, double *lon, double 
    while (fgets (line, MAX_SIZE_LINE, f) != NULL ) {
       strncpy (lastLine, line, MAX_SIZE_LINE);
    }
-   return (sscanf (lastLine, "%lf;%lf;%lf", lat, lon, time) >= 3);
    fclose (f);
-   return true;
+   return (sscanf (lastLine, "%lf;%lf;%lf", lat, lon, time) >= 3);
 }
 
 /*! calculate distance in number of miles 
@@ -2147,5 +2150,51 @@ bool isServerAccessible (const char *url) {
         curl_global_cleanup();
         return false; // Erreur d'initialisation de curl
     }
+}
+
+/*! true if day light, false if night 
+// libnova required for this
+bool OisDayLight (time_t t, double lat, double lon) {
+   struct ln_lnlat_posn observer;
+   struct ln_rst_time rst;
+   double julianDay;
+   int ret;
+   observer.lat = lat; 
+   observer.lng = lon; 
+        
+   julianDay = ln_get_julian_from_timet (&t);
+   // printf ("julianDay: %lf\n", julianDay);
+   if ((ret = ln_get_solar_rst (julianDay, &observer, &rst)) != 0) {
+      //printf ("Sun is circumpolar: %d\n", ret);
+      return (ret == 1); // 1 if day, 0 if night
+   }
+   else {
+      //printf ("julianDay Rise: %lf\n", rst.rise);
+      //printf ("julianDay Set : %lf\n", rst.set);
+      return (rst.set < rst.rise);
+   }
+}
+*/
+
+/*! true if day light, false if night 
+   simplified : day if local theoric time is >= 6 and <= 18 
+   t is the time in hours from beginning of grib */
+bool isDayLight (double t, double lat, double lon) {
+   long date = zone.dataDate [0];
+   long time = zone.dataTime [0];
+   struct tm tm0 = {0};
+   tm0.tm_year = (date / 10000) - 1900;
+   tm0.tm_mon = ((date % 10000) / 100) - 1;
+   tm0.tm_mday = date % 100;
+   tm0.tm_hour = time / 100;
+   tm0.tm_min = time % 100;
+   tm0.tm_isdst = -1;                              // avoid adjustments with hours summer winter
+   lon = lonCanonize (lon);
+   tm0.tm_sec += 3600 * (t + lon / 15.0);          // add one hour every 15° + = east, - = west
+   mktime (&tm0);                                  // adjust with secondes added
+   // printf ("isDayLignt UTC; %s", asctime (&tm0));
+   if (lat > 75.0) return  (tm0.tm_mon > 3 && tm0.tm_mon < 9);
+   if (lat < -75.0) return ! (tm0.tm_mon > 3 && tm0.tm_mon < 9);
+   return (tm0.tm_hour >= 6) && (tm0.tm_hour <= 18);
 }
 

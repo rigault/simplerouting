@@ -163,6 +163,8 @@ static int buildNextIsochrone (Pp *pOr, Pp *pDest, Isoc isoList, int isoLen, dou
    *bestVmg = 0;
    
    for (int k = 0; k < isoLen; k++) {
+      if (!isInZone (&isoList [k], &zone))
+         continue;
       findWind (&isoList [k], t, &u, &v, &gust, &w, &twd, &tws);
       if (tws > par.maxWind)
          continue; // avoid location where wind speed too high...
@@ -175,7 +177,8 @@ static int buildNextIsochrone (Pp *pOr, Pp *pDest, Isoc isoList, int isoLen, dou
          twa = (cog > twd) ? cog - twd : cog - twd + 360;   //angle of the boat with the wind
          if (twa > 360) twa -= 360; 
          //speed of the boat considering twa and wind speed (tws) in polar
-         sog = (motor) ? par.motorSpeed : par.efficiency * findPolar (twa, tws * par.xWind, polMat); 
+         double efficiency = (isDayLight (t, isoList [k].lat, isoList [k].lon)) ? par.dayEfficiency : par.nightEfficiency;
+         sog = (motor) ? par.motorSpeed : efficiency * findPolar (twa, tws * par.xWind, polMat); 
          newPt.motor = motor;
          newPt.amure = (cog > twd) ? BABORD : TRIBORD;
          if ((w > 0) && ((waveCorrection = findPolar (twa, w, wavePolMat)) > 0)) {
@@ -342,7 +345,7 @@ static void statRoute (double lastStepDuration) {
    for (int i = 1; i < route.n; i++) {
       p.lat = route.t [i-1].lat;
       p.lon = route.t [i-1].lon;
-      route.t [i-1].time = par.tStep * (i - 1) + route.startTimeInHours;
+      route.t [i-1].time = par.tStep * (i - 1) + par.startTimeInHours;
       route.t [i-1].lCap = directCap (route.t[i-1].lat, route.t[i-1].lon, route.t[i].lat, route.t[i].lon);
       route.t [i-1].oCap = orthoCap (route.t[i-1].lat, route.t[i-1].lon, route.t[i].lat, route.t[i].lon);
       route.t [i-1].ld  = loxoDist (route.t[i-1].lat, route.t[i-1].lon, route.t[i].lat, route.t[i].lon);
@@ -362,30 +365,30 @@ static void statRoute (double lastStepDuration) {
       route.maxGust = MAX (route.maxGust, route.t [i-1].g);
       route.maxWave = MAX (route.maxWave, route.t [i-1].w);
    }
+   route.t [route.n-1].time = par.tStep * (route.n-1) + par.startTimeInHours;
+   route.duration += lastStepDuration;
+   route.totDist += route.t [route.n-1].od;
+   if (route.t [route.n-1].motor) {
+      route.motorDuration += lastStepDuration;
+      route.motorDist += route.t [route.n-1].od;
+   }
+   p.lat = route.t [route.n-1].lat;
+   p.lon = route.t [route.n-1].lon;
+   findWind (&p, route.t [route.n-1].time, &route.t [route.n-1].u, &route.t [route.n-1].v, &route.t [route.n-1].g, 
+      &route.t [route.n-1].w, &route.t [route.n-1].twd, &route.t [route.n-1].tws);
+   route.maxTws  = MAX (route.maxTws, route.t [route.n-1].tws);
+   route.maxGust = MAX (route.maxGust, route.t [route.n-1].g);
+   route.maxWave = MAX (route.maxWave, route.t [route.n-1].w);
+   route.avrTws  += route.t [route.n-1].tws;
+   route.avrGust += route.t [route.n-1].g;
+   route.avrWave += route.t [route.n-1].w;
+
    if (route.destinationReached) {
-      p.lat = route.t [route.n-1].lat;
-      p.lon = route.t [route.n-1].lon;
-      route.t [route.n-1].time = par.tStep * (route.n-1) + route.startTimeInHours;
       route.t [route.n-1].lCap = directCap (route.t[route.n-1].lat, route.t[route.n-1].lon, par.pDest.lat, par.pDest.lon);
       route.t [route.n-1].oCap = orthoCap (route.t[route.n-1].lat, route.t[route.n-1].lon, par.pDest.lat, par.pDest.lon);
       route.t [route.n-1].ld = loxoDist (route.t[route.n-1].lat, route.t[route.n-1].lon, par.pDest.lat, par.pDest.lon);
       route.t [route.n-1].od = orthoDist (route.t[route.n-1].lat, route.t[route.n-1].lon, par.pDest.lat, par.pDest.lon);
-      route.duration += lastStepDuration;
-      route.totDist += route.t [route.n-1].od;
-      if (route.t [route.n-1].motor) {
-         route.motorDuration += lastStepDuration;
-         route.motorDist += route.t [route.n-1].od;
-      }
-      findWind (&p, route.t [route.n-1].time, &route.t [route.n-1].u, &route.t [route.n-1].v, &route.t [route.n-1].g, 
-         &route.t [route.n-1].w, &route.t [route.n-1].twd, &route.t [route.n-1].tws);
-      route.maxTws  = MAX (route.maxTws, route.t [route.n-1].tws);
-      route.maxGust = MAX (route.maxGust, route.t [route.n-1].g);
-      route.maxWave = MAX (route.maxWave, route.t [route.n-1].w);
-      route.avrTws  += route.t [route.n-1].tws;
-      route.avrGust += route.t [route.n-1].g;
-      route.avrWave += route.t [route.n-1].w;
    }
-   if (route.n == 0) return;
    route.avrTws /= route.n;
    route.avrGust /= route.n;
    route.avrWave /= route.n;
@@ -397,7 +400,6 @@ void storeRoute (Pp *pOr, Pp *pDest, double lastStepDuration) {
    int iFather;
    // bool found = false;
    route.nIsoc = nIsoc;
-   route.startTimeInHours = par.startTimeInHours;
    route.n =  (pDest->id == 0) ? nIsoc + 2 : nIsoc + 1;
    if (nIsoc == 0) {
       route.n = 1;
@@ -423,11 +425,6 @@ void storeRoute (Pp *pOr, Pp *pDest, double lastStepDuration) {
       route.t [i+1].motor = ptLast.motor;
       ptLast = pt;
    }
-   /*if (!found) {
-      route.totDist = 0;
-      route.motorDist = 0;
-      return;
-   }*/
    route.t [0].lat = pOr->lat;
    route.t [0].lon = pOr->lon;
    route.t [0].id = pOr->id;
@@ -440,6 +437,45 @@ void storeRoute (Pp *pOr, Pp *pDest, double lastStepDuration) {
 /*! copy route in a string
    true if enough space, false if truncated */
 bool routeToStr (SailRoute *route, char *str, size_t maxLength) {
+   char line [MAX_SIZE_LINE], strDate [MAX_SIZE_LINE];
+   char strLat [MAX_SIZE_LINE], strLon [MAX_SIZE_LINE];
+
+   strcpy (str, " No        Lat        Lon         Date-Time         Motor     Cap       Dist      SOG     Twd      Tws    Gust   Waves\n");
+   snprintf (line, MAX_SIZE_LINE, " pOr:      %-12s%-12s %6s %6d %7.2f°   %7.2lf  %7.2lf  %6.0lf° %7.2lf %7.2lf %7.2lf\n", \
+      latToStr (route->t[0].lat, par.dispDms, strLat), lonToStr (route->t[0].lon, par.dispDms, strLon), \
+      newDate (zone.dataDate [0], (zone.dataTime [0]/100) + route->t[0].time, strDate), \
+      route->t[0].motor, route->t[0].lCap, route->t[0].ld, route->t[0].ld/par.tStep,
+      route->t[0].twd, route->t[0].tws, MS_TO_KN * route->t[0].g, route->t[0].w);
+
+   strncat (str, line, maxLength - strlen (str));
+   for (int i = 1; i < route->n; i++) {
+      if ((fabs(route->t[i].lon) > 180.0) || (fabs (route->t[i].lat) > 90.0))
+         snprintf (line, MAX_SIZE_LINE, " Isoc %3d: Erreur sur latitude ou longitude\n", i-1);   
+      else
+         snprintf (line, MAX_SIZE_LINE, " Isoc %3d: %-12s%-12s %s %6d %7.2f°   %7.2f  %7.2lf  %6.0lf° %7.2lf %7.2lf %7.2lf\n", \
+            i-1,
+            latToStr (route->t[i].lat, par.dispDms, strLat), lonToStr (route->t[i].lon, par.dispDms, strLon), \
+            newDate (zone.dataDate [0], (zone.dataTime [0]/100) + route->t[i].time, strDate), \
+            route->t[i].motor,\
+            route->t[i].lCap, route->t[i].ld, route->t[i].ld/par.tStep,
+            route->t[i].twd, route->t[i].tws, MS_TO_KN * route->t[i].g, route->t[i].w);
+      strncat (str, line, maxLength - strlen (str));
+   }
+   
+   snprintf (line, MAX_SIZE_LINE, " Avr %88s  %7.2lf %7.2lf %7.2lf\n", " ", route->avrTws, MS_TO_KN * route->avrGust, route->avrWave); 
+   strncat (str, line, maxLength - strlen (str));
+   snprintf (line, MAX_SIZE_LINE, " Max %88s  %7.2lf %7.2lf %7.2lf\n", " ", route->maxTws, MS_TO_KN * route->maxGust, route->maxWave); 
+   strncat (str, line, maxLength - strlen (str));
+   snprintf (line, MAX_SIZE_LINE, "\n Total distance: %7.2lf NM,    Motor distance: %7.2lf NM\n", route->totDist, route->motorDist);
+   strncat (str, line, maxLength - strlen (str));
+   snprintf (line, MAX_SIZE_LINE, " Total Duration: %7.2lf hours, Motor Duration: %7.2lf hours\n", route->duration, route->motorDuration);
+   strncat (str, line, maxLength - strlen (str));
+   return true;
+}
+
+/*! copy route in a string
+   true if enough space, false if truncated */
+bool OrouteToStr (SailRoute *route, char *str, size_t maxLength) {
    char line [MAX_SIZE_LINE];
    char strLat [MAX_SIZE_LINE];
    char strLon [MAX_SIZE_LINE];
@@ -494,7 +530,8 @@ static inline bool goalP (Pp *pFrom, Pp *pDest, double t, double dt, double *tim
    twa = (cog > twd) ? cog - twd : cog - twd + 360;      // angle of the boat with the wind
    *motor =  ((maxSpeedInPolarAt (tws * par.xWind, &polMat) < par.threshold) && (par.motorSpeed > 0));
    // printf ("maxSpeedinPolar: %.2lf\n", maxSpeedInPolarAt (tws, &polMat));
-   sog = (*motor) ? par.motorSpeed : par.efficiency * findPolar (twa, tws * par.xWind, polMat);
+   double efficiency = (isDayLight (t, pFrom->lat, pFrom->lon)) ? par.dayEfficiency : par.nightEfficiency;
+   sog = (motor) ? par.motorSpeed : efficiency * findPolar (twa, tws * par.xWind, polMat); 
    if ((w > 0) && ((waveCorrection = findPolar (twa, w, wavePolMat)) > 0)) { 
       sog = sog * (waveCorrection / 100.0);
    }
@@ -656,7 +693,6 @@ void *routingLaunch () {
    long ut0, ut1;
    double lastStepDuration;
    lastClosest = par.pOr;
-   route.kTime0 = (int) (par.startTimeInHours / (zone.timeStamp [1] - zone.timeStamp [0]));
    tDeltaCurrent = zoneTimeDiff (&currentZone, &zone); // global variable
    Pp pNext;
    par.pOr.id = -1;
