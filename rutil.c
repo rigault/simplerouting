@@ -270,6 +270,23 @@ bool isNumber (const char *name) {
    return false; 
 }
 
+/*! replace $ by sequence */
+char *dollarSubstitute (const char* str, char *res, size_t maxSize) {
+   res [0] = '\0';
+   if (str == NULL) NULL;
+   int len = 0;
+   for (size_t i = 0; (i < maxSize) && (str[i] != '\0'); ++i) {
+      if (str[i] == '$') {
+         res[len++] = '\\';
+         res[len++] = '$';
+      } else {
+         res[len++] = str[i];
+      }
+   }
+   res[len] = '\0';
+   return res;
+}
+
 /*! translate str in double for latitude longitudes */
 double getCoord (const char *str) {
    double deg = 0.0, min = 0.0, sec = 0.0;
@@ -393,7 +410,10 @@ bool smtpGribRequestPython (int type, double lat1, double lon1, double lat2, dou
    int i;
    char temp [MAX_SIZE_LINE];
    char *suffix = "WIND,GUST,WAVES"; 
+   char newPw [MAX_SIZE_NAME];
    if (par.mailPw [0] == '\0') return false;
+   dollarSubstitute (par.mailPw, newPw, MAX_SIZE_NAME);
+   
    lon1 = lonCanonize (lon1);
    lon2 = lonCanonize (lon2);
    
@@ -423,7 +443,7 @@ bool smtpGribRequestPython (int type, double lat1, double lon1, double lat2, dou
          (int) fabs (round(lat1)), (lat1 > 0) ? 'N':'S', (int) fabs (round(lat2)), (lat2 > 0) ? 'N':'S',\
 		   (int) fabs (round(lon1)), (lon1 > 0) ? 'E':'W', (int) fabs (round(lon2)), (lon2 > 0) ? 'E':'W',\
 		   par.gribResolution, par.gribResolution, par.gribTimeStep, par.gribTimeMax,\
-         (type == SAILDOCS_CURR) ? "CURRENT" : suffix, par.mailPw);
+         (type == SAILDOCS_CURR) ? "CURRENT" : suffix, newPw);
       break;
    case MAILASAIL:
       printf ("smtp mailasail python\n");
@@ -1558,23 +1578,6 @@ char *strchrReplace (const char *source, char cIn, char cOut, char *dest) {
    return dest;
 } 
 
-/*! replace $ by sequence */
-void dollarReplace (char* str) {
-   char res [MAX_SIZE_LINE] = "";
-   size_t len = 0;
-   if (str == NULL) return;
-   for (size_t i = 0; (i < MAX_SIZE_LINE) && (str[i] != '\0'); ++i) {
-      if (str[i] == '$') {
-         res[len++] = '\\';
-         res[len++] = '$';
-      } else {
-         res[len++] = str[i];
-      }
-   }
-   res[len] = '\0';
-   strncpy (str, res, MAX_SIZE_LINE);
-}
-
 /*! find name, lat and lon */
 static void analyseCoord (char *str, double *lat, double *lon) {
    char *pt = NULL;
@@ -1755,6 +1758,7 @@ bool readParam (const char *fileName) {
          if (par.nShpFiles >= MAX_N_SHP_FILES) 
             fprintf (stderr, "Error in readParam: Number max of SHP files reached: %d\n", par.nShpFiles);
       }
+      else if (sscanf (pLine, "MOST_RECENT_GRIB:%d", &par.mostRecentGrib) > 0);
       else if (sscanf (pLine, "START_TIME:%lf", &par.startTimeInHours) > 0);
       else if (sscanf (pLine, "T_STEP:%lf", &par.tStep) > 0);
       else if (sscanf (pLine, "RANGE_COG:%d", &par.rangeCog) > 0);
@@ -1796,7 +1800,6 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "WAVE_DISP:%d", &par.waveDisp) > 0);
       else if (sscanf (pLine, "GRID_DISP:%d", &par.gridDisp) > 0);
       else if (sscanf (pLine, "LEVEL_POI_DISP:%d", &par.maxPoiVisible) > 0);
-      else if (sscanf (pLine, "MAIL_PW:%255s", par.mailPw) > 0);
       else if (sscanf (pLine, "WEBKIT:%255s", str) > 0)
          buildRootName (str, par.webkit);
       else if (strstr (pLine, "EDITOR:") != NULL) {
@@ -1816,18 +1819,22 @@ bool readParam (const char *fileName) {
          forbidZoneAdd (pLine, par.nForbidZone);
          par.nForbidZone += 1;
       }
+      else if (sscanf (pLine, "MAIL_PW:%255s", par.mailPw) > 0);
       else fprintf (stderr, "Error in readParam: Cannot interpret: %s\n", pLine);
    }
-   if (par.mailPw [0] != '\0')
-      dollarReplace (par.mailPw);
+   if (par.mailPw [0] != '\0') {
+      par.storeMailPw = true;
+   }
+      
    if (par.maxIso > MAX_N_ISOC) par.maxIso = MAX_N_ISOC;
    if (par.constWindTws != 0) initZone (&zone);
    fclose (f);
    return true;
 }
 
-/*! write parameter file from fill struct par */
-bool writeParam (const char *fileName, bool header) {
+/*! write parameter file from fill struct par 
+   header or not, password or not */
+bool writeParam (const char *fileName, bool header, bool password) {
    FILE *f = NULL;
    if ((f = fopen (fileName, "w")) == NULL) {
       fprintf (stderr, "Error in writeParam: Cannot write: %s\n", fileName);
@@ -1850,6 +1857,7 @@ bool writeParam (const char *fileName, bool header) {
    fprintf (f, "CGRIB:           %s\n", par.gribFileName);
    if (par.currentGribFileName [0] != '\0')
       fprintf (f, "CURRENT_GRIB:    %s\n", par.currentGribFileName);
+   fprintf (f, "MOST_RECENT_GRIB:%d\n", par.mostRecentGrib);
    fprintf (f, "GRIB_RESOLUTION: %.1lf\n", par.gribResolution);
    fprintf (f, "GRIB_TIME_STEP:  %d\n", par.gribTimeStep);
    fprintf (f, "GRIB_TIME_MAX:   %d\n", par.gribTimeMax);
@@ -1913,6 +1921,8 @@ bool writeParam (const char *fileName, bool header) {
    fprintf (f, "WEBKIT:          %s\n", par.webkit);
    fprintf (f, "EDITOR:          %s\n", par.editor);
    fprintf (f, "SPREADSHEET:     %s\n", par.spreadsheet);
+   if (password)
+      fprintf (f, "MAIL_PW:         %s\n", par.mailPw);
    for (int i = 0; i < par.nForbidZone; i++) {
       fprintf (f, "FORBID_ZONE:     ");
       for (int j = 0; j < forbidZones [i].n; j++)

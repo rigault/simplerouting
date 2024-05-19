@@ -107,9 +107,8 @@ void optionManage (char option) {
       printf ("Compilation-date: %s\n", __DATE__);
       break;
    case 'z': //
-      printf ("size of buffer %zu\n", sizeof (buffer));
-      while (true) {
-      }   
+      printf ("Password %s\n", par.mailPw);
+      printf ("Password %s\n", dollarSubstitute (par.mailPw, buffer, strlen (par.mailPw)));
       break;
    default:
       printf ("Option unknown: -%c\n", option);

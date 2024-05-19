@@ -309,6 +309,7 @@ typedef struct {
    int nSectors;                             // number of sector for optimization by sector
    char workingDir [MAX_SIZE_FILE_NAME];     // working directory
    char gribFileName [MAX_SIZE_FILE_NAME];   // name of grib file
+   int  mostRecentGrib;                      // true if most recent grib in grib directory to be selected
    double gribResolution;                    // grib lat step for mail request
    int gribTimeStep;                         // grib time step for mail request
    int gribTimeMax;                          // grib time max fir mail request
@@ -357,6 +358,7 @@ typedef struct {
    char webkit [MAX_SIZE_NAME];              // name of webkit application
    char spreadsheet [MAX_SIZE_NAME];         // name of spreadshhet application
    char mailPw [MAX_SIZE_NAME];              // password for smtp and imap
+   bool storeMailPw;                         // store Mail PW
    int  nForbidZone;                         // number of forbidden zones
    char forbidZone [MAX_N_FORBID_ZONE][MAX_SIZE_LINE]; // array of forbid zones
 } Par;

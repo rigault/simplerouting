@@ -94,7 +94,6 @@ guint8 colorPalette [N_WIND_COLORS][3] = {{0,0,255}, {0, 255, 0}, {255, 255, 0},
 guint8 bwPalette [N_WIND_COLORS][3] = {{250,250,250}, {200, 200, 200}, {170, 170, 170}, {130, 130, 130}, {70, 70, 70}, {10, 10, 10}};
 const double tTws [] = {0.0, 15.0, 20.0, 25.0, 30.0, 40.0};
 
-static guint last_click_time = 0;         // time at last rigt click. Used to make difference between double click and simple click
 char   parameterFileName [MAX_SIZE_FILE_NAME];
 guint  context_id;                        // for statusBar
 int    selectedPol = 0;                   // select polar to draw. 0 = all
@@ -987,11 +986,17 @@ static void focusOnPointInRoute (cairo_t *cr)  {
          latToStr (lat, par.dispDms, strLat), lonToStr (lon, par.dispDms, strLon));
    }
    else {
-      if (i >= route.n) i = route.n - 1;
-      lat = route.t[i].lat;
-      lon = route.t[i].lon;
+      if (i > route.n) {
+         i = route.n - 1;
+         lat = lastClosest.lat;
+         lon = lastClosest.lon;
+      }
+      else {
+         lat = route.t[i].lat;
+         lon = route.t[i].lon;
+      }
       snprintf (sInfoRoute, sizeof (sInfoRoute), 
-         "Route Date: %s Lat: %-12s Lon: %-12s   COG: %6.2f°   SOG:%5.2lfKn   TWD:%03d° TWS:%5.2lfKn   Gust: %5.2lfKn   Wave: %5.2lfm   %s", \
+         "Route Date: %s Lat: %-12s Lon: %-12s   COG: %6.0f°   SOG:%5.2lfKn   TWD:%03d° TWS:%5.2lfKn   Gust: %5.2lfKn   Wave: %5.2lfm   %s", \
          newDate (zone.dataDate [0], (zone.dataTime [0]/100) + route.t[i].time, strDate), \
          latToStr (route.t[i].lat, par.dispDms, strLat), lonToStr (route.t[i].lon, par.dispDms, strLon), \
          route.t[i].lCap, route.t[i].ld/par.tStep, \
@@ -1001,7 +1006,7 @@ static void focusOnPointInRoute (cairo_t *cr)  {
    }
    showUnicode (cr, BOAT_UNICODE, lon, lat);
    gtk_label_set_text (GTK_LABEL(labelInfoRoute), sInfoRoute);
-   circle (cr, lon, lat, 1.0, 0.0, 0.0); // red
+   circle (cr, lon, lat, 00, 0.0, 1.0); // blue
 }
 
 /*! draw the routes based on route table, from pOr to pDest or best point */
@@ -1525,8 +1530,8 @@ static void drawGribCallback (GtkDrawingArea *area, cairo_t *cr, int width, int 
    if ((route.n != 0) && (isfinite(route.totDist)) && (route.totDist > 0)) { 
       drawAllIsochrones (cr, par.style);
       drawAllRoutes (cr);
-      Pp selectedPt = isocArray [nIsoc - 1][selectedPointInLastIsochrone]; // selected point in last isochrone
-      circle (cr, selectedPt.lon, selectedPt.lat, 1.0, 0.0, 1.1);
+      //Pp selectedPt = isocArray [nIsoc - 1][selectedPointInLastIsochrone]; // selected point in last isochrone
+      //circle (cr, selectedPt.lon, selectedPt.lat, 1.0, 0.0, 1.1);
    }
    focusOnPointInRoute (cr);
    if (destPressed) {
@@ -2339,7 +2344,6 @@ static void on_stop_button_clicked(GtkWidget *widget, gpointer data) {
 
 /*! Callback for animation update */
 static gboolean on_play_timeout(gpointer user_data) {
-   //theTime += zone.timeStamp [1]-zone.timeStamp [0];
    theTime += par.tStep;
    if (theTime > zone.timeStamp [zone.nTimeStamp - 1]) {
       theTime = zone.timeStamp [zone.nTimeStamp - 1]; 
@@ -2350,13 +2354,32 @@ static gboolean on_play_timeout(gpointer user_data) {
    return animation_active;
 }
 
+/*! Callback for animation update */
+static gboolean on_loop_timeout(gpointer user_data) {
+   theTime += par.tStep;
+   if ((theTime > zone.timeStamp [zone.nTimeStamp - 1]) || (theTime > par.startTimeInHours + route.duration))
+      theTime = par.startTimeInHours;
+   gtk_widget_queue_draw(drawing_area);
+   statusBarUpdate ();
+   return animation_active;
+}
+
 /*! Callback for play button (animation) */
 static void on_play_button_clicked(GtkWidget *widget, gpointer user_data) {
    if (!animation_active) {
       animation_active = true;
       g_timeout_add (ANIMATION_TEMPO, (GSourceFunc)on_play_timeout, NULL);
-   } else {
-      animation_active = false;
+   }
+}
+
+/*! Callback for loop  button (animation) */
+static void on_loop_button_clicked(GtkWidget *widget, gpointer user_data) {
+   if (!animation_active) {
+      animation_active = true;
+      theTime = par.startTimeInHours;
+      gtk_widget_queue_draw (drawing_area);
+      statusBarUpdate ();
+      g_timeout_add (ANIMATION_TEMPO, (GSourceFunc)on_loop_timeout, NULL);
    }
 }
 
@@ -2433,15 +2456,23 @@ static void historyReset  () {
 }
 
 char traceName [MAX_SIZE_FILE_NAME];
+
 /*! Response for URL change */
 static void newTraceResponse (GtkDialog *dialog, gint response_id, gpointer user_data) {
+   FILE *f;
    if (response_id == GTK_RESPONSE_ACCEPT) {
       printf ("Trace name OK: %s\n", traceName);
-      strncpy (par.traceFileName, traceName, MAX_SIZE_FILE_NAME);
+      if ((f = fopen (traceName, "r")) != NULL) {// check if file already exist
+         infoMessage ("This name already exist ! Retry...", GTK_MESSAGE_ERROR );
+         fclose (f);
+      }
+      else {
+         strncpy (par.traceFileName, traceName, MAX_SIZE_FILE_NAME);
+      }
    }
    gtk_window_destroy (GTK_WINDOW (dialog));
+   gtk_widget_queue_draw (drawing_area);
 }
-   
 
 /*! callback for newTrace change */
 static void traceChange (GtkEditable *editable, gpointer user_data) {
@@ -2525,6 +2556,46 @@ static void traceDump () {
       displayFile (fileName, title, false);
    }
    else infoMessage ("Error in distance trace calculation", GTK_MESSAGE_ERROR);
+}
+
+/*! callback for openTrace */
+static void on_open_trace_response (GtkDialog *dialog, int response) {
+   if (response == GTK_RESPONSE_ACCEPT) {
+      GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
+      g_autoptr(GFile) file = gtk_file_chooser_get_file (chooser);
+      if (file != NULL) {
+         gchar *fileName = g_file_get_path(file);
+         if (fileName != NULL) {
+            printf ("Fichier sélectionné : %s\n", fileName);
+            strncpy (par.traceFileName, fileName, MAX_SIZE_FILE_NAME); 
+            g_free(fileName);
+            traceReport ();
+            gtk_widget_queue_draw (drawing_area);
+         }
+     }
+   }
+   gtk_window_destroy (GTK_WINDOW (dialog));
+}
+
+/*! Select trace file and read trace file */
+static void openTrace () {
+   char directory [MAX_SIZE_DIR_NAME];
+   snprintf (directory, sizeof (directory), "%strace", par.workingDir);
+   GtkWidget *dialog = gtk_file_chooser_dialog_new ("Open Trace", GTK_WINDOW (window), GTK_FILE_CHOOSER_ACTION_OPEN,
+                       "_Cancel", GTK_RESPONSE_CANCEL, "_Open", GTK_RESPONSE_ACCEPT, NULL);
+
+   GFile *gDirectory = g_file_new_for_path(directory);
+   gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog), gDirectory, NULL);
+   g_object_unref(gDirectory);
+
+   GtkFileFilter *filter = gtk_file_filter_new();
+   gtk_file_filter_set_name(filter, "Trace Files");
+   gtk_file_filter_add_pattern(filter, "*.csv");
+   gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+   g_object_unref (filter);
+
+   gtk_window_present (GTK_WINDOW (dialog));
+   g_signal_connect (dialog, "response", G_CALLBACK (on_open_trace_response), NULL);
 }
 
 /*! display Points of Interest information */
@@ -2755,7 +2826,7 @@ static void rteDump () {
 /*! show parameters information */
 static void parDump () {
    char str [MAX_SIZE_FILE_NAME];
-   writeParam (buildRootName (TEMP_FILE_NAME, str), true);
+   writeParam (buildRootName (TEMP_FILE_NAME, str), true, false);
    displayFile (buildRootName (TEMP_FILE_NAME, str), "Parameter Dump", true);
 }
 
@@ -3083,7 +3154,8 @@ static void on_save_scenario_response (GtkDialog *dialog, int response) {
          gchar *fileName = g_file_get_path(file);
          if (fileName != NULL) {
             printf ("Fichier sélectionné : %s\n", fileName);
-            writeParam (fileName, false);
+            printf ("Mail Pw Exist: %d\n", par.storeMailPw);
+            writeParam (fileName, false, par.storeMailPw);
             g_free(fileName);
          }
      }
@@ -3202,7 +3274,6 @@ static void on_open_scenario_response (GtkDialog *dialog, int response) {
       if (file != NULL) {
          gchar *fileName = g_file_get_path(file);
          if (fileName != NULL) {
-            printf ("Fichier sélectionné : %s\n", fileName);
             strncpy (parameterFileName, fileName, MAX_SIZE_FILE_NAME);
             readParam (fileName);
             initScenario ();
@@ -3380,8 +3451,10 @@ static gboolean mailGribRead (gpointer data) {
    char buffer[MAX_SIZE_BUFFER] = "\n";
    int n = 0;
    char *fileName, *end;
+   char newPw [MAX_SIZE_NAME];
+   dollarSubstitute (par.mailPw, newPw, MAX_SIZE_NAME);
    
-   snprintf (command, sizeof (command), "%s %s%s %s", par.imapScript, par.workingDir, (provider == SAILDOCS_CURR) ? "currentgrib" : "grib", par.mailPw); 
+   snprintf (command, sizeof (command), "%s %s%s %s", par.imapScript, par.workingDir, (provider == SAILDOCS_CURR) ? "currentgrib" : "grib", newPw); 
    if ((fp = popen (command, "r")) == NULL) {
       fprintf (stderr, "Error in mailGribRead. popen command: %s\n", command);
       gribRequestRunning = false;
@@ -3483,12 +3556,10 @@ static void model_combo_changed (GtkComboBox *widget, gpointer user_data) {
    updateMailRequestBox ();
 }
 
-/*! Calback to set up mail password  */
+/*! Callback to set up mail password  */
 static void password_entry_changed (GtkEditable *editable, gpointer user_data) {
    const gchar *text = gtk_editable_get_text (editable);
    g_strlcpy (par.mailPw, text, MAX_SIZE_NAME);
-   dollarReplace (par.mailPw);
-   //printf ("pw: %s\n", par.mailPw);
 }
 
 /*! action when closing mail request box */
@@ -3496,13 +3567,15 @@ static void mailRequestBoxResponse (GtkDialog *dialog, gint response_id, gpointe
    char buffer [MAX_SIZE_BUFFER] = "";
    char *ptBuffer, *ptBuffer1;
    char command [MAX_SIZE_LINE * 2] = "";
+   char newPw [MAX_SIZE_NAME];
+   dollarSubstitute (par.mailPw, newPw, MAX_SIZE_NAME);
    printf ("Response mail Request rep: %d %d\n", response_id, GTK_RESPONSE_ACCEPT);
    if (response_id == GTK_RESPONSE_ACCEPT) {
       if (smtpGribRequestPython (provider, mailRequestPar.lat1, mailRequestPar.lon1, mailRequestPar.lat2, mailRequestPar.lon2, buffer, MAX_SIZE_BUFFER)) { 
          ptBuffer = strchr (buffer, ' ');          // delete first words 
          ptBuffer1 = strchr (ptBuffer + 1, ' ');   // delete second word 
          spinner ("Waiting for grib Mail response", ptBuffer1);
-         snprintf (command, sizeof (command), "%s %s", par.imapToSeen, par.mailPw);
+         snprintf (command, sizeof (command), "%s %s", par.imapToSeen, newPw);
          if (popen (command, "r") == NULL) {
             infoMessage ("Error running imapToSeen script", GTK_MESSAGE_ERROR);;
             return;
@@ -3767,8 +3840,11 @@ static void on_checkbox_toggled (GtkWidget *checkbox, gpointer user_data) {
 }
 
 /*! Callback for poi visibility change level */
-static void on_level_poi_visible_changed (GtkScale *scale, gpointer user_data) {
+static void on_level_poi_visible_changed (GtkScale *scale, gpointer label) {
    par.maxPoiVisible = gtk_range_get_value(GTK_RANGE(scale));
+   gchar *value_str = g_strdup_printf("%d", par.maxPoiVisible);
+   gtk_label_set_text(GTK_LABEL(label), value_str);
+   g_free(value_str);
    gtk_widget_queue_draw (drawing_area);
 }
 
@@ -4072,6 +4148,12 @@ static void change () {
    g_signal_connect (G_OBJECT(checkboxGrid), "toggled", G_CALLBACK (on_checkbox_toggled), &par.gridDisp);
    gtk_grid_attach(GTK_GRID (tab_display), checkboxGrid,        0, 7, 1, 1);
 
+   // Boîte à cocher pour "info display"
+   GtkWidget *checkboxInfoDisp = gtk_check_button_new_with_label("Info Display");
+   gtk_check_button_set_active ((GtkCheckButton *) checkboxInfoDisp, par.infoDisp);
+   g_signal_connect(G_OBJECT(checkboxInfoDisp), "toggled", G_CALLBACK (on_checkbox_toggled), &par.infoDisp);
+   gtk_grid_attach(GTK_GRID (tab_display), checkboxInfoDisp,       2, 7, 1, 1);
+
    // Boîte à cocher pour "closest"
    GtkWidget *checkboxClosest = gtk_check_button_new_with_label("Closest");
    gtk_check_button_set_active ((GtkCheckButton *) checkboxClosest, par.closestDisp);
@@ -4084,23 +4166,23 @@ static void change () {
    g_signal_connect(G_OBJECT(checkboxFocal), "toggled", G_CALLBACK (on_checkbox_toggled), &par.focalDisp);
    gtk_grid_attach(GTK_GRID (tab_display), checkboxFocal,          2, 8, 1, 1);
 
-   // Boîte à cocher pour "info display"
-   GtkWidget *checkboxInfoDisp = gtk_check_button_new_with_label("Info Display");
-   gtk_check_button_set_active ((GtkCheckButton *) checkboxInfoDisp, par.infoDisp);
-   g_signal_connect(G_OBJECT(checkboxInfoDisp), "toggled", G_CALLBACK (on_checkbox_toggled), &par.infoDisp);
-   gtk_grid_attach(GTK_GRID (tab_display), checkboxInfoDisp,       0, 9, 1, 1);
-
-   gtk_grid_attach(GTK_GRID(tab_display), separator, 0, 10, 10, 1);
+   gtk_grid_attach(GTK_GRID(tab_display), separator, 0, 9, 10, 1);
 
    // Créer le widget GtkScale
    const int MAX_LEVEL_POI_VISIBLE = 5; 
-   labelCreate (tab_display, "level Poi Visible",     0, 11);
-   GtkWidget *levelVisible = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL, 1, MAX_LEVEL_POI_VISIBLE, 1);
-   gtk_range_set_value(GTK_RANGE(levelVisible), par.maxPoiVisible);
+   labelCreate (tab_display, "level Poi Visible",     0, 10);
+
+   GtkWidget *labelNumber = gtk_label_new (g_strdup_printf("%d", par.maxPoiVisible));
+   gtk_grid_attach(GTK_GRID (tab_display), labelNumber, 1, 10, 1, 1);
+   gtk_widget_set_margin_start (labelNumber, 10);
+   gtk_label_set_xalign(GTK_LABEL(labelNumber), 0.0);
+   
+   GtkWidget *levelVisible = gtk_scale_new_with_range (GTK_ORIENTATION_HORIZONTAL, 1, MAX_LEVEL_POI_VISIBLE, 1);
+   gtk_range_set_value (GTK_RANGE(levelVisible), par.maxPoiVisible);
    gtk_scale_set_value_pos (GTK_SCALE(levelVisible), GTK_POS_TOP);
    gtk_widget_set_size_request (levelVisible, 200, -1);  // Ajuster la largeur du GtkScale
-   g_signal_connect(levelVisible, "value-changed", G_CALLBACK(on_level_poi_visible_changed), NULL);
-   gtk_grid_attach(GTK_GRID(tab_display), levelVisible, 1, 11, 2, 1);
+   g_signal_connect (levelVisible, "value-changed", G_CALLBACK (on_level_poi_visible_changed), labelNumber);
+   gtk_grid_attach(GTK_GRID(tab_display), levelVisible, 2, 10, 2, 1);
   
    // Affichage de la boîte de dialogue et récupération de la réponse
    g_signal_connect_swapped (dialogBox, "response", G_CALLBACK (OKChange), dialogBox);
@@ -4306,7 +4388,6 @@ static void changeLastPoint () {
    double y = whereIsPopup.y;
 
    if (menuWindow != NULL) popoverFinish (menuWindow);
-   if (route.n == 0) return; // we care only if route exist
    for (int i = 0; i < isoDesc [nIsoc - 1 ].size; i++) {
       xLon = getX (isocArray [nIsoc - 1][i].lon);
       yLat = getY (isocArray [nIsoc - 1][i].lat);
@@ -4329,12 +4410,12 @@ static void on_right_click_event (GtkGestureClick *gesture, int n_press, double 
    
    GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 5);
 
-   if (route.n != 0) {
+   if (route.n != 0 && !route.destinationReached) {
       GtkWidget *recalculateButton = gtk_button_new_with_label ("Last Point In Isochrone");
       g_signal_connect (recalculateButton, "clicked", G_CALLBACK (changeLastPoint), NULL);
       gtk_box_append (GTK_BOX (box), recalculateButton);
    }
-   
+
    GtkWidget *meteoGramButton = gtk_button_new_with_label ("Meteogram");
    g_signal_connect (meteoGramButton, "clicked", G_CALLBACK (meteogram), NULL);
    GtkWidget *originButton = gtk_button_new_with_label ("Point Of Origin");
@@ -4761,7 +4842,7 @@ gboolean update_GPS_callback (gpointer data) {
    char str [MAX_SIZE_LINE], strDate [MAX_SIZE_LINE], strLat [MAX_SIZE_LINE], strLon [MAX_SIZE_LINE];
    GtkWidget *label = GTK_WIDGET(data);
    if (my_gps_data.OK)
-      snprintf (str, sizeof (str), "%s UTC   Lat: %s Lon: %s  COG: %.2lf°  SOG: %.2lf Kn",
+      snprintf (str, sizeof (str), "%s UTC   Lat: %s Lon: %s  COG: %.0lf°  SOG: %.2lf Kn",
          epochToStr (my_gps_data.time, false, strDate, sizeof (strDate)),
          latToStr (my_gps_data.lat, par.dispDms, strLat), lonToStr (my_gps_data.lon, par.dispDms, strLon),
          my_gps_data.cog, my_gps_data.sog);
@@ -4789,6 +4870,7 @@ static void app_activate (GApplication *application) {
    createButton (toolBox, "preferences-desktop", change);
    createButton (toolBox, "media-playback-pause", on_stop_button_clicked);
    createButton (toolBox, "media-playback-start", on_play_button_clicked);
+   createButton (toolBox, "media-playlist-repeat", on_loop_button_clicked);
    createButton (toolBox, "media-skip-backward", on_to_start_button_clicked);
    createButton (toolBox, "media-seek-backward", on_reward_button_clicked);
    createButton (toolBox, "media-seek-forward", on_forward_button_clicked);
@@ -4931,6 +5013,7 @@ static void app_startup (GApplication *application) {
    
    createAction ("traceReport", traceReport);
    createAction ("traceDump", traceDump);
+   createAction ("openTrace", openTrace);
    createAction ("newTrace", newTrace);
 
    createAction ("help", help);
@@ -5001,6 +5084,7 @@ static void app_startup (GApplication *application) {
    GMenu *trace_menu_v = g_menu_new ();
    subMenu (trace_menu_v, "Report", "app.traceReport", "");
    subMenu (trace_menu_v, "Dump", "app.traceDump", "");
+   subMenu (trace_menu_v, "Open", "app.openTrace", "");
    subMenu (trace_menu_v, "New", "app.newTrace", "");
 
    // Ajout d'éléments dans le menu "Help"
@@ -5056,7 +5140,7 @@ int main (int argc, char *argv[]) {
    char fileName [MAX_SIZE_FILE_NAME];
    bool ret = true;
    vOffsetLocalUTC = offsetLocalUTC ();
-   printf ("LocalTime - UTC: %.0lf\n", vOffsetLocalUTC);
+   printf ("LocalTime - UTC: %.0lf hours\n", vOffsetLocalUTC / 3600.0);
    initGPS ();
 
    if (setlocale (LC_ALL, "C") == NULL) {              // very important for scanf decimal numbers
@@ -5102,7 +5186,8 @@ int main (int argc, char *argv[]) {
    initZone (&zone);
    initDispZone ();
    
-   if (par.gribFileName [0] == '\0') { // no grib file found in .par file
+   if (par.mostRecentGrib) { // most recent grib will replace existing grib
+      par.gribFileName [0] = '\0';
       if ((strlen (par.workingDir) + strlen ("grib/"))  < sizeof (par.gribFileName)) { 
          strncat (par.gribFileName, par.workingDir, MAX_SIZE_FILE_NAME - strlen (par.workingDir));
          strncat (par.gribFileName, "grib/", MAX_SIZE_FILE_NAME - 5);
