@@ -13,7 +13,7 @@
 void optionManage (char option) {
 	FILE *f = NULL;
    char buffer [MAX_SIZE_BUFFER] = "";
-   double w, twa, tws, lon, lat, lat2, lon2;
+   double w, twa, tws, lon, lat, lat2, lon2, cog;
    char str [MAX_SIZE_LINE] = "";
    switch (option) {
    case 'c': // cap
@@ -93,11 +93,11 @@ void optionManage (char option) {
       if (tIsSea == NULL) printf ("in readIsSea : bizarre\n");
       // dumpIsSea ();
       while (1) {
-         printf ("Lon = ");
-         scanf ("%lf", &lon);
          printf ("Lat = ");
          scanf ("%lf", &lat);
-         if (isSea (lon, lat))
+         printf ("Lon = ");
+         scanf ("%lf", &lon);
+         if (isSea (lat, lon))
             printf ("Sea\n");
          else printf ("Earth\n");
       }
@@ -106,6 +106,15 @@ void optionManage (char option) {
       printf ("Prog version: %s, %s, %s\n", PROG_NAME, PROG_VERSION, PROG_AUTHOR);
       printf ("Compilation-date: %s\n", __DATE__);
       break;
+   case 'w': // twa
+      while (true) {
+         printf ("COG = ");
+         scanf ("%lf", &cog);
+         printf ("TWS = ");
+         scanf ("%lf", &tws);
+         printf ("fTwa = %.2lf, ffTwa = %.2lf\n", fTwa (cog, tws), ffTwa (cog, tws));
+      }
+   break;
    case 'z': //
       printf ("Password %s\n", par.mailPw);
       printf ("Password %s\n", dollarSubstitute (par.mailPw, buffer, strlen (par.mailPw)));

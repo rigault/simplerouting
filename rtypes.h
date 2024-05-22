@@ -7,7 +7,7 @@
 #include <time.h>
 #include <pthread.h>
 #include <math.h>
-#define GPS_TIME_OUT          2000000           // 2 s
+#define GPS_TIME_OUT          5000000           // 5 s
 #define N_WIND_URL            6
 #define N_CURRENT_URL         6
 #define ROOT_GRIB_URL         "https://static1.mclcm.net/mc2020/int/cartes/marine/grib/" // Meteoconsult
@@ -50,6 +50,7 @@
 #define MAX_SIZE_DIR_NAME     192               // max size of directory name
 #define MAX_N_SHP_FILES       4                 // max number of shape file
 #define MAX_N_POI             4096              // max number of poi in poi file
+#define SMALL_SIZE            5                 // for short string
 #define MAX_SIZE_POI_NAME     32                // max size of city name
 #define MAX_HISTORY_ROUTE     10                // max nimbedr of history route stored
 #define GPSD_TCP_PORT         "2947"            // TCP port for gps demon
@@ -68,6 +69,7 @@ enum {NONE, ARROW, BARBULE};                    // wind representation
 enum {NOTHING, POINT, SEGMENT, BEZIER};         // bezier or segment representation
 enum {UNVISIBLE, NORMAL, CAT, PORT, NEW};       // for POI point of interest
 enum {RUNNING, STOPPED, NO_SOLUTION, EXIST_SOLUTION}; // for chooseDeparture.ret values
+enum {NO_ANIMATION, PLAY, LOOP};                // for animationActive status
 
 /*! for meteo services */
 enum {SAILDOCS_GFS, SAILDOCS_ECMWF, SAILDOCS_ICON, SAILDOCS_ARPEGE, SAILDOCS_AROME, SAILDOCS_CURR, MAILASAIL, GLOBALMARINET}; // grib mail service providers
@@ -147,7 +149,7 @@ typedef struct {
    int outZone;
 } CheckGrib;
 
-/*! Wind point */
+/*! Wind point */ 
 typedef struct {
    double lat;
    double lon;
@@ -156,13 +158,6 @@ typedef struct {
    double w;                                 // waves height WW3 model
    double g;                                 // wind speed gust
 } FlowP;                                     // ether wind or current
-
-/*! Trace point */
-typedef struct {
-   double lat;
-   double lon;
-   time_t time;
-} TraceP;
 
 /*! zone description */
 typedef struct {
@@ -240,10 +235,11 @@ typedef struct {
    double lon;
    int    id;
    int    father;
+   int    amure;
    bool   motor;
    double time;   // time in hours after start
    double oCap;   // orthodromic cap
-   double od;     // orthodromic dromic distance
+   double od;     // orthodromic distance
    double lCap;   // loxodromic cap
    double ld;     // loxodromic distance
    double u;      // east west wind or current in meter/s
@@ -346,6 +342,7 @@ typedef struct {
    int closestDisp;                          // display closest point to pDest in isochrones
    int focalDisp;                            // display focal point 
    int infoDisp;                             // display digest information
+   int speedDisp;                            // Speed of Display 
    double penalty0;                          // penalty in hours when amure change front
    double penalty1;                          // penalty in hours when amure change back
    double motorSpeed;                        // motor speed if used
@@ -361,6 +358,7 @@ typedef struct {
    bool storeMailPw;                         // store Mail PW
    int  nForbidZone;                         // number of forbidden zones
    char forbidZone [MAX_N_FORBID_ZONE][MAX_SIZE_LINE]; // array of forbid zones
+   int techno;                              // additionnal info display for tech experts
 } Par;
 
 /*! Isochrone */

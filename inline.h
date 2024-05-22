@@ -1,6 +1,11 @@
 /*! this file contains small inlines functions
  to be included in s source files */
 
+/*! true if P (lat, lon) is within the zone */
+static inline bool isInZone (double lat, double lon, Zone *zone) {
+   return (lat >= zone->latMin) && (lat <= zone->latMax) && (lon >= zone->lonLeft) && (lon <= zone->lonRight);
+}
+
 /*! true wind direction */
 static inline double fTwd (double u, double v) {
 	double val = 180 + RAD_TO_DEG * atan2 (u, v);
@@ -10,6 +15,21 @@ static inline double fTwd (double u, double v) {
 /*! true wind speed. cf Pythagore */
 static inline double fTws (double u, double v) {
     return MS_TO_KN * sqrt ((u * u) + (v * v));
+}
+
+/*! return TWA between 0.. 360 
+   note : tribord amure if twa > 180 */
+static inline double fTwa (double cog, double tws) {
+   double twa =  fmod ((cog - tws), 360.0);
+   if (twa < 0) twa += 360; 
+   return twa;
+}
+
+/*! return TWA between 0.. 360 */
+static inline double ffTwa (double cog, double twd) {
+   double twa = (cog > twd) ? cog - twd : cog - twd + 360;   //angle of the boat with the wind
+   if (twa > 360) twa -= 360; 
+   return twa;
 }
 
 /*! return fx : linear interpolation */
@@ -29,6 +49,7 @@ static inline double givry (double lat1, double lon1, double lat2, double lon2) 
    double latM = (lat1 + lat2) / 2;
    return (theta/2) * sin (latM * DEG_TO_RAD);
 }
+
 /*! direct loxodromic cap from origin to dest */
 static inline double directCap (double lat1, double lon1, double lat2, double lon2) {
    return RAD_TO_DEG * atan2 ((lon2 - lon1) * cos (DEG_TO_RAD * (lat1+lat2)/2), lat2 - lat1);

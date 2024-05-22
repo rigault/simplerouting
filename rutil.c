@@ -108,7 +108,7 @@ const char *CURRENT_URL [N_CURRENT_URL * 2] = {
 };
 
 /*! say if point is in sea */
-bool isSea (double lon, double lat) {
+bool isSea (double lat, double lon) {
    if (tIsSea == NULL) return true;
    int iLon = round (lon * 10  + 1800);
    int iLat = round (-lat * 10  + 900);
@@ -482,17 +482,6 @@ bool smtpGribRequestPython (int type, double lat1, double lon1, double lat2, dou
    return true;
 }
    
-/*! filter char */
-void strClean (char *str) {
-   char *pt = str;
-   while (*pt) {
-      if (isalnum (*pt) || (isspace (*pt)))
-         *str++  = *pt;
-      pt++;
-   }
-   *str = '\0';
-}
-
 /*! Read poi file and fill internal data structure. Return number of poi */
 int readPoi (const char *fileName) {
    char buffer [MAX_SIZE_LINE];
@@ -1015,76 +1004,20 @@ static inline int indLon (double lon, Zone *zone) {
    return (int) round ((lon - zone->lonLeft)/zone->lonStep);
 }
 
-/*! true if P is within the zone */
-bool isInZone (Pp *pt, Zone *zone) {
-   if (par.constWindTws > 0) return true;
-   else return (pt->lat >= zone->latMin) && (pt->lat <= zone->latMax) && (pt->lon >= zone->lonLeft) && (pt->lon <= zone->lonRight);
-}
-
-/*! interpolation to return tws at index time iT */
-double findTwsByIt (Pp *p, int iT0, const FlowP *gribData) {
-   double latMin, latMax, lonMin, lonMax;
-   double a, b, u0, v0;
-
-   FlowP windP00, windP01, windP10, windP11;
-   if ((!zone.wellDefined) || (zone.nbLat == 0) || (! isInZone (p, &zone))) {
-      return 0;
-   }
-   
-   find4PointsAround (p->lat, p->lon, &latMin, &latMax, &lonMin, &lonMax, &zone);
-   
-   windP00 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMax, &zone) * zone.nbLon + indLon(lonMin, &zone)];  
-   windP01 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMax, &zone) * zone.nbLon + indLon(lonMax, &zone)];
-   windP10 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMin, &zone) * zone.nbLon + indLon(lonMax, &zone)];
-   windP11 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMin, &zone) * zone.nbLon + indLon(lonMin, &zone)];
-
-   a = interpolate (p->lon, windP00.lon, windP01.lon, windP00.u, windP01.u);
-   b = interpolate (p->lon, windP10.lon, windP11.lon, windP10.u, windP11.u); 
-   u0 = interpolate (p->lat, windP00.lat, windP10.lat, a, b);
-   
-   a = interpolate (p->lon, windP00.lon, windP01.lon, windP00.v, windP01.v); 
-   b = interpolate (p->lon, windP10.lon, windP11.lon, windP10.v, windP11.v); 
-   v0 = interpolate (p->lat, windP00.lat, windP10.lat, a, b);
-
-   return fTws (u0, v0);
-}
-
-/*! interpolation to return gust at index time iT */
-double findGustByIt (Pp *p, int iT0, const FlowP *gribData) {
-   double latMin, latMax, lonMin, lonMax;
-   double a, b;
-
-   FlowP windP00, windP01, windP10, windP11;
-   if ((!zone.wellDefined) || (zone.nbLat == 0) || (! isInZone (p, &zone))) {
-      return 0;
-   }
-   
-   find4PointsAround (p->lat, p->lon, &latMin, &latMax, &lonMin, &lonMax, &zone);
-   
-   windP00 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMax, &zone) * zone.nbLon + indLon(lonMin, &zone)];  
-   windP01 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMax, &zone) * zone.nbLon + indLon(lonMax, &zone)];
-   windP10 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMin, &zone) * zone.nbLon + indLon(lonMax, &zone)];
-   windP11 = gribData [iT0 * zone.nbLat * zone.nbLon + indLat(latMin, &zone) * zone.nbLon + indLon(lonMin, &zone)];
-
-   a = interpolate (p->lon, windP00.lon, windP01.lon, windP00.g, windP01.g);
-   b = interpolate (p->lon, windP10.lon, windP11.lon, windP10.g, windP11.g); 
-   return interpolate (p->lat, windP00.lat, windP10.lat, a, b);
-}
-
-/*! interpolation to get u, v, g (gust), w (waves) at point p and time t */
-bool findFlow (Pp *p, double t, double *rU, double *rV, double *rG, double *rW, Zone *zone, const FlowP *gribData) {
+/*! interpolation to get u, v, g (gust), w (waves) at point (lat, lon)  and time t */
+bool findFlow (double lat, double lon, double t, double *rU, double *rV, double *rG, double *rW, Zone *zone, const FlowP *gribData) {
    double t0,t1;
    double latMin, latMax, lonMin, lonMax;
    double a, b, u0, u1, v0, v1, g0, g1, w0, w1;
    int iT0, iT1;
    FlowP windP00, windP01, windP10, windP11;
-   if ((!zone->wellDefined) || (zone->nbLat == 0) || (! isInZone (p, zone)) || (t < 0)){
+   if ((!zone->wellDefined) || (zone->nbLat == 0) || (! isInZone (lat, lon, zone) && par.constWindTws == 0) || (t < 0)){
       *rU = 0, *rV = 0, *rG = 0; *rW = 0;
       return false;
    }
    
    findTimeAround (t, &iT0, &iT1, zone);
-   find4PointsAround (p->lat, p->lon, &latMin, &latMax, &lonMin, &lonMax, zone);
+   find4PointsAround (lat, lon, &latMin, &latMax, &lonMin, &lonMax, zone);
    //printf ("lat %lf iT0 %d, iT1 %d, latMin %lf latMax %lf lonMin %lf lonMax %lf\n", p.lat, iT0, iT1, latMin, latMax, lonMin, lonMax);  
    // 4 points at time t0
    windP00 = gribData [iT0 * zone->nbLat * zone->nbLon + indLat(latMax, zone) * zone->nbLon + indLon(lonMin, zone)];  
@@ -1097,21 +1030,21 @@ bool findFlow (Pp *p, double t, double *rU, double *rV, double *rG, double *rW, 
    // speed longitude interpolation at northern latitudes
   
    // interpolation  for u, v, w, g
-   a = interpolate (p->lon, windP00.lon, windP01.lon, windP00.u, windP01.u);
-   b = interpolate (p->lon, windP10.lon, windP11.lon, windP10.u, windP11.u); 
-   u0 = interpolate (p->lat, windP00.lat, windP10.lat, a, b);
+   a = interpolate (lon, windP00.lon, windP01.lon, windP00.u, windP01.u);
+   b = interpolate (lon, windP10.lon, windP11.lon, windP10.u, windP11.u); 
+   u0 = interpolate (lat, windP00.lat, windP10.lat, a, b);
    
-   a = interpolate (p->lon, windP00.lon, windP01.lon, windP00.v, windP01.v); 
-   b = interpolate (p->lon, windP10.lon, windP11.lon, windP10.v, windP11.v); 
-   v0 = interpolate (p->lat, windP00.lat, windP10.lat, a, b);
+   a = interpolate (lon, windP00.lon, windP01.lon, windP00.v, windP01.v); 
+   b = interpolate (lon, windP10.lon, windP11.lon, windP10.v, windP11.v); 
+   v0 = interpolate (lat, windP00.lat, windP10.lat, a, b);
    
-   a = interpolate (p->lon, windP00.lon, windP01.lon, windP00.g, windP01.g); 
-   b = interpolate (p->lon, windP10.lon, windP11.lon, windP10.g, windP11.g); 
-   g0 = interpolate (p->lat, windP00.lat, windP10.lat, a, b);
+   a = interpolate (lon, windP00.lon, windP01.lon, windP00.g, windP01.g); 
+   b = interpolate (lon, windP10.lon, windP11.lon, windP10.g, windP11.g); 
+   g0 = interpolate (lat, windP00.lat, windP10.lat, a, b);
     
-   a = interpolate (p->lon, windP00.lon, windP01.lon, windP00.w, windP01.w); 
-   b = interpolate (p->lon, windP10.lon, windP11.lon, windP10.w, windP11.w); 
-   w0 = interpolate (p->lat, windP00.lat, windP10.lat, a, b);
+   a = interpolate (lon, windP00.lon, windP01.lon, windP00.w, windP01.w); 
+   b = interpolate (lon, windP10.lon, windP11.lon, windP10.w, windP11.w); 
+   w0 = interpolate (lat, windP00.lat, windP10.lat, a, b);
     
    //printf ("lat %lf a %lf  b %lf  00lat %lf 10lat %lf  %lf\n", p.lat, a, b, windP00.lat, windP10.lat, tws0); 
 
@@ -1122,21 +1055,21 @@ bool findFlow (Pp *p, double t, double *rU, double *rV, double *rG, double *rW, 
    windP11 = gribData [iT1 * zone->nbLat * zone->nbLon + indLat(latMin, zone) * zone->nbLon + indLon(lonMin, zone)];
 
    // interpolatuon for  for u, v
-   a = interpolate (p->lon, windP00.lon, windP01.lon, windP00.u, windP01.u);
-   b = interpolate (p->lon, windP10.lon, windP11.lon, windP10.u, windP11.u); 
-   u1 = interpolate (p->lat, windP00.lat, windP10.lat, a, b);
+   a = interpolate (lon, windP00.lon, windP01.lon, windP00.u, windP01.u);
+   b = interpolate (lon, windP10.lon, windP11.lon, windP10.u, windP11.u); 
+   u1 = interpolate (lat, windP00.lat, windP10.lat, a, b);
    
-   a = interpolate (p->lon, windP00.lon, windP01.lon, windP00.v, windP01.v); 
-   b = interpolate (p->lon, windP10.lon, windP11.lon, windP10.v, windP11.v); 
-   v1 = interpolate (p->lat, windP00.lat, windP10.lat, a, b);
+   a = interpolate (lon, windP00.lon, windP01.lon, windP00.v, windP01.v); 
+   b = interpolate (lon, windP10.lon, windP11.lon, windP10.v, windP11.v); 
+   v1 = interpolate (lat, windP00.lat, windP10.lat, a, b);
     
-   a = interpolate (p->lon, windP00.lon, windP01.lon, windP00.g, windP01.g); 
-   b = interpolate (p->lon, windP10.lon, windP11.lon, windP10.g, windP11.g); 
-   g1 = interpolate (p->lat, windP00.lat, windP10.lat, a, b);
+   a = interpolate (lon, windP00.lon, windP01.lon, windP00.g, windP01.g); 
+   b = interpolate (lon, windP10.lon, windP11.lon, windP10.g, windP11.g); 
+   g1 = interpolate (lat, windP00.lat, windP10.lat, a, b);
    
-   a = interpolate (p->lon, windP00.lon, windP01.lon, windP00.w, windP01.w); 
-   b = interpolate (p->lon, windP10.lon, windP11.lon, windP10.w, windP11.w); 
-   w1 = interpolate (p->lat, windP00.lat, windP10.lat, a, b);
+   a = interpolate (lon, windP00.lon, windP01.lon, windP00.w, windP01.w); 
+   b = interpolate (lon, windP10.lon, windP11.lon, windP10.w, windP11.w); 
+   w1 = interpolate (lat, windP00.lat, windP10.lat, a, b);
    
    // finally, interpolation twd tws between t0 and t1
    t0 = zone->timeStamp [iT0];
@@ -1150,7 +1083,7 @@ bool findFlow (Pp *p, double t, double *rU, double *rV, double *rG, double *rW, 
 }
 
 /*! use findflow to get wind and waves */
-void findWind (Pp *pt, double t, double *u, double *v, double *gust, double *w, double *twd, double *tws ) {
+void findWindGrib (double lat, double lon, double t, double *u, double *v, double *gust, double *w, double *twd, double *tws ) {
    if (par.constWindTws != 0) {
       *twd = par.constWindTwd;
       *tws = par.constWindTws;
@@ -1159,7 +1092,7 @@ void findWind (Pp *pt, double t, double *u, double *v, double *gust, double *w, 
       *w = 0;
    }
    else {
-      findFlow (pt, t, u, v, gust, w, &zone, tGribData [WIND]);
+      findFlow (lat, lon, t, u, v, gust, w, &zone, tGribData [WIND]);
       *twd = fTwd (*u, *v);
       *tws = fTws (*u, *v);
    }
@@ -1168,7 +1101,7 @@ void findWind (Pp *pt, double t, double *u, double *v, double *gust, double *w, 
 }
 
 /*! use findflow to get current */
-void findCurrent (Pp *pt, double t, double *uCurr, double *vCurr, double *tcd, double *tcs) {
+void findCurrentGrib (double lat, double lon, double t, double *uCurr, double *vCurr, double *tcd, double *tcs) {
    double gust, bidon;
    *uCurr = 0;
    *vCurr = 0;
@@ -1183,7 +1116,7 @@ void findCurrent (Pp *pt, double t, double *uCurr, double *vCurr, double *tcd, d
    }
    else {
       if (t <= currentZone.timeStamp [currentZone.nTimeStamp - 1]) {
-         findFlow (pt, t, uCurr, vCurr, &gust, &bidon, &currentZone, tGribData [CURRENT]);
+         findFlow (lat, lon, t, uCurr, vCurr, &gust, &bidon, &currentZone, tGribData [CURRENT]);
          *tcd = fTwd (*uCurr, *vCurr);
          *tcs = fTws (*uCurr, *vCurr);
       }
@@ -1303,7 +1236,6 @@ static inline int indexOf (int timeStep, double lat, double lon, Zone *zone) {
    //printf ("iT: %d iLon :%d iLat: %d\n", iT, iLon, iLat); 
    return  (iT * zone->nbLat * zone->nbLon) + (iLat * zone->nbLon) + iLon;
 }
-
 
 /*! read grib file using eccodes C API 
    return readGribRet */
@@ -1533,13 +1465,27 @@ double maxValInPol (PolMat *mat) {
    return max;
 }
 
-/*! return VMG: angle and speed at TWS */
+/*! return VMG: angle and speed at TWSi : pres */
 void bestVmg (double tws, PolMat *mat, double *vmgAngle, double *vmgSpeed) {
    *vmgSpeed = -1;
    double vmg;
    for (int i = 1; i < mat->nLine; i++) {
       if (mat->t [i][0] > 90) break; // useless over 90°
       vmg = findPolar (mat->t [i][0], tws, *mat) * cos (DEG_TO_RAD * mat->t [i][0]);
+      if (vmg > *vmgSpeed) {
+         *vmgSpeed = vmg;
+         *vmgAngle = mat->t [i][0];
+      }
+   }
+}
+
+/*! return VMG back: angle and speed at TWS : vent arriere */
+void bestVmgBack (double tws, PolMat *mat, double *vmgAngle, double *vmgSpeed) {
+   *vmgSpeed = -1;
+   double vmg;
+   for (int i = 1; i < mat->nLine; i++) {
+      if (mat->t [i][0] < 90) continue; // useless under  90° for Vmg Back
+      vmg = fabs (findPolar (mat->t [i][0], tws, *mat) * cos (DEG_TO_RAD * mat->t [i][0]));
       if (vmg > *vmgSpeed) {
          *vmgSpeed = vmg;
          *vmgAngle = mat->t [i][0];
@@ -1566,17 +1512,6 @@ char *polToStr (char * str, PolMat *mat, size_t maxLength) {
    strncat (str, line, maxLength - strlen (str));
    return str;
 }
-
-/*! replace cIn  character by cOut */
-char *strchrReplace (const char *source, char cIn, char cOut, char *dest) {
-   int i = 0;
-   while (*source) {
-      dest [i++] = (*source == cIn) ? cOut : *source;
-      source++;
-   }
-   dest [i] = '\0';
-   return dest;
-} 
 
 /*! find name, lat and lon */
 static void analyseCoord (char *str, double *lat, double *lon) {
@@ -1800,6 +1735,8 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "WAVE_DISP:%d", &par.waveDisp) > 0);
       else if (sscanf (pLine, "GRID_DISP:%d", &par.gridDisp) > 0);
       else if (sscanf (pLine, "LEVEL_POI_DISP:%d", &par.maxPoiVisible) > 0);
+      else if (sscanf (pLine, "SPEED_DISP:%d", &par.speedDisp) > 0);
+      else if (sscanf (pLine, "TECHNO_DISP:%d", &par.techno) > 0);
       else if (sscanf (pLine, "WEBKIT:%255s", str) > 0)
          buildRootName (str, par.webkit);
       else if (strstr (pLine, "EDITOR:") != NULL) {
@@ -1909,7 +1846,8 @@ bool writeParam (const char *fileName, bool header, bool password) {
    fprintf (f, "CURRENT_DISP:    %d\n", par.currentDisp);
    fprintf (f, "WAVE_DISP:       %d\n", par.waveDisp);
    fprintf (f, "GRID_DISP:       %d\n", par.gridDisp);
-   fprintf (f, "LEVEL_POI_DISP:  %d\n", par.maxPoiVisible);
+   fprintf (f, "SPEED_DISP:      %d\n", par.speedDisp);
+   fprintf (f, "TECHNO_DISP:     %d\n", par.techno);
    fprintf (f, "MAX_THETA:       %.2lf\n", par.maxTheta);
    fprintf (f, "J_FACTOR:        %d\n", par.jFactor);
    fprintf (f, "K_FACTOR:        %d\n", par.kFactor);
@@ -1960,7 +1898,6 @@ void *getGPS () {
          if (gps_data.fix.mode < 0 || MODE_STR_NUM <= gps_data.fix.mode) {
             gps_data.fix.mode = 0;
          }
-         //if (isfinite(gps_data.fix.latitude) && isfinite(gps_data.fix.longitude)) {
          if (isfinite(gps_data.fix.latitude) && isfinite(gps_data.fix.longitude) &&
             ((gps_data.fix.latitude != 0 || gps_data.fix.longitude != 0))) {
             // printf("Lat: %.2f, Lon: %.2f\n", gps_data.fix.latitude, gps_data.fix.longitude);
@@ -2095,11 +2032,11 @@ bool findLastTracePoint (const char *fileName, double *lat, double *lon, double 
 
 /*! calculate distance in number of miles 
    od: orthodromic, ld: loxodromic, rd: real*/
-bool distanceTraceDone (const char *fileName, double *od, double *ld, double *rd) {
+bool distanceTraceDone (const char *fileName, double *od, double *ld, double *rd, double *sog) {
    FILE *f = NULL;
    bool first = true;
    char line [MAX_SIZE_LINE];
-   double lat0 = 0.0, lon0 = 0.0, latLast, lonLast, lat, lon, time;
+   double lat0 = 0.0, lon0 = 0.0, time0 = 0, latLast, lonLast, lat, lon, time, delta;
    *rd = 0.0;
    
    if ((f = fopen (fileName, "r")) == NULL) {
@@ -2109,17 +2046,63 @@ bool distanceTraceDone (const char *fileName, double *od, double *ld, double *rd
    while (fgets (line, MAX_SIZE_LINE, f) != NULL ) {
       if (sscanf (line, "%lf;%lf;%lf", &lat, &lon, &time) < 3) continue;
       if (first) {
-         lat0 = lat, lon0 = lon;
+         lat0 = lat, lon0 = lon, time0 = time;
          first = false;
       }
       else {
-        *rd += orthoDist (lat, lon, latLast, lonLast);
+         delta = orthoDist (lat, lon, latLast, lonLast);
+         if (!isnan (delta)) 
+            *rd += delta;
+         // printf ("lat: %.2lf lon: %.2lf rd: %.2lf\n", lat, lon, *rd);
       }
       latLast = lat, lonLast = lon;
    }
    *od = orthoDist (lat, lon, lat0, lon0);
    *ld = loxoDist (lat, lon, lat0, lon0);
+   *sog = *rd / ((time - time0) / 3600.0);
    fclose (f);
+   return true;
+}
+
+/*! Last info digest 
+   idem infoTrace but take into account last GPS pos if available */ 
+bool infoDigest (const char *fileName, double *od, double *ld, double *rd, double *sog) {
+   FILE *f = NULL;
+   bool first = true;
+   char line [MAX_SIZE_LINE];
+   double lat0 = 0.0, lon0 = 0.0, time0 = 0, latLast = 0.0, lonLast = 0.0, lat, lon, time, delta;
+   *rd = 0.0;
+   
+   if ((f = fopen (fileName, "r")) == NULL) {
+      fprintf (stderr, "Error in distanceTraceDone: cannot read: %s\n", fileName);
+      return false;
+   }
+   while (fgets (line, MAX_SIZE_LINE, f) != NULL ) {
+      if (sscanf (line, "%lf;%lf;%lf", &lat, &lon, &time) < 3) continue;
+      if (first) {
+         lat0 = lat, lon0 = lon, time0 = time;
+         first = false;
+      }
+      else {
+         delta = orthoDist (lat, lon, latLast, lonLast);
+         if (!isnan (delta)) 
+            *rd += delta;
+         // printf ("lat: %.2lf lon: %.2lf rd: %.2lf\n", lat, lon, *rd);
+      }
+      latLast = lat, lonLast = lon;
+   }
+   fclose (f);
+   if (my_gps_data.OK) {
+      lat = my_gps_data.lat;
+      lon = my_gps_data.lon;
+      delta = orthoDist (lat, lon, latLast, lonLast);
+      if (!isnan (delta))
+         *rd += delta;
+      time = my_gps_data.time;
+   }
+   *od = orthoDist (lat, lon, lat0, lon0);
+   *ld = loxoDist (lat, lon, lat0, lon0);
+   *sog = *rd / ((time - time0) / 3600.0);
    return true;
 }
 
@@ -2203,7 +2186,7 @@ bool isDayLight (double t, double lat, double lon) {
    tm0.tm_sec += 3600 * (t + lon / 15.0);          // add one hour every 15° + = east, - = west
    mktime (&tm0);                                  // adjust with secondes added
    // printf ("isDayLignt UTC; %s", asctime (&tm0));
-   if (lat > 75.0) return  (tm0.tm_mon > 3 && tm0.tm_mon < 9);
+   if (lat > 75.0) return  (tm0.tm_mon > 3 && tm0.tm_mon < 9); // specific for high latitides
    if (lat < -75.0) return ! (tm0.tm_mon > 3 && tm0.tm_mon < 9);
    return (tm0.tm_hour >= 6) && (tm0.tm_hour <= 18);
 }
