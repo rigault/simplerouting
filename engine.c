@@ -338,6 +338,7 @@ static void statRoute (double lastStepDuration) {
    Pp p = {0};
    if (route.n == 0) return;
    route.totDist = route.motorDist = 0;
+   route.lastStepDuration = lastStepDuration;
    route.duration = route.motorDuration = 0;
    route.maxTws = route.maxGust = route.maxWave = 0;
    route.avrTws = route.avrGust = route.avrWave = 0;
@@ -349,6 +350,7 @@ static void statRoute (double lastStepDuration) {
       route.t [i-1].oCap = orthoCap (route.t[i-1].lat, route.t[i-1].lon, route.t[i].lat, route.t[i].lon);
       route.t [i-1].ld  = loxoDist (route.t[i-1].lat, route.t[i-1].lon, route.t[i].lat, route.t[i].lon);
       route.t [i-1].od = orthoDist (route.t[i-1].lat, route.t[i-1].lon, route.t[i].lat, route.t[i].lon);
+      route.t [i-1].sog = route.t [i-1].od / par.tStep;
       route.totDist += route.t [i-1].od;
       route.duration += par.tStep;
       if (route.t [i-1].motor) {
@@ -363,6 +365,7 @@ static void statRoute (double lastStepDuration) {
       route.maxTws  = MAX (route.maxTws, route.t [i-1].tws);
       route.maxGust = MAX (route.maxGust, route.t [i-1].g);
       route.maxWave = MAX (route.maxWave, route.t [i-1].w);
+      route.maxSog = MAX (route.maxSog, route.t [i-1].sog);
    }
    route.t [route.n-1].time = par.tStep * (route.n-1) + par.startTimeInHours;
    route.duration += lastStepDuration;
@@ -375,6 +378,7 @@ static void statRoute (double lastStepDuration) {
    p.lon = route.t [route.n-1].lon;
    findWindGrib (p.lat, p.lon, route.t [route.n-1].time, &route.t [route.n-1].u, &route.t [route.n-1].v, &route.t [route.n-1].g, 
       &route.t [route.n-1].w, &route.t [route.n-1].twd, &route.t [route.n-1].tws);
+   
    route.maxTws  = MAX (route.maxTws, route.t [route.n-1].tws);
    route.maxGust = MAX (route.maxGust, route.t [route.n-1].g);
    route.maxWave = MAX (route.maxWave, route.t [route.n-1].w);
@@ -387,10 +391,12 @@ static void statRoute (double lastStepDuration) {
       route.t [route.n-1].oCap = orthoCap (route.t[route.n-1].lat, route.t[route.n-1].lon, par.pDest.lat, par.pDest.lon);
       route.t [route.n-1].ld = loxoDist (route.t[route.n-1].lat, route.t[route.n-1].lon, par.pDest.lat, par.pDest.lon);
       route.t [route.n-1].od = orthoDist (route.t[route.n-1].lat, route.t[route.n-1].lon, par.pDest.lat, par.pDest.lon);
+      route.t [route.n-1].sog =  route.t [route.n-1].od / route.lastStepDuration;
    }
    route.avrTws /= route.n;
    route.avrGust /= route.n;
    route.avrWave /= route.n;
+   route.avrSog = route.totDist / route.duration;
 }
 
 /*! store route */
@@ -460,7 +466,7 @@ bool routeToStr (SailRoute *route, char *str, size_t maxLength) {
       latToStr (route->t[0].lat, par.dispDms, strLat), lonToStr (route->t[0].lon, par.dispDms, strLon), \
       newDate (zone.dataDate [0], (zone.dataTime [0]/100) + route->t[0].time, strDate), \
       motorTribordBabord (route->t[0].motor, route->t[0].amure, shortStr, SMALL_SIZE), \
-      route->t[0].lCap, route->t[0].ld, route->t[0].ld/par.tStep, \
+      route->t[0].lCap, route->t[0].ld, route->t[0].sog, \
       route->t[0].twd, route->t[0].tws, MS_TO_KN * route->t[0].g, route->t[0].w);
 
    strncat (str, line, maxLength - strlen (str));
@@ -473,14 +479,16 @@ bool routeToStr (SailRoute *route, char *str, size_t maxLength) {
             latToStr (route->t[i].lat, par.dispDms, strLat), lonToStr (route->t[i].lon, par.dispDms, strLon), \
             newDate (zone.dataDate [0], (zone.dataTime [0]/100) + route->t[i].time, strDate), \
             motorTribordBabord (route->t[i].motor, route->t[i].amure, shortStr, SMALL_SIZE), \
-            route->t[i].lCap, route->t[i].ld, route->t[i].ld/par.tStep,
+            route->t[i].lCap, route->t[i].ld, route->t[i].sog,
             route->t[i].twd, route->t[i].tws, MS_TO_KN * route->t[i].g, route->t[i].w);
       strncat (str, line, maxLength - strlen (str));
    }
    
-   snprintf (line, MAX_SIZE_LINE, " Avr %88s  %7.2lf %7.2lf %7.2lf\n", " ", route->avrTws, MS_TO_KN * route->avrGust, route->avrWave); 
+   snprintf (line, MAX_SIZE_LINE, " Avr %73s  %5.2lf          %7.2lf %7.2lf %7.2lf\n", " ", \
+      route->avrSog, route->avrTws, MS_TO_KN * route->avrGust, route->avrWave); 
    strncat (str, line, maxLength - strlen (str));
-   snprintf (line, MAX_SIZE_LINE, " Max %88s  %7.2lf %7.2lf %7.2lf\n", " ", route->maxTws, MS_TO_KN * route->maxGust, route->maxWave); 
+   snprintf (line, MAX_SIZE_LINE, " Max %73s  %5.2lf          %7.2lf %7.2lf %7.2lf\n", " ", \
+      route->maxSog, route->maxTws, MS_TO_KN * route->maxGust, route->maxWave); 
    strncat (str, line, maxLength - strlen (str));
    snprintf (line, MAX_SIZE_LINE, "\n Total distance: %7.2lf NM,    Motor distance: %7.2lf NM\n", route->totDist, route->motorDist);
    strncat (str, line, maxLength - strlen (str));

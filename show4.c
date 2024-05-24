@@ -625,19 +625,6 @@ static void OpaintWind (cairo_t *cr, int width, int height) {
    // printf ("nCall in PaintWind to findWindGrib: %d\n", nCall);
 }
 
-/*! Test update colors for wind */
-static void paintWindTest0 (cairo_t *cr, int width, int height) {
-   double u, v, gust, w, twd, tws, lat, lon;
-   guint8 red = 0, green = 255, blue = 0;
-   for (int x = 0; x < width; x++) {
-      for (int y = 0; y < height; y++) {
-         cairo_set_source_rgba (cr, red/255.0, green/255.0, blue/255.0, 0.5);
-         cairo_rectangle (cr, x, y, 1, 1);
-         cairo_fill (cr);
-      }
-   }
-}
-
 /*! draw colors for wind */
 static void paintWindTest (cairo_t *cr, int width, int height) {
    // Crée une surface d'image en mémoire
@@ -912,7 +899,7 @@ static void circle (cairo_t *cr, double lon, double lat, double red, double gree
 }
 
 /*! draw the boat or cat or ... */
-static void showUnicode (cairo_t *cr, const char *unicode, double lon, double lat) {
+static void showUnicode (cairo_t *cr, const char *unicode, double x, double y) {
    PangoLayout *layout;
    PangoFontDescription *desc;
 
@@ -923,7 +910,7 @@ static void showUnicode (cairo_t *cr, const char *unicode, double lon, double la
 
    pango_layout_set_text(layout, unicode, -1);
 
-   cairo_move_to (cr, getX (lon), getY (lat) - 20);
+   cairo_move_to (cr, x, y);
    pango_cairo_show_layout(cr, layout);
    g_object_unref(layout);
 }
@@ -1095,7 +1082,7 @@ static void focusOnPointInRoute (cairo_t *cr)  {
          MS_TO_KN * route.t[i].g, route.t[i].w,
          (isDayLight (route.t[i].time, lat, lon)) ? "Day" : "Night");
    }
-   showUnicode (cr, BOAT_UNICODE, lon, lat);
+   showUnicode (cr, BOAT_UNICODE, getX (lon), getY (lat) - 20);
    gtk_label_set_text (GTK_LABEL(labelInfoRoute), sInfoRoute);
    circle (cr, lon, lat, 00, 0.0, 1.0); // blue
 }
@@ -1186,7 +1173,7 @@ static void drawPoi (cairo_t *cr) {
          case UNVISIBLE:
             break;
          case CAT:
-            showUnicode (cr, CAT_UNICODE, tPoi [i].lon, tPoi [i].lat);
+            showUnicode (cr, CAT_UNICODE, x, y - 20);
             break;
          case NORMAL: case NEW:
             circle (cr, tPoi [i].lon, tPoi [i].lat, 0.0, 0.0, 0.0);
@@ -1408,7 +1395,6 @@ static void barbule (cairo_t *cr, double lat, double lon, double u, double v, do
 static void statusBarUpdate () {
    if (statusbar == NULL) return;
    char totalDate [MAX_SIZE_DATE]; 
-   char *pDate = &totalDate [0];
    char sStatus [MAX_SIZE_BUFFER];
    double lat, lon;
    double u = 0, v = 0, g = 0, w = 0, uCurr = 0, vCurr = 0, currTwd = 0, currTws = 0;
@@ -1425,7 +1411,7 @@ static void statusBarUpdate () {
    
    snprintf (sStatus, sizeof (sStatus), "%s         %ld/%ld      %s %s, %s\
       Wind: %03d° %05.2lf Knots  Gust: %05.2lf Knots  Waves: %05.2lf  Current: %03d° %05.2lf Knots         %s      Zoom: %.2lf       %s",
-      newDate (zone.dataDate [0], (zone.dataTime [0]/100) + theTime, pDate),\
+      newDate (zone.dataDate [0], (zone.dataTime [0]/100) + theTime, totalDate),\
       theTime, zone.timeStamp [zone.nTimeStamp-1], " ",\
       latToStr (lat, par.dispDms, strLat),\
       lonToStr (lon, par.dispDms, strLon),\
@@ -1655,7 +1641,7 @@ static void drawGribCallback (GtkDrawingArea *area, cairo_t *cr, int width, int 
    }
    focusOnPointInRoute (cr);
    if (destPressed) {
-      showUnicode (cr, DESTINATION_UNICODE, par.pDest.lon, par.pDest.lat);
+      showUnicode (cr, DESTINATION_UNICODE, getX (par.pDest.lon), getY (par.pDest.lat) - 20);
       circle (cr, par.pDest.lon, par.pDest.lat, 0.0, 0.0, 1.0);
    }
    if (polygonStarted) {
@@ -2249,7 +2235,7 @@ char *durationToStr (double duration, char *res, size_t len) {
       snprintf (res, len, "%02d:%02d", nHours, nMin); 
    else
       snprintf (res, len, "%d Days %02d:%02d", nDays, nHours, nMin);
-   // printf ("Duration: %.2lf hours, equuvalent to %d days, %02d:%02d\n", duration, nDays, nHours, nMin);
+   // printf ("Duration: %.2lf hours, equivalent to %d days, %02d:%02d\n", duration, nDays, nHours, nMin);
    return res;
 } 
 
@@ -2257,7 +2243,6 @@ char *durationToStr (double duration, char *res, size_t len) {
 static void niceReport (SailRoute *route, double computeTime) {
    char str [MAX_SIZE_LINE];
    char totalDate [MAX_SIZE_DATE]; 
-   char *pDate = &totalDate [0];
    char line [MAX_SIZE_LINE];
    char strLat [MAX_SIZE_LINE];
    char strLon [MAX_SIZE_LINE];
@@ -2298,7 +2283,7 @@ static void niceReport (SailRoute *route, double computeTime) {
    lineReport (grid, 8, "mail-forward-symbolic", "Distance To Destination", line);
 
    snprintf (line, sizeof (line), "%s\n",\
-      newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours + route->duration, pDate));
+      newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours + route->duration, totalDate));
    lineReport (grid, 10, "alarm-symbolic", "Arrival Date and Time", line);
 
    snprintf (line, sizeof (line), "%.2lf\n", route->totDist);
@@ -2971,22 +2956,20 @@ static void simulationReport () {
 /*! Draw routegram */
 static void on_routegram_event (GtkDrawingArea *area, cairo_t *cr, int width, int height, gpointer user_data) {
    int x, y;
-   char str [MAX_SIZE_LINE];
+   char str [MAX_SIZE_LINE], strDate [MAX_SIZE_DATE];
    const int X_LEFT = 30;
    const int X_RIGHT = width - 20;
-   const int Y_TOP = 40;
+   const int Y_TOP = 20;
    const int Y_BOTTOM = height - 25;
-   const int HEAD_Y = 20;
+   const int HEAD_Y = 10;
    const int DELTA = 5;
    const int DAY_LG = 10;
-   const int XK = (X_RIGHT - X_LEFT) / route.duration;  
-   char totalDate [MAX_SIZE_DATE], oldDay [MAX_SIZE_DATE] = ""; 
-   char *pDate = &totalDate [0], *pOldDay = &oldDay [0];
-   int timeRoute, initTimeRoute;
+   const int XK = (X_RIGHT - X_LEFT) / (route.duration + par.tStep);  
    double u, v, head_x;
 
    cairo_set_line_width (cr, 1);
    cairo_set_font_size (cr, 12);
+   
    // legend
    CAIRO_SET_SOURCE_RGB_BLUE(cr);
    cairo_move_to (cr, X_RIGHT - 50, 10);
@@ -3006,7 +2989,7 @@ static void on_routegram_event (GtkDrawingArea *area, cairo_t *cr, int width, in
    
    // Dessiner la ligne horizontale avec fleches
    CAIRO_SET_SOURCE_RGB_BLACK(cr);
-   cairo_move_to (cr, X_LEFT,  Y_BOTTOM );
+   cairo_move_to (cr, X_LEFT,  Y_BOTTOM);
    cairo_line_to (cr, X_RIGHT, Y_BOTTOM);
    cairo_line_to (cr, X_RIGHT - DELTA, Y_BOTTOM + DELTA); // for arrow
    cairo_stroke (cr);
@@ -3027,26 +3010,52 @@ static void on_routegram_event (GtkDrawingArea *area, cairo_t *cr, int width, in
    cairo_select_font_face (cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
    cairo_set_font_size (cr, 10);
    CAIRO_SET_SOURCE_RGB_BLACK(cr);
-   initTimeRoute = zone.dataTime [0]/100 + par.startTimeInHours; 
-   for (int i = 0; i <= route.duration; i+= (route.duration <= 120) ? 6 : 12) {
-      timeRoute = (zone.dataTime [0]/100) + par.startTimeInHours + i;
+
+   struct tm tmTime;
+   memcpy (&tmTime, &startInfo, sizeof (tmTime)); 
+   double timeStep = (route.duration <= 120) ? 6 : 12;
+   int lastDay = -1;
+
+   for (double i = 0; i <= route.duration; i+= timeStep) {
       x = X_LEFT + XK * i;
       cairo_move_to (cr, x, Y_BOTTOM + 10);
-      newDate (zone.dataDate [0], timeRoute, pDate);
-      cairo_show_text (cr, strrchr (pDate, ' ') + 1); // hour is after space
-      if ((timeRoute % ((route.duration <= 240) ? 24 : 48)) == initTimeRoute) { // only year month day considered
+      snprintf (strDate, sizeof (strDate), "%4d/%02d/%02d %02d:%02d", 
+         tmTime.tm_year + 1900, tmTime.tm_mon+1, tmTime.tm_mday, tmTime.tm_hour, tmTime.tm_min);
+      cairo_show_text (cr, strrchr (strDate, ' ') + 1); // hour is after space
+
+      if (tmTime.tm_mday != lastDay) {                 // change day
          cairo_move_to (cr, x, Y_BOTTOM + 20);
-         pDate [DAY_LG] = '\0'; // date
-         cairo_show_text (cr, pDate);
-         strncpy (pOldDay, pDate, MAX_SIZE_DATE);
+         strDate [DAY_LG] = '\0';                       // only date
+         cairo_show_text (cr, strDate);
          CAIRO_SET_SOURCE_RGB_ULTRA_LIGHT_GRAY(cr);
          cairo_move_to (cr, x, Y_BOTTOM);
          cairo_line_to (cr, x, Y_TOP);
          cairo_stroke (cr);
          CAIRO_SET_SOURCE_RGB_BLACK(cr);
       }
+      lastDay = tmTime.tm_mday;
+      tmTime.tm_min += timeStep * 60;
+      mktime (&tmTime);
    }
    cairo_stroke(cr);
+   
+   // ligne vertcale arrivée
+   CAIRO_SET_SOURCE_RGB_BLACK(cr); // lignes horizontales
+   double lastX = X_LEFT + XK * route.duration;
+   cairo_move_to (cr, lastX, Y_BOTTOM);
+   cairo_line_to (cr, lastX, Y_TOP);
+   cairo_stroke(cr);
+   showUnicode (cr, DESTINATION_UNICODE, lastX, Y_TOP + 50);
+   
+   // date arrivee
+   cairo_select_font_face (cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+   cairo_set_font_size (cr, 16);
+   CAIRO_SET_SOURCE_RGB_BLACK(cr);
+   newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours + route.duration, strDate);
+   cairo_move_to (cr, lastX, Y_TOP + 100);
+   cairo_show_text (cr, strDate);
+   cairo_select_font_face (cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
+   cairo_set_font_size (cr, 10);
 
    // Dessiner les libelles des vitesses et lignes horizontales
    cairo_set_font_size (cr, 10);
@@ -3066,24 +3075,31 @@ static void on_routegram_event (GtkDrawingArea *area, cairo_t *cr, int width, in
    }
    cairo_stroke(cr);
 
-   // draw tws arrows
-   for (int i = 0; i < route.n; i++) {
-      head_x = X_LEFT + XK * i * par.tStep;
-      if ((i % (int) (route.duration / 24)) == 0) {
-         u = -sin (DEG_TO_RAD * route.t[i].twd) * route.t[i].tws / MS_TO_KN; 
-         v = -cos (DEG_TO_RAD * route.t[i].twd) * route.t[i].tws / MS_TO_KN; 
-         arrow (cr, head_x, HEAD_Y, u, v, route.t [i].twd, route.t[i].tws, WIND);
-         // arrow (cr, head_x, HEAD_Y + 20, uCurr, vCurr, currTwd, currTws, CURRENT);
-      }
+   double lastU, lastV, lastG, lastW, lastTwd, lastTws;
+   // find last values at destination
+   if (route.destinationReached) {
+      findWindGrib (par.pDest.lat, par.pDest.lon, route.t[route.n - 1].time + route.lastStepDuration,\
+          &lastU, &lastV, &lastG, &lastW, &lastTwd, &lastTws);
    }
-   CAIRO_SET_SOURCE_RGB_BLUE(cr);
+   // draw tws arrows
+   int arrowStep = (route.n / 24) + 1;
+   for (int i = 0; i < route.n; i += arrowStep) {
+      head_x = X_LEFT + XK * i * par.tStep;
+      u = -sin (DEG_TO_RAD * route.t[i].twd) * route.t[i].tws / MS_TO_KN;
+      v = -cos (DEG_TO_RAD * route.t[i].twd) * route.t[i].tws / MS_TO_KN; 
+      arrow (cr, head_x, HEAD_Y, u, v, route.t [i].twd, route.t[i].tws, WIND);
+   }
+
    // draw tws 
+   CAIRO_SET_SOURCE_RGB_BLUE(cr);
    for (int i = 0; i < route.n; i++) {
       x = X_LEFT + XK * i * par.tStep;
       y = Y_BOTTOM - YK * route.t[i].tws;
       if (i == 0) cairo_move_to (cr, x, y);
       else cairo_line_to (cr, x, y);
    }
+   if (route.destinationReached) 
+      cairo_line_to (cr, lastX, Y_BOTTOM - YK * lastTws);
    cairo_stroke(cr);
    
    // draw gust
@@ -3095,10 +3111,12 @@ static void on_routegram_event (GtkDrawingArea *area, cairo_t *cr, int width, in
          if (i == 0) cairo_move_to (cr, x, y);
          else cairo_line_to (cr, x, y);
       }
+   if (route.destinationReached) 
+      cairo_line_to (cr, lastX, Y_BOTTOM - YK * MAX (MS_TO_KN * lastG, lastTws));
       cairo_stroke(cr);
    }
 
-   //draw Weves
+   //draw Waves
    if (route.maxWave > 0) { 
       CAIRO_SET_SOURCE_RGB_GREEN(cr);
       for (int i = 0; i < route.n; i ++) {
@@ -3107,6 +3125,8 @@ static void on_routegram_event (GtkDrawingArea *area, cairo_t *cr, int width, in
          if (i == 0) cairo_move_to (cr, x, y);
          else cairo_line_to (cr, x, y);
       }
+      if (route.destinationReached) 
+         cairo_line_to (cr, lastX, Y_BOTTOM - YK * lastW);
       cairo_stroke(cr);
    }
 
@@ -3114,10 +3134,12 @@ static void on_routegram_event (GtkDrawingArea *area, cairo_t *cr, int width, in
    CAIRO_SET_SOURCE_RGB_ORANGE(cr);
    for (int i = 0; i < route.n; i++) {
       x = X_LEFT + XK * i * par.tStep;
-      y = Y_BOTTOM -YK * route.t[i].ld/par.tStep;
+      y = Y_BOTTOM - YK * route.t[i].sog;
       if (i == 0) cairo_move_to (cr, x, y);
       else cairo_line_to (cr, x, y);
    }
+   // last SOG segment to destination
+   cairo_line_to (cr, lastX, y);
    cairo_stroke(cr);
 }
 
@@ -3191,6 +3213,247 @@ static void poiEdit (GSimpleAction *action, GVariant *parameter, gpointer *data)
          GTK_WINDOW(window), GTK_DIALOG_MODAL, "OK", GTK_RESPONSE_ACCEPT, "Cancel", GTK_RESPONSE_CANCEL, NULL);
    g_signal_connect_swapped (dialogBox, "response", G_CALLBACK (cbEditPoi), dialogBox);
    gtk_widget_show (dialogBox);
+}
+
+#define MIN_SPEED 1
+#define MAX_SPEED 20
+#define DASHBOARD_RADIUS 100
+#define CENTER_X 150
+#define CENTER_Y 150
+
+struct {
+   GtkWidget *speedometer;
+   GtkWidget *compass;
+   GtkWidget *textZone;
+   int timeoutId;
+} widgetDashboard = {NULL, NULL, NULL, 0};
+
+/*!  Function to draw the speedometer */
+static void draw_speedometer(GtkDrawingArea *area, cairo_t *cr, int width, int height, gpointer data) {
+   MyGpsData  *dashboard = (MyGpsData *)data;
+
+   // Clear background
+   cairo_set_source_rgb(cr, 1, 1, 1); // White
+   cairo_paint(cr);
+
+   // Draw the outer circle (speedometer)
+   cairo_set_source_rgb(cr, 0, 0, 0); // Black
+   cairo_arc(cr, CENTER_X, CENTER_Y, DASHBOARD_RADIUS, 0, 2 * M_PI);
+   cairo_fill(cr);
+
+
+   // Draw the speed inside a rectangle at the center
+   char speed_str[10];
+   cairo_set_font_size (cr, 10);
+   cairo_select_font_face (cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
+   CAIRO_SET_SOURCE_RGB_WHITE(cr);
+   snprintf(speed_str, sizeof(speed_str), "%.2lfKn", dashboard->sog);
+   cairo_rectangle(cr, CENTER_X - 25, CENTER_Y + 15, 60, 20);
+   cairo_fill(cr);
+   CAIRO_SET_SOURCE_RGB_BLACK(cr);
+   cairo_move_to(cr, CENTER_X - 15, CENTER_Y + 30);
+   cairo_show_text(cr, speed_str);
+
+   // Draw speed marks
+   cairo_set_source_rgb(cr, 1, 1, 1); // White
+   cairo_set_line_width(cr, 2);
+   for (int i = MIN_SPEED; i <= MAX_SPEED; ++i) {
+      double angle = (i - MIN_SPEED) * (M_PI / (MAX_SPEED - MIN_SPEED)) - M_PI;
+      double x1 = CENTER_X + (DASHBOARD_RADIUS - 10) * cos(angle);
+      double y1 = CENTER_Y + (DASHBOARD_RADIUS - 10) * sin(angle);
+      double x2 = CENTER_X + DASHBOARD_RADIUS * cos(angle);
+      double y2 = CENTER_Y + DASHBOARD_RADIUS * sin(angle);
+      cairo_move_to(cr, x1, y1);
+      cairo_line_to(cr, x2, y2);
+      cairo_stroke(cr);
+
+      // Draw the speed numbers
+      char speed_text[4];
+      snprintf(speed_text, sizeof(speed_text), "%d", i);
+      cairo_text_extents_t extents;
+      cairo_text_extents(cr, speed_text, &extents);
+      double tx = CENTER_X + (DASHBOARD_RADIUS - 20) * cos(angle) - extents.width / 2;
+      double ty = CENTER_Y + (DASHBOARD_RADIUS - 20) * sin(angle) + extents.height / 2;
+      cairo_move_to(cr, tx, ty);
+      cairo_show_text(cr, speed_text);
+   }
+
+   // Draw the needle
+   cairo_set_source_rgb(cr, 1, 0, 0); // Red
+   cairo_set_line_width(cr, 3);
+   double needle_angle = (dashboard->sog - MIN_SPEED) * (M_PI / (MAX_SPEED - MIN_SPEED)) - M_PI;
+   double needle_x = CENTER_X + (DASHBOARD_RADIUS - 20) * cos(needle_angle);
+   double needle_y = CENTER_Y + (DASHBOARD_RADIUS - 20) * sin(needle_angle);
+   cairo_move_to(cr, CENTER_X, CENTER_Y);
+   cairo_line_to(cr, needle_x, needle_y);
+   cairo_stroke(cr);
+}
+
+
+/*!  Function to draw the compass */
+static void draw_compass(GtkDrawingArea *area, cairo_t *cr, int width, int height, gpointer data) {
+   MyGpsData  *dashboard = (MyGpsData *)data;
+   double angle = *((double*) data); // Angle en degrés
+
+   // Définir les paramètres de dessin de base
+   cairo_set_line_width(cr, 2.0);
+
+   // Trouver le centre de la zone de dessin
+   double xc = width / 2.0;
+   double yc = height / 2.0;
+   xc = CENTER_X;
+   yc = CENTER_Y;
+   // Dessiner le cercle extérieur de la boussole
+   cairo_arc(cr, xc, yc, DASHBOARD_RADIUS, 0, 2 * M_PI);
+   cairo_stroke(cr);
+
+   // Dessiner les directions principales (N, E, S, W) et secondaires (NE, SE, SW, NW)
+   cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+   cairo_set_font_size(cr, 20);
+
+   struct {
+      const char *label;
+      double angle;
+   } directions[] = {
+      {"N", 0}, {"NE", 45}, {"E", 90}, {"SE", 135},
+      {"S", 180}, {"SW", 225}, {"W", 270}, {"NW", 315}
+   };
+
+   for (int i = 0; i < 8; i++) {
+      double direction_angle = directions[i].angle * DEG_TO_RAD;
+      double label_x = xc + (DASHBOARD_RADIUS - 30) * sin(direction_angle) - 10;
+      double label_y = yc - (DASHBOARD_RADIUS - 30) * cos(direction_angle) + 10;
+      cairo_move_to(cr, label_x, label_y);
+      cairo_show_text(cr, directions[i].label);
+   }
+
+   // Dessiner les graduations
+   cairo_set_line_width(cr, 1.0);
+   for (int i = 0; i < 360; i += 10) {
+      double tick_angle = i * DEG_TO_RAD;
+      double inner_radius = DASHBOARD_RADIUS - (i % 30 == 0 ? 20 : 10);
+      double tick_x1 = xc + DASHBOARD_RADIUS * sin(tick_angle);
+      double tick_y1 = yc - DASHBOARD_RADIUS * cos(tick_angle);
+      double tick_x2 = xc + inner_radius * sin(tick_angle);
+      double tick_y2 = yc - inner_radius * cos(tick_angle);
+      cairo_move_to(cr, tick_x1, tick_y1);
+      cairo_line_to(cr, tick_x2, tick_y2);
+      cairo_stroke(cr);
+   }
+
+   // Draw the speed inside a rectangle at the center
+   char cog_str[10];
+   cairo_set_font_size (cr, 10);
+   cairo_select_font_face (cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
+   snprintf(cog_str, sizeof(cog_str), "%.0lf°", dashboard->cog);
+   CAIRO_SET_SOURCE_RGB_BLACK(cr);
+   cairo_rectangle(cr, CENTER_X - 25, CENTER_Y + 15, 60, 20);
+   cairo_fill(cr);
+   CAIRO_SET_SOURCE_RGB_WHITE(cr);
+   cairo_move_to(cr, CENTER_X - 15, CENTER_Y + 30);
+   cairo_show_text(cr, cog_str);
+
+   // Dessiner l'aiguille de la boussole
+   double needle_length = DASHBOARD_RADIUS * 0.8;
+   double angle_rad =  dashboard->cog * DEG_TO_RAD;
+
+   double needle_x = xc + needle_length * sin(angle_rad);
+   double needle_y = yc - needle_length * cos(angle_rad);
+
+   // Dessiner la base de l'aiguille
+   cairo_set_source_rgb(cr, 0, 0, 0);
+   cairo_arc(cr, xc, yc, 10, 0, 2 * M_PI);
+   cairo_fill(cr);
+
+   // Dessiner la ligne de l'aiguille
+   cairo_set_source_rgb(cr, 1, 0, 0); // Couleur rouge pour l'aiguille
+   cairo_set_line_width(cr, 4.0);
+   cairo_move_to(cr, xc, yc);
+   cairo_line_to(cr, needle_x, needle_y);
+   cairo_stroke(cr);
+
+   // Dessiner la pointe opposée de l'aiguille
+   double opposite_x = xc - needle_length * sin(angle_rad);
+   double opposite_y = yc + needle_length * cos(angle_rad);
+   cairo_set_source_rgb(cr, 0, 0, 0); // Couleur noire pour l'opposée
+   cairo_move_to(cr, xc, yc);
+   cairo_line_to(cr, opposite_x, opposite_y);
+   cairo_stroke(cr);
+}
+
+/*! Function to draw the text zone */
+static void draw_text_zone (GtkDrawingArea *area, cairo_t *cr, int width, int height, gpointer data) {
+   char strPos [MAX_SIZE_LINE], strLat [MAX_SIZE_LINE], strLon [MAX_SIZE_LINE], strDate [MAX_SIZE_DATE];
+   time_t now = time(NULL);
+   struct tm *utc_time = gmtime(&now);
+   strftime(strDate, sizeof(strDate), "%Y-%m-%d %H:%M:%S UTC", utc_time);
+   // epochToStr (my_gps_data.time, true, strDate, sizeof (strDate));
+   snprintf (strPos, sizeof (strPos), "%s %s", \
+      latToStr (my_gps_data.lat, par.dispDms, strLat), lonToStr (my_gps_data.lon, par.dispDms, strLon));
+  
+   cairo_move_to(cr, CENTER_X, CENTER_Y);
+   cairo_set_font_size (cr, 12);
+   cairo_select_font_face (cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+   CAIRO_SET_SOURCE_RGB_BLACK(cr);
+   cairo_move_to (cr, 45, 10);
+   cairo_show_text (cr, strPos);
+   cairo_move_to (cr, 45, 30);
+   cairo_show_text (cr, strDate);
+}
+
+/*! update on timeout */
+static gboolean updateDashboard(gpointer label) {
+   if (window == NULL) return FALSE;
+   gtk_widget_queue_draw (widgetDashboard.speedometer);
+   gtk_widget_queue_draw (widgetDashboard.compass);
+   gtk_widget_queue_draw (widgetDashboard.textZone);
+   return TRUE;
+}
+
+/*! callback destroy dashboard */
+static void on_dashboard_window_destroy (GtkWidget *widget, gpointer data) {
+   if (widgetDashboard.timeoutId != 0) {
+      g_source_remove (widgetDashboard.timeoutId);
+      widgetDashboard.timeoutId = 0;
+   }
+}
+
+/*! show Dashboard */
+static void dashboard () {
+   char line [MAX_SIZE_LINE];
+   snprintf (line, MAX_SIZE_LINE, "Dashboard");
+       
+   GtkWidget *dashboardWindow = gtk_application_window_new (GTK_APPLICATION (app));
+   gtk_window_set_title (GTK_WINDOW(dashboardWindow), line);
+   gtk_window_set_default_size (GTK_WINDOW(dashboardWindow), 300, 700);
+   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+   gtk_window_set_child(GTK_WINDOW(dashboardWindow), box);
+
+   // Connect the destroy signal to the callback function
+   g_signal_connect (dashboardWindow, "destroy", G_CALLBACK(on_dashboard_window_destroy), NULL);
+
+   // Speedometer
+   widgetDashboard.speedometer = gtk_drawing_area_new();
+   gtk_widget_set_size_request(widgetDashboard.speedometer, 300, 300);
+   gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA (widgetDashboard.speedometer), draw_speedometer, &my_gps_data, NULL);
+   gtk_box_append(GTK_BOX(box), widgetDashboard.speedometer);
+
+   // Compass
+   widgetDashboard.compass = gtk_drawing_area_new();
+   gtk_widget_set_size_request (widgetDashboard.compass, 300, 300);
+   gtk_drawing_area_set_draw_func (GTK_DRAWING_AREA(widgetDashboard.compass), draw_compass, &my_gps_data, NULL);
+   gtk_box_append (GTK_BOX(box), widgetDashboard.compass);
+
+   // text Zone
+   widgetDashboard.textZone = gtk_drawing_area_new();
+   gtk_widget_set_size_request (widgetDashboard.textZone, 300, 100);
+   gtk_drawing_area_set_draw_func (GTK_DRAWING_AREA(widgetDashboard.textZone), draw_text_zone, &my_gps_data, NULL);
+   gtk_box_append (GTK_BOX(box), widgetDashboard.textZone);
+
+   // UTC Time
+   widgetDashboard.timeoutId = g_timeout_add_seconds (1, updateDashboard, NULL); // Update every second
+
+   gtk_window_present (GTK_WINDOW (dashboardWindow));   
 }
 
 /*! show GPS information */
@@ -4882,8 +5145,7 @@ static void on_meteogram_event (GtkDrawingArea *area, cairo_t *cr, int width, in
    double tDeltaCurrent = zoneTimeDiff (&currentZone, &zone);
    double tDeltaNow = 0; // time between beginning of grib and now in hours
    double lat, lon;
-   char totalDate [MAX_SIZE_DATE], oldDay [MAX_SIZE_DATE] = ""; 
-   char *pDate = &totalDate [0], *pOldDay = &oldDay [0];
+   char totalDate [MAX_SIZE_DATE]; 
    int timeMeteo, initTimeMeteo;
    lat = yToLat (whereIsPopup.y);
    lon = xToLon (whereIsPopup.x);
@@ -4984,13 +5246,12 @@ static void on_meteogram_event (GtkDrawingArea *area, cairo_t *cr, int width, in
       timeMeteo = (zone.dataTime [0]/100) + i;
       x = X_LEFT + XK * i;
       cairo_move_to (cr, x, Y_BOTTOM + 10);
-      newDate (zone.dataDate [0], timeMeteo, pDate);
-      cairo_show_text (cr, strrchr (pDate, ' ') + 1); // hour is after space
+      newDate (zone.dataDate [0], timeMeteo, totalDate);
+      cairo_show_text (cr, strrchr (totalDate, ' ') + 1); // hour is after space
       if ((timeMeteo % ((par.gribTimeMax <= 240) ? 24 : 48)) == initTimeMeteo) { // only year month day considered
          cairo_move_to (cr, x, Y_BOTTOM + 20);
-         pDate [DAY_LG] = '\0'; // date
-         cairo_show_text (cr, pDate);
-         strncpy (pOldDay, pDate, MAX_SIZE_DATE);
+         totalDate [DAY_LG] = '\0'; // date
+         cairo_show_text (cr, totalDate);
          CAIRO_SET_SOURCE_RGB_ULTRA_LIGHT_GRAY(cr);
          cairo_move_to (cr, x, Y_BOTTOM);
          cairo_line_to (cr, x, Y_TOP);
@@ -5072,7 +5333,6 @@ static void on_meteogram_event (GtkDrawingArea *area, cairo_t *cr, int width, in
 /*! meteogram */
 static void meteogram () {
    char totalDate [MAX_SIZE_DATE]; 
-   char *pDate = &totalDate [0];
    char strLat [MAX_SIZE_NAME], strLon [MAX_SIZE_NAME];
    char line [MAX_SIZE_LINE]; 
    if (par.constWindTws > 0) {
@@ -5085,7 +5345,7 @@ static void meteogram () {
    pt.lon = xToLon (whereIsPopup.x);
    snprintf (line, sizeof (line), "Meteogram for %s %s beginning %s during %ld hours", latToStr (pt.lat, par.dispDms, strLat), 
       lonToStr (pt.lon, par.dispDms, strLon),
-      newDate (zone.dataDate [0], (zone.dataTime [0]/100), pDate),
+      newDate (zone.dataDate [0], (zone.dataTime [0]/100), totalDate),
       zone.timeStamp [zone.nTimeStamp -1]);
 
    GtkWidget *meteoWindow = gtk_application_window_new (GTK_APPLICATION (app));
@@ -5340,6 +5600,7 @@ static void app_startup (GApplication *application) {
    createAction ("sailReport", rteReport);
    createAction ("sailHistory", rteHistory);
    createAction ("simulationReport", simulationReport);
+   createAction ("dashboard", dashboard);
    createAction ("gps", gpsDump);
 
    createAction ("historyReset", historyReset);
@@ -5406,6 +5667,7 @@ static void app_startup (GApplication *application) {
    subMenu (display_menu_v, "Sail Route", "app.sailRoute", "");
    subMenu (display_menu_v, "Sail Report", "app.sailReport", "");
    subMenu (display_menu_v, "Simulation Report", "app.simulationReport", "");
+   subMenu (display_menu_v, "Dashboard", "app.dashboard", "");
    subMenu (display_menu_v, "GPS", "app.gps", "");
 
    // Ajout d'éléments dans le menu "History"

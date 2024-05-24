@@ -1920,7 +1920,7 @@ void *getGPS () {
       }
       (void) gps_stream (&gps_data, WATCH_DISABLE, NULL);
       (void) gps_close (&gps_data);
-      sleep (20);
+      sleep (5);
    }
    return NULL;
 }

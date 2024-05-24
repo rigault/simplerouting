@@ -7,7 +7,7 @@
 #include <time.h>
 #include <pthread.h>
 #include <math.h>
-#define GPS_TIME_OUT          5000000           // 5 s
+#define GPS_TIME_OUT          2000000           // 2 s
 #define N_WIND_URL            6
 #define N_CURRENT_URL         6
 #define ROOT_GRIB_URL         "https://static1.mclcm.net/mc2020/int/cartes/marine/grib/" // Meteoconsult
@@ -242,6 +242,7 @@ typedef struct {
    double od;     // orthodromic distance
    double lCap;   // loxodromic cap
    double ld;     // loxodromic distance
+   double sog;    // speed over ground
    double u;      // east west wind or current in meter/s
    double v;      // north south component of wind or current in meter/s
    double w;      // waves height WW3 model
@@ -263,6 +264,7 @@ typedef struct {
    int    nIsoc;                            // number of Isochrones
    int    n;                                // number of steps
    double calculationTime;                  // compute time to calculate the route
+   double lastStepDuration;                 // in hours
    double duration;                         // total time in hours of the route
    double motorDuration;                    // total time in hours using motor
    double totDist;                          // total distance in NM
@@ -272,9 +274,11 @@ typedef struct {
    double avrTws;                           // average wind speed of the route
    double avrGust;                          // average gust of the route
    double avrWave;                          // average wave of the route
+   double avrSog;                           // average Speed Over Ground
    double maxTws;                           // max wind speed of the route
    double maxGust;                          // max gust of the route
    double maxWave;                          // max wave of the route
+   double maxSog;                           // max Speed Over Ground
    SailPoint t [MAX_N_ISOC + 1];
 } SailRoute;
 

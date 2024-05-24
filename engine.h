@@ -3,7 +3,7 @@ extern Pp        isocArray [MAX_N_ISOC][MAX_SIZE_ISOC];
 extern IsoDesc   isoDesc  [MAX_N_ISOC];
 extern int       nIsoc;
 extern Pp        lastClosest;                   // closest point to destination in last isocgrone computed
-extern ChooseDeparture chooseDeparture;           // for choice of departure time
+extern ChooseDeparture chooseDeparture;         // for choice of departure time
 extern HistoryRoute historyRoute;
 
 extern void    storeRoute (Pp *pOr, Pp *pDest, double lastStepDuration);
