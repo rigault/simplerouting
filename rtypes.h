@@ -194,6 +194,7 @@ typedef struct {
    int    amure;
    bool   motor;
    int    sector;
+   int    toIndexWp;
    double lat;
    double lon;
    double dd;     // distance to pDest
@@ -236,6 +237,7 @@ typedef struct {
    int    id;
    int    father;
    int    amure;
+   int    toIndexWp;
    bool   motor;
    double time;   // time in hours after start
    double oCap;   // orthodromic cap
@@ -269,6 +271,8 @@ typedef struct {
    double motorDuration;                    // total time in hours using motor
    double totDist;                          // total distance in NM
    double motorDist;                        // distance using motor in NM
+   double tribordDist;                      // distance sail tribord in NM
+   double babordDist;                       // distance sail babord in NM
    int    ret;                              // return value of routing
    bool   destinationReached;               // true if destination reaches
    double avrTws;                           // average wind speed of the route

@@ -1871,57 +1871,59 @@ bool writeParam (const char *fileName, bool header, bool password) {
    return true;
 }
 
-/*! get GPS information */
-void *getGPS () {
+/*! provide GPS information */
+void *getGPS() {
    struct gps_data_t gps_data;
-   const int MODE_STR_NUM = 4;
    my_gps_data.OK = false;
-   while (true) {
-      my_gps_data.OK = false;
-      if (gps_open ("localhost", GPSD_TCP_PORT, &gps_data) == -1) {
-         fprintf (stderr, "Error in getGPS: Unable to connect to GPSD.\n");
-         my_gps_data.OK = false;
-         return NULL;
-      }
-
-      (void) gps_stream (&gps_data, WATCH_ENABLE | WATCH_JSON, NULL);
-
-      while (gps_waiting (&gps_data, GPS_TIME_OUT)) {
-         if (gps_read (&gps_data, NULL, 0) == -1) {
-            fprintf (stderr, "Error in getGPS: gps_read\n");
-            break;
-         }
-         if (MODE_SET != (MODE_SET & gps_data.set)) {
-            // did not even get mode, nothing to see here
-            continue;
-         }
-         if (gps_data.fix.mode < 0 || MODE_STR_NUM <= gps_data.fix.mode) {
-            gps_data.fix.mode = 0;
-         }
-         if (isfinite(gps_data.fix.latitude) && isfinite(gps_data.fix.longitude) &&
-            ((gps_data.fix.latitude != 0 || gps_data.fix.longitude != 0))) {
-            // printf("Lat: %.2f, Lon: %.2f\n", gps_data.fix.latitude, gps_data.fix.longitude);
-            // update GPS data
-            my_gps_data.lat = gps_data.fix.latitude;
-            my_gps_data.lon = gps_data.fix.longitude;
-            my_gps_data.alt = gps_data.fix.altitude;
-            my_gps_data.cog = gps_data.fix.track;
-            my_gps_data.sog = MS_TO_KN * gps_data.fix.speed;
-            my_gps_data.status = gps_data.fix.status;
-            my_gps_data.nSat = gps_data.satellites_visible;
-            my_gps_data.time = gps_data.fix.time.tv_sec;
-            my_gps_data.OK = true;
-            break;
-         }
-         else {
-            my_gps_data.OK = false;
-            // printf("No GPS Info\n");
-         }
-      }
-      (void) gps_stream (&gps_data, WATCH_DISABLE, NULL);
-      (void) gps_close (&gps_data);
-      sleep (5);
+   if (gps_open("localhost", GPSD_TCP_PORT, &gps_data) == -1) {
+      fprintf(stderr, "Error: Unable to connect to GPSD.\n");
+      return NULL;
    }
+
+   gps_stream(&gps_data, WATCH_ENABLE | WATCH_JSON, NULL);
+
+   while (true) {
+      if (gps_waiting(&gps_data, GPS_TIME_OUT)) {
+         if (gps_read(&gps_data, NULL, 0) == -1) {
+            fprintf (stderr, "Error in getGPS: gps_read\n");
+         } else {
+            if (gps_data.set & PACKET_SET) {
+               /*   
+               printf("Latitude   : %lf, Longitude: %lf\n", gps_data.fix.latitude, gps_data.fix.longitude);
+               printf("Altitude   : %lf meters\n", gps_data.fix.altitude);
+               printf("Fix Quality: %d\n", gps_data.fix.status);
+               printf("Satellites : %d\n", gps_data.satellites_visible);
+               printf("SOG        : %.2lfKn\n", MS_TO_KN * gps_data.fix.speed);
+               printf("COG        : %.0lf°\n", gps_data.fix.track);
+               printf("Time       : %ld\n\n", gps_data.fix.time.tv_sec);
+               */
+               if (isfinite(gps_data.fix.latitude) && isfinite(gps_data.fix.longitude) &&
+                  ((gps_data.fix.latitude != 0 || gps_data.fix.longitude != 0))) {
+                  // printf("Lat: %.2f, Lon: %.2f\n", gps_data.fix.latitude, gps_data.fix.longitude);
+                  // update GPS data
+                  my_gps_data.lat = gps_data.fix.latitude;
+                  my_gps_data.lon = gps_data.fix.longitude;
+                  my_gps_data.alt = gps_data.fix.altitude;
+                  my_gps_data.cog = gps_data.fix.track;
+                  my_gps_data.sog = MS_TO_KN * gps_data.fix.speed;
+                  my_gps_data.status = gps_data.fix.status;
+                  my_gps_data.nSat = gps_data.satellites_visible;
+                  my_gps_data.time = gps_data.fix.time.tv_sec;
+                  my_gps_data.OK = true;
+               }
+               else 
+                  my_gps_data.OK = false;
+            } else 
+               fprintf(stderr, "Error in getGPS: No fix available.\n");
+         }
+      } else {
+         printf("Timeout: No data received from GPS.\n");
+      }
+   }
+
+   gps_stream(&gps_data, WATCH_DISABLE, NULL);
+   gps_close(&gps_data);
+
    return NULL;
 }
 
@@ -1939,6 +1941,7 @@ void closeGPS () {
    pthread_cancel (gps_thread);
    pthread_join (gps_thread, NULL);
 }
+
 
 /*! URL for METEO Consult Wind delay hours before now at closest time 0Z, 6Z, 12Z, or 18Z 
 	Current 12 hours before new at 0Z */
