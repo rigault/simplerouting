@@ -35,7 +35,7 @@ void optionManage (char option) {
       gribToStr (buffer, &zone, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       printf ("grib print...\n");
-      printGrib (&zone, tGribData [WIND]);
+      printGribFull (&zone, tGribData [WIND]);
       printf ("\n\nFollowing lines are suspects info...\n");
       checkGribToStr (buffer, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);

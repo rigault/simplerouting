@@ -1,6 +1,11 @@
 /*! this file contains small inlines functions
  to be included in s source files */
 
+/*! return pythagore distance */
+static inline double dist (double x, double y) {
+   return sqrt (x*x + y*y);
+}
+
 /*! true if P (lat, lon) is within the zone */
 static inline bool isInZone (double lat, double lon, Zone *zone) {
    return (lat >= zone->latMin) && (lat <= zone->latMax) && (lon >= zone->lonLeft) && (lon <= zone->lonRight);
@@ -19,28 +24,32 @@ static inline double fTws (double u, double v) {
 
 /*! return TWA between 0.. 360 
    note : tribord amure if twa > 180 */
-static inline double fTwa (double cog, double tws) {
+static inline double ffTwa (double cog, double tws) {
    double twa =  fmod ((cog - tws), 360.0);
    if (twa < 0) twa += 360; 
    return twa;
 }
 
 /*! return TWA between 0.. 360 */
-static inline double ffTwa (double cog, double twd) {
+static inline double fTwa (double cog, double twd) {
    double twa = (cog > twd) ? cog - twd : cog - twd + 360;   //angle of the boat with the wind
    if (twa > 360) twa -= 360; 
    return twa;
+}
+
+/*! return AWA and AWS Apparent Wind Angle and Speed */
+static inline void fAwaAws (double twa, double tws, double sog, double *awa, double *aws) {
+   double a = tws * sin (DEG_TO_RAD * twa);
+   double b = tws * cos (DEG_TO_RAD * twa) + sog;
+   *awa = RAD_TO_DEG * atan2 (a, b) + 360;
+   while (*awa > 360) *awa -= 360;
+   *aws = sqrt (a*a + b*b);
 }
 
 /*! return fx : linear interpolation */
 static inline double interpolate (double x, double x0, double x1, double fx0, double fx1) {
    if (x1 == x0) return fx0;
    else return fx0 + (x-x0) * (fx1-fx0) / (x1-x0);
-}
-
-/*! return pythagore distance */
-static inline double dist (double x, double y) {
-   return sqrt (x*x + y*y);
 }
 
 /*! return givry correction to apply to direct or loxodromic cap to get orthodromic cap  */

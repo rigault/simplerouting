@@ -77,7 +77,6 @@ int readCurrentGribRet = -1;      // to check if readCurrentGrib is terminated
 int  nTotEntities = 0;            // cumulated number of entities
 Entity *entities = NULL;
 
-
 /*! Thread for GPS management */
 struct ThreadData {
    struct gps_data_t gps_data;
@@ -409,7 +408,7 @@ double lonCanonize (double lon) {
 bool smtpGribRequestPython (int type, double lat1, double lon1, double lat2, double lon2, char *command, size_t maxLength) {
    int i;
    char temp [MAX_SIZE_LINE];
-   char *suffix = "WIND,GUST,WAVES"; 
+   char *suffix = "WIND,GUST,WAVES,RAIN,PRMSL"; 
    char newPw [MAX_SIZE_NAME];
    if (par.mailPw [0] == '\0') return false;
    dollarSubstitute (par.mailPw, newPw, MAX_SIZE_NAME);
@@ -706,6 +705,32 @@ double zoneTimeDiff (Zone *zone1, Zone *zone0) {
    }
    else return 0;
 } 
+
+/*! print Grib u v for all lat lon time information */
+void printGribFull (Zone *zone, FlowP *gribData) {
+   int iGrib;
+   printf ("printGrib\n");
+   for (size_t  k = 0; k < zone->nTimeStamp; k++) {
+      double t = zone->timeStamp [k];
+      printf ("Time: %.0lf\n", t);
+      printf ("lon   lat   u     v     g     w     msl     prate\n");
+      for (int i = 0; i < zone->nbLat; i++) {
+         for (int j = 0; j < zone->nbLon; j++) {
+	         iGrib = (k * zone->nbLat * zone->nbLon) + (i * zone->nbLon) + j;
+            printf (" %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f\n", \
+            gribData [iGrib].lon, \
+	         gribData [iGrib].lat, \
+            gribData [iGrib].u, \
+            gribData [iGrib].v, \
+            gribData [iGrib].g, \
+            gribData [iGrib].w, \
+            gribData [iGrib].msl, \
+            gribData [iGrib].prate);
+         }
+      }
+     printf ("\n");
+   }
+}
 
 /*! print Grib u v for all lat lon time information */
 void printGrib (Zone *zone, FlowP *gribData) {
@@ -1005,10 +1030,10 @@ static inline int indLon (double lon, Zone *zone) {
 }
 
 /*! interpolation to get u, v, g (gust), w (waves) at point (lat, lon)  and time t */
-bool findFlow (double lat, double lon, double t, double *rU, double *rV, double *rG, double *rW, Zone *zone, const FlowP *gribData) {
+static bool findFlow (double lat, double lon, double t, double *rU, double *rV, double *rG, double *rW, double *msl, double *prate, Zone *zone, const FlowP *gribData) {
    double t0,t1;
    double latMin, latMax, lonMin, lonMax;
-   double a, b, u0, u1, v0, v1, g0, g1, w0, w1;
+   double a, b, u0, u1, v0, v1, g0, g1, w0, w1, msl0, msl1, prate0, prate1;
    int iT0, iT1;
    FlowP windP00, windP01, windP10, windP11;
    if ((!zone->wellDefined) || (zone->nbLat == 0) || (! isInZone (lat, lon, zone) && par.constWindTws == 0) || (t < 0)){
@@ -1029,7 +1054,7 @@ bool findFlow (double lat, double lon, double t, double *rU, double *rV, double 
    // printf ("00tws %lf  01tws %lf  10tws %lf 11tws %lf\n", windP00.tws, windP01.tws,windP10.tws,windP11.tws); 
    // speed longitude interpolation at northern latitudes
   
-   // interpolation  for u, v, w, g
+   // interpolation  for u, v, w, g, msl, prate
    a = interpolate (lon, windP00.lon, windP01.lon, windP00.u, windP01.u);
    b = interpolate (lon, windP10.lon, windP11.lon, windP10.u, windP11.u); 
    u0 = interpolate (lat, windP00.lat, windP10.lat, a, b);
@@ -1045,6 +1070,14 @@ bool findFlow (double lat, double lon, double t, double *rU, double *rV, double 
    a = interpolate (lon, windP00.lon, windP01.lon, windP00.w, windP01.w); 
    b = interpolate (lon, windP10.lon, windP11.lon, windP10.w, windP11.w); 
    w0 = interpolate (lat, windP00.lat, windP10.lat, a, b);
+    
+   a = interpolate (lon, windP00.lon, windP01.lon, windP00.msl, windP01.msl); 
+   b = interpolate (lon, windP10.lon, windP11.lon, windP10.msl, windP11.msl); 
+   msl0 = interpolate (lat, windP00.lat, windP10.lat, a, b);
+    
+   a = interpolate (lon, windP00.lon, windP01.lon, windP00.prate, windP01.prate); 
+   b = interpolate (lon, windP10.lon, windP11.lon, windP10.prate, windP11.prate); 
+   prate0 = interpolate (lat, windP00.lat, windP10.lat, a, b);
     
    //printf ("lat %lf a %lf  b %lf  00lat %lf 10lat %lf  %lf\n", p.lat, a, b, windP00.lat, windP10.lat, tws0); 
 
@@ -1071,6 +1104,14 @@ bool findFlow (double lat, double lon, double t, double *rU, double *rV, double 
    b = interpolate (lon, windP10.lon, windP11.lon, windP10.w, windP11.w); 
    w1 = interpolate (lat, windP00.lat, windP10.lat, a, b);
    
+   a = interpolate (lon, windP00.lon, windP01.lon, windP00.msl, windP01.msl); 
+   b = interpolate (lon, windP10.lon, windP11.lon, windP10.msl, windP11.msl); 
+   msl1 = interpolate (lat, windP00.lat, windP10.lat, a, b);
+   
+   a = interpolate (lon, windP00.lon, windP01.lon, windP00.prate, windP01.prate); 
+   b = interpolate (lon, windP10.lon, windP11.lon, windP10.prate, windP11.prate); 
+   prate1 = interpolate (lat, windP00.lat, windP10.lat, a, b);
+   
    // finally, interpolation twd tws between t0 and t1
    t0 = zone->timeStamp [iT0];
    t1 = zone->timeStamp [iT1];
@@ -1078,12 +1119,15 @@ bool findFlow (double lat, double lon, double t, double *rU, double *rV, double 
    *rV = interpolate (t, t0, t1, v0, v1);
    *rG = interpolate (t, t0, t1, g0, g1);
    *rW = interpolate (t, t0, t1, w0, w1);
+   *msl = interpolate (t, t0, t1, msl0, msl1);
+   *prate = interpolate (t, t0, t1, prate0, prate1);
 
    return true;
 }
 
 /*! use findflow to get wind and waves */
 void findWindGrib (double lat, double lon, double t, double *u, double *v, double *gust, double *w, double *twd, double *tws ) {
+   double msl, prate;
    if (par.constWindTws != 0) {
       *twd = par.constWindTwd;
       *tws = par.constWindTws;
@@ -1092,7 +1136,7 @@ void findWindGrib (double lat, double lon, double t, double *u, double *v, doubl
       *w = 0;
    }
    else {
-      findFlow (lat, lon, t, u, v, gust, w, &zone, tGribData [WIND]);
+      findFlow (lat, lon, t, u, v, gust, w, &msl, &prate,  &zone, tGribData [WIND]);
       *twd = fTwd (*u, *v);
       *tws = fTws (*u, *v);
    }
@@ -1100,9 +1144,23 @@ void findWindGrib (double lat, double lon, double t, double *u, double *v, doubl
    else if (par.constWave != 0) *w = par.constWave;
 }
 
+/*! use findflow to get rain */
+double findRainGrib (double lat, double lon, double t) {
+   double u, v, g, w, msl, prate;
+   findFlow (lat, lon, t, &u, &v, &g, &w, &msl, &prate, &zone, tGribData [WIND]);
+   return prate;
+}
+
+/*! use findflow to get pressure */
+double findPressureGrib (double lat, double lon, double t) {
+   double u, v, g, w, msl, prate;
+   findFlow (lat, lon, t, &u, &v, &g, &w, &msl, &prate, &zone, tGribData [WIND]);
+   return msl;
+}
+
 /*! use findflow to get current */
 void findCurrentGrib (double lat, double lon, double t, double *uCurr, double *vCurr, double *tcd, double *tcs) {
-   double gust, bidon;
+   double gust, bidon, msl, prate;
    *uCurr = 0;
    *vCurr = 0;
    *tcd = 0;
@@ -1116,7 +1174,7 @@ void findCurrentGrib (double lat, double lon, double t, double *uCurr, double *v
    }
    else {
       if (t <= currentZone.timeStamp [currentZone.nTimeStamp - 1]) {
-         findFlow (lat, lon, t, uCurr, vCurr, &gust, &bidon, &currentZone, tGribData [CURRENT]);
+         findFlow (lat, lon, t, uCurr, vCurr, &gust, &bidon, &msl, &prate, &currentZone, tGribData [CURRENT]);
          *tcd = fTwd (*uCurr, *vCurr);
          *tcs = fTws (*uCurr, *vCurr);
       }
@@ -1327,6 +1385,14 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
             tGribData [iFlow] [iGrib].v = val;
          else if (strcmp (shortName, "gust") == 0)
             tGribData [iFlow] [iGrib].g = val;
+         else if (strcmp (shortName, "msl") == 0)  { // pressure
+            tGribData [iFlow] [iGrib].msl = val;
+            // printf ("pressure: %.2lf\n", val);
+         }
+         else if (strcmp (shortName, "prate") == 0) { // precipitation
+            tGribData [iFlow] [iGrib].prate = val;
+            // if (val > 0) printf ("prate: %lf\n", val);
+         }
          else if (strcmp (shortName, "swh") == 0) // waves
             tGribData [iFlow] [iGrib].w = val;
          else if (indicatorOfParameter == GUST_GFS) // find gust in GFS file specific parameter = 180
@@ -2000,8 +2066,8 @@ bool curlGet (char *url, char* outputFile) {
    return true;
 }
 
-/*! add trace point to trace file */
-bool addTracePoint (const char *fileName) {
+/*! add GPS trace point to trace file */
+bool addTraceGPS (const char *fileName) {
    FILE *f = NULL;
    char str [MAX_SIZE_LINE];
    if (!my_gps_data.OK) 
@@ -2013,6 +2079,20 @@ bool addTracePoint (const char *fileName) {
       return false;
    }
    fprintf (f, "%.2lf; %.2lf; %ld; %s\n", my_gps_data.lat, my_gps_data.lon, my_gps_data.time, epochToStr (my_gps_data.time, true, str, sizeof (str)));
+   fclose (f);
+   return true;
+}
+
+/*! add trace point to trace file */
+bool addTracePt (const char *fileName, double lat, double lon) {
+   FILE *f = NULL;
+   char str [MAX_SIZE_LINE];
+   time_t t = time (NULL);
+   if ((f = fopen (fileName, "a")) == NULL) {
+      fprintf (stderr, "Error in addTrace: cannot write: %s\n", fileName);
+      return false;
+   }
+   fprintf (f, "%.2lf; %.2lf; %ld; %s\n", lat, lon, t, epochToStr (t, true, str, sizeof (str)));
    fclose (f);
    return true;
 }

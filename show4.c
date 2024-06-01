@@ -576,7 +576,7 @@ static void paintDayNight (cairo_t *cr, int width, int height) {
  
 /*! update colors for wind */
 static void createWindSurface (cairo_t *cr, int index, int width, int height) {
-   double u, v, gust, w, twd, tws, lat, lon;
+   double u, v, gust, w, twd, tws, val, lat, lon;
    guint8 red, green, blue;
    int nCall = 0;
    surface [index] = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
@@ -588,11 +588,35 @@ static void createWindSurface (cairo_t *cr, int index, int width, int height) {
          lat = yToLat (y);
          lon = xToLon (x);
          if (isInZone (lat, lon, &zone)) {
-	         findWindGrib (lat, lon, theTime, &u, &v, &gust, &w, &twd, &tws);
             nCall += 1;
-            if (par.averageOrGustDisp != 0)
-               tws = MAX (tws, MS_TO_KN * gust);
-            mapColors (tws, &red, &green, &blue);
+            switch (par.averageOrGustDisp) {
+            case WIND_DISP:
+	            findWindGrib (lat, lon, theTime, &u, &v, &gust, &w, &twd, &tws);
+               val = tws;
+               break;
+            case GUST_DISP:
+	            findWindGrib (lat, lon, theTime, &u, &v, &gust, &w, &twd, &tws);
+               val = MAX (tws, MS_TO_KN * gust);
+               break;
+            case WAVE_DISP:
+	            findWindGrib (lat, lon, theTime, &u, &v, &gust, &w, &twd, &tws);
+               val = w;
+               break;
+            case RAIN_DISP:
+	            val = findRainGrib (lat, lon, theTime) * 250000;
+               break;
+            case PRESSURE_DISP:
+               // normalisent a value between 0 to 50 associated to 950 to 1050 hP
+	            val = findPressureGrib (lat, lon, theTime)/ 100; // hPa
+               val -= 990;
+               val *= 1;
+               if (val > 50) val = 50;
+               if (val < 0) val = 0;
+               // printf ("val: %.2lf\n", val);
+               break;
+            default:;
+            }
+            mapColors (val, &red, &green, &blue);
             cairo_set_source_rgba (surface_cr [index], red/255.0, green/255.0, blue/255.0, 0.5);
             cairo_rectangle (surface_cr [index], x, y, 1, 1);
             cairo_fill (surface_cr [index]);
@@ -1059,8 +1083,12 @@ static int findIndexInRoute (double t) {
    -1 if terminated */
 static int findIndexInRouteNow () {
    time_t now = time (NULL);
-   // to complete
-   int i = 0;
+   // tDeltaNow is the number of hours between beginning of grib to now */
+   double tDeltaNow = (now - vOffsetLocalUTC)/ 3600.0; // offset between local and UTC in hours
+   tDeltaNow -= gribDateTimeToEpoch (zone.dataDate [0], zone.dataTime [0]) / 3600.0;
+   printf ("tDeltaNow: %.2lf\n", tDeltaNow);
+   int i = (tDeltaNow - par.startTimeInHours) / par.tStep;
+   printf ("tDeltaNow: %.2lf, i = %d\n", tDeltaNow, i);
    return i;
 }
 
@@ -1094,12 +1122,14 @@ static void focusOnPointInRoute (cairo_t *cr)  {
          lat = route.t[i].lat;
          lon = route.t[i].lon;
       }
+      int twa = fTwa (route.t[i].lCap, route.t[i].twd);
       snprintf (sInfoRoute, sizeof (sInfoRoute), 
-         "Route Date: %s Lat: %-12s Lon: %-12s   COG: %6.0f°   SOG:%5.2lfKn   TWD:%03d° TWS:%5.2lfKn   Gust: %5.2lfKn   Wave: %5.2lfm   %s", \
+         "Route Date: %s Lat: %-12s Lon: %-12s   COG: %6.0f°   SOG:%5.2lfKn   TWD:%03d°   TWA:%03d°   TWS:%5.2lfKn   Gust: %5.2lfKn   Wave: %5.2lfm   %s", \
          newDate (zone.dataDate [0], (zone.dataTime [0]/100) + route.t[i].time, strDate), \
          latToStr (route.t[i].lat, par.dispDms, strLat), lonToStr (route.t[i].lon, par.dispDms, strLon), \
          route.t[i].lCap, route.t[i].ld/par.tStep, \
-         (int) (route.t[i].twd + 360) % 360, route.t[i].tws, \
+         (int) (route.t[i].twd + 360) % 360,\
+         twa, route.t[i].tws, \
          MS_TO_KN * route.t[i].g, route.t[i].w,
          (isDayLight (route.t[i].time, lat, lon)) ? "Day" : "Night");
    }
@@ -1498,7 +1528,7 @@ static void drawScale (cairo_t *cr, DispZone *dispZone) {
 }
 
 /* Provide resume of information */
-void static drawInfo (cairo_t *cr, int width, int height) {
+static void drawInfo (cairo_t *cr, int width, int height) {
    double lat, lon, distToDest;
    char str [MAX_SIZE_BUFFER];
    char strDate [MAX_SIZE_LINE];
@@ -2247,7 +2277,7 @@ static void lineReport (GtkWidget *grid, int l, const char* iconName, const char
 }
 
 /*! convert hours in string with days, hours, minutes */
-char *durationToStr (double duration, char *res, size_t len) {
+static char *durationToStr (double duration, char *res, size_t len) {
    int nDays, nHours, nMin;
    nDays = duration / 24;
    nHours = fmod (duration, 24.0);
@@ -2485,7 +2515,6 @@ static gboolean routingCheck (gpointer data) {
    }
    niceReport (&route, route.calculationTime);
    selectedPointInLastIsochrone = (nIsoc <= 1) ? 0 : isoDesc [nIsoc -1].closest; 
-   printf ("ATT in routingCheck\n");
    gtk_widget_queue_draw (drawing_area);
    return TRUE;
 }
@@ -2493,7 +2522,7 @@ static gboolean routingCheck (gpointer data) {
 /*! launch routing */
 static void on_run_button_clicked () {
    if (! gpsTrace)
-      if (addTracePoint (par.traceFileName))
+      if (addTraceGPS (par.traceFileName))
          gpsTrace = true; // only one GPS trace per session
    if (! isInZone (par.pOr.lat, par.pOr.lon, &zone) && (par.constWindTws == 0)) {
      infoMessage ("Origin point not in wind zone", GTK_MESSAGE_WARNING);
@@ -2798,6 +2827,13 @@ static void newTrace () {
    gtk_widget_show (dialogBox);
 }
 
+/*! add POR to current trace */
+static void traceAdd () {
+   char fileName [MAX_SIZE_FILE_NAME];
+   buildRootName (par.traceFileName, fileName);
+   addTracePt (fileName, par.pOr.lat, par.pOr.lon);
+}
+
 /*! display trace report */
 static void traceReport () {
    char fileName [MAX_SIZE_FILE_NAME];
@@ -2969,7 +3005,7 @@ static void historyRteDump (gpointer user_data) {
    else {
       routeToStr (&historyRoute.r[k], buffer, MAX_SIZE_BUFFER); 
       snprintf (title, MAX_SIZE_LINE, "History: %2d", k);
-      displayText (1100, 400, buffer, title);
+      displayText (1400, 400, buffer, title);
    }
 }
 
@@ -3251,18 +3287,6 @@ static void on_routegram_event (GtkDrawingArea *area, cairo_t *cr, int width, in
       arrow (cr, head_x, HEAD_Y, u, v, route.t [i].twd, route.t[i].tws, WIND);
    }
 
-   // draw tws 
-   CAIRO_SET_SOURCE_RGB_BLUE(cr);
-   for (int i = 0; i < route.n; i++) {
-      x = X_LEFT + XK * i * par.tStep;
-      y = Y_BOTTOM - YK * route.t[i].tws;
-      if (i == 0) cairo_move_to (cr, x, y);
-      else cairo_line_to (cr, x, y);
-   }
-   if (route.destinationReached) 
-      cairo_line_to (cr, lastX, Y_BOTTOM - YK * lastTws);
-   cairo_stroke(cr);
-   
    // draw gust
    if (route.maxGust > 0) { 
       CAIRO_SET_SOURCE_RGB_RED(cr);
@@ -3277,6 +3301,18 @@ static void on_routegram_event (GtkDrawingArea *area, cairo_t *cr, int width, in
       cairo_stroke(cr);
    }
 
+   // draw tws 
+   CAIRO_SET_SOURCE_RGB_BLUE(cr);
+   for (int i = 0; i < route.n; i++) {
+      x = X_LEFT + XK * i * par.tStep;
+      y = Y_BOTTOM - YK * route.t[i].tws;
+      if (i == 0) cairo_move_to (cr, x, y);
+      else cairo_line_to (cr, x, y);
+   }
+   if (route.destinationReached) 
+      cairo_line_to (cr, lastX, Y_BOTTOM - YK * lastTws);
+   cairo_stroke(cr);
+   
    //draw Waves
    if (route.maxWave > 0) { 
       CAIRO_SET_SOURCE_RGB_GREEN(cr);
@@ -3354,7 +3390,7 @@ static void rteDump () {
       infoMessage ("No route calculated", GTK_MESSAGE_INFO);
    else {
       routeToStr (&route, buffer, MAX_SIZE_BUFFER); 
-      displayText (1100, 400, buffer, (route.destinationReached) ? "Destination reached" :\
+      displayText (1400, 400, buffer, (route.destinationReached) ? "Destination reached" :\
          "Destination unreached. Route to best point");
    }
 }
@@ -3373,7 +3409,7 @@ static void parInfo () {
 }
 
 /*! Call back point of interest */
-void cbEditPoi (GtkDialog *dialog, gint response_id, gpointer user_data) {
+static void cbEditPoi (GtkDialog *dialog, gint response_id, gpointer user_data) {
    if (response_id == GTK_RESPONSE_ACCEPT) {
       nPoi = 0;
       nPoi = readPoi (par.poiFileName);
@@ -3635,7 +3671,12 @@ static void draw_text_zone (GtkDrawingArea *area, cairo_t *cr, int width, int he
    if (route.n > 0) {
       int i = findIndexInRouteNow ();
       cairo_move_to (cr, xc-50, yc + 15);
-      snprintf (str, sizeof (str), "Sail Route: %.0lf°", route.t[0].oCap);
+      if (i < 0)
+         snprintf (str, sizeof (str), "Sail Route: NA");
+      else if (i >= route.n)
+         snprintf (str, sizeof (str), "Sail Route: N/A");
+      else
+         snprintf (str, sizeof (str), "Sail Route: %.0lf°", route.t[i].oCap);
       cairo_show_text (cr, str);
    }
 }
@@ -3817,7 +3858,6 @@ static gboolean readGribCheck (gpointer data) {
       updatedColors = false;
       titleUpdate ();
    }
-   printf ("ATT\n");
    gtk_widget_queue_draw (drawing_area);
    return TRUE;
 }
@@ -4083,7 +4123,7 @@ static void initScenario () {
 }
 
 /*! Call back editScenario */
-void cbEditScenario (GtkDialog *dialog, gint response_id, gpointer user_data) {
+static void cbEditScenario (GtkDialog *dialog, gint response_id, gpointer user_data) {
    if (response_id == GTK_RESPONSE_ACCEPT) {
       readParam (parameterFileName);
       initScenario ();
@@ -4314,6 +4354,7 @@ static gboolean mailGribRead (gpointer data) {
    if (n > 0) {
       g_source_remove (gribMailTimeout); // timer stopped
       if (((fileName = strstr (buffer, "File: /") + 6) != NULL) && (n > 2)) {
+         printf ("Mail Response: %s\n", buffer);
          while (isspace (*fileName)) fileName += 1;
          if ((end = strstr (fileName, " ")) != NULL)
             *(end) = '\0';
@@ -4556,6 +4597,7 @@ static void testFunction () {
    printf ("test\n");
    checkGribToStr (buffer, MAX_SIZE_BUFFER);
    displayText (750, 400, buffer, "Grib Wind Check");
+   printGribFull (&zone, tGribData [WIND]);
 }
 
 /*! display label in col c and ligne l of tab*/
@@ -4567,14 +4609,14 @@ static void labelCreate (GtkWidget *tab, char * name, int c, int l) {
 }
 
 /*! Lat update for change */
-void onLatChange (GtkWidget *widget, gpointer data) {
+static void onLatChange (GtkWidget *widget, gpointer data) {
    double *x_ptr = (double *) data;
    *x_ptr = getCoord (gtk_editable_get_text (GTK_EDITABLE (widget)));
    gtk_widget_queue_draw (drawing_area);
 }
 
 /*! origin Lon update for change */
-void onLonChange (GtkWidget *widget, gpointer data) {
+static void onLonChange (GtkWidget *widget, gpointer data) {
    double *x_ptr = (double *) data;
    *x_ptr = getCoord (gtk_editable_get_text (GTK_EDITABLE (widget)));
    *x_ptr = lonCanonize (*x_ptr);
@@ -4627,17 +4669,11 @@ static void radio_button_average_or_gust_disp (GtkToggleButton *button, gpointer
    destroySurface ();
 }
 
-/*! Radio button for average or gustt disp */
-static GtkWidget *createRadioButtonAverageOrGustDisp (char *name, GtkWidget *tab_display, GtkWidget *from, int i) {
-   GtkWidget *choice = gtk_check_button_new_with_label (name);
-   g_object_set_data (G_OBJECT(choice), "index", GINT_TO_POINTER(i));
-   g_signal_connect (choice, "toggled", G_CALLBACK (radio_button_average_or_gust_disp), NULL);
-   gtk_grid_attach (GTK_GRID(tab_display), choice,           i+1, 3, 1, 1);
-   if (from != NULL)
-      gtk_check_button_set_group ((GtkCheckButton *) choice, (GtkCheckButton *) from); 
-   if (i == par.averageOrGustDisp)
-      gtk_check_button_set_active ((GtkCheckButton *) choice, TRUE);
-   return choice;
+/*! callBack for disp choice Avr or Gust or Rain or Pressure */
+static void on_combo_box_disp_changed (GtkComboBoxText *combo_box, gpointer user_data) {
+   par.averageOrGustDisp = gtk_combo_box_get_active(GTK_COMBO_BOX(combo_box));
+   gtk_widget_queue_draw (drawing_area); // affiche le tout
+   destroySurface ();
 }
 
 /*! callBack for Isochrone choice */
@@ -4949,10 +4985,19 @@ static void change () {
    choice1 = createRadioButtonWindDisp ("Arrow", tab_display, choice0, 1);
    createRadioButtonWindDisp ("Barbule", tab_display, choice1, 2);
    
-   // Radio Button Avr/Gust
-   labelCreate (tab_display, "Wind/Gust",                   0, 3);
-   choice0 = createRadioButtonAverageOrGustDisp ("Average", tab_display, NULL, 0);
-   createRadioButtonAverageOrGustDisp ("Gust", tab_display, choice0, 1);
+   // Création d'une combo box Avr/gust/rain/pressure
+   labelCreate (tab_display, "Wind/Gust/Rain/Pressure",     0, 3);
+   GtkWidget *combo_box_disp = gtk_combo_box_text_new();
+   gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_box_disp), NULL, "Wind");
+   gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_box_disp), NULL, "Gust");
+   gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_box_disp), NULL, "Waves");
+   gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_box_disp), NULL, "Rain");
+   gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_box_disp), NULL, "Pressure");
+   gtk_grid_attach (GTK_GRID(tab_display), combo_box_disp, 1, 3, 1, 1);
+   gtk_combo_box_set_active(GTK_COMBO_BOX (combo_box_disp), par.averageOrGustDisp);
+   // Connexion du signal "changed" de la combo box à la fonction de rappel
+   g_signal_connect(combo_box_disp, "changed", G_CALLBACK (on_combo_box_disp_changed), NULL);
+
    
    // Création d'une combo box Isochrones
    labelCreate (tab_display, "Isoc.",                       0, 4);
@@ -5429,7 +5474,7 @@ static void on_meteogram_event (GtkDrawingArea *area, cairo_t *cr, int width, in
    cairo_show_text (cr, "Current");
    
    // graphical difference between up to now and after now 
-   // dDeltaNow is the number of hours between beginning of grib to now */
+   // tDeltaNow is the number of hours between beginning of grib to now */
    time_t now = time (NULL);
    tDeltaNow = (now - vOffsetLocalUTC)/ 3600.0; // offset between local and UTC in hours
    tDeltaNow -= gribDateTimeToEpoch (zone.dataDate [0], zone.dataTime [0]) / 3600.0;
@@ -5607,7 +5652,7 @@ static void meteogram () {
 }
 
 /*! submenu with label and icon
-void try_subMenu(GMenu *vMenu, const char *str, const char *app, const gchar *iconName) {
+static void try_subMenu(GMenu *vMenu, const char *str, const char *app, const gchar *iconName) {
    GMenuItem *menu_item = g_menu_item_new (str, app);
    g_menu_item_set_label(menu_item, str);
    if (iconName != NULL) {
@@ -5621,7 +5666,7 @@ void try_subMenu(GMenu *vMenu, const char *str, const char *app, const gchar *ic
 */
 
 /*! submenu with label and icon */
-void subMenu (GMenu *vMenu, const char *str, const char *app, const gchar *iconName) {
+static void subMenu (GMenu *vMenu, const char *str, const char *app, const gchar *iconName) {
    GMenuItem *menu_item = g_menu_item_new (str, app);
    g_menu_append_item (vMenu, menu_item);
    g_object_unref (menu_item);
@@ -5682,7 +5727,7 @@ static void createButton (GtkWidget *toolBox, char *iconName, void *callBack) {
 }
 
 /*! update info GPS */ 
-gboolean update_GPS_callback (gpointer data) {
+static gboolean update_GPS_callback (gpointer data) {
    char str [MAX_SIZE_LINE], strDate [MAX_SIZE_LINE], strLat [MAX_SIZE_LINE], strLon [MAX_SIZE_LINE];
    GtkWidget *label = GTK_WIDGET(data);
    if (my_gps_data.OK)
@@ -5857,7 +5902,9 @@ static void app_startup (GApplication *application) {
    createActionWithParam ("poiEdit", poiEdit, POI_SEL);
    createActionWithParam ("portsEdit", poiEdit, PORT_SEL);
    
+   createAction ("traceAdd", traceAdd);
    createAction ("traceReport", traceReport);
+   createAction ("traceDump", traceDump);
    createAction ("traceDump", traceDump);
    createAction ("openTrace", openTrace);
    createAction ("newTrace", newTrace);
@@ -5932,6 +5979,7 @@ static void app_startup (GApplication *application) {
 
    // Ajout d'éléments dans le menu "Poi"
    GMenu *trace_menu_v = g_menu_new ();
+   subMenu (trace_menu_v, "Add POR", "app.traceAdd", "");
    subMenu (trace_menu_v, "Report", "app.traceReport", "");
    subMenu (trace_menu_v, "Dump", "app.traceDump", "");
    subMenu (trace_menu_v, "Open", "app.openTrace", "");

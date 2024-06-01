@@ -70,6 +70,7 @@ enum {NOTHING, POINT, SEGMENT, BEZIER};         // bezier or segment representat
 enum {UNVISIBLE, NORMAL, CAT, PORT, NEW};       // for POI point of interest
 enum {RUNNING, STOPPED, NO_SOLUTION, EXIST_SOLUTION}; // for chooseDeparture.ret values
 enum {NO_ANIMATION, PLAY, LOOP};                // for animationActive status
+enum {WIND_DISP, GUST_DISP, WAVE_DISP, RAIN_DISP, PRESSURE_DISP}; // for display
 
 /*! for meteo services */
 enum {SAILDOCS_GFS, SAILDOCS_ECMWF, SAILDOCS_ICON, SAILDOCS_ARPEGE, SAILDOCS_AROME, SAILDOCS_CURR, MAILASAIL, GLOBALMARINET}; // grib mail service providers
@@ -157,6 +158,8 @@ typedef struct {
    double v;                                 // north south component of wind or current in meter/s
    double w;                                 // waves height WW3 model
    double g;                                 // wind speed gust
+   double msl;                               // mean sea level pressure
+   double prate;                             // precipitation rate
 } FlowP;                                     // ether wind or current
 
 /*! zone description */
@@ -366,7 +369,7 @@ typedef struct {
    bool storeMailPw;                         // store Mail PW
    int  nForbidZone;                         // number of forbidden zones
    char forbidZone [MAX_N_FORBID_ZONE][MAX_SIZE_LINE]; // array of forbid zones
-   int techno;                              // additionnal info display for tech experts
+   int techno;                               // additionnal info display for tech experts
 } Par;
 
 /*! Isochrone */

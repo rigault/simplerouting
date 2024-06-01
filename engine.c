@@ -174,7 +174,9 @@ static int buildNextIsochrone (Pp *pOr, Pp *pDest, Isoc isoList, int isoLen, dou
       motor = (maxSpeedInPolarAt (tws * par.xWind, &polMat) < par.threshold) && (par.motorSpeed > 0);
 
       for (int cog = (directCog - par.rangeCog); cog < (directCog + par.rangeCog + 1); cog+=par.cogStep) {
-         twa = fTwa (cog, twd);                       //angle of the boat with the wind
+         twa = fTwa (cog, twd);
+         //printf ("twd: %.0lf, cog: %d, twa: %.0lf\n", twd, cog, twa); 
+         //angle of the boat with the wind
          newPt.amure = (twa < 180) ? BABORD : TRIBORD;
          newPt.toIndexWp = pDest->toIndexWp;
          //speed of the boat considering twa and wind speed (tws) in polar
@@ -182,6 +184,7 @@ static int buildNextIsochrone (Pp *pOr, Pp *pDest, Isoc isoList, int isoLen, dou
          sog = (motor) ? par.motorSpeed : efficiency * findPolar (twa, tws * par.xWind, polMat); 
          newPt.motor = motor;
          if ((w > 0) && ((waveCorrection = findPolar (twa, w, wavePolMat)) > 0)) {
+            // printf ("sog before wave: %.2lf, after: %.2lf\n", sog, sog * waveCorrection / 100.0);
             sog = sog * (waveCorrection / 100.0);
          }
          if ((!motor) && (newPt.amure != isoList [k].amure)) {       // changement amure
@@ -195,8 +198,8 @@ static int buildNextIsochrone (Pp *pOr, Pp *pDest, Isoc isoList, int isoLen, dou
          dLon = sog * (dt - penalty) * sin (DEG_TO_RAD * cog) / cos (DEG_TO_RAD * isoList [k].lat);  // nautical miles in E W direction
          
          // printf ("vcurr : %.2lf, vcurr : %.2lf\n", vCurr, uCurr);
-         dLat += MS_TO_KN * vCurr * dt;                   // correction for current
-         dLon += MS_TO_KN * uCurr * dt / cos (DEG_TO_RAD * isoList [k].lat);
+         dLat += MS_TO_KN * vCurr * dt;                   // correction for current 
+         dLon += MS_TO_KN * uCurr * dt / cos (DEG_TO_RAD * isoList [k].lat); 
  
 	      // printf ("builN dLat %lf dLon %lf\n", dLat, dLon);
          newPt.lat = isoList [k].lat + dLat/60;
@@ -474,36 +477,44 @@ bool routeToStr (SailRoute *route, char *str, size_t maxLength) {
    char line [MAX_SIZE_LINE], strDate [MAX_SIZE_LINE];
    char strLat [MAX_SIZE_LINE], strLon [MAX_SIZE_LINE];  
    char shortStr [SMALL_SIZE];
+   double awa, aws;
+   double twa = fTwa (route->t[0].lCap, route->t[0].twd);
+   fAwaAws (twa, route->t[0].tws, route->t[0].sog, &awa, &aws);
 
-   strcpy (str, " No         WP Lat        Lon         Date-Time         M/T/B     COG       Dist      SOG     Twd      Tws    Gust   Waves\n");
-   snprintf (line, MAX_SIZE_LINE, " pOr:      %3d %-12s%-12s %6s %6s %7.2f°   %7.2lf  %7.2lf  %6.0lf° %7.2lf %7.2lf %7.2lf\n", \
+   strcpy (str, " No         WP Lat        Lon         Date-Time         M/T/B     COG \
+      Dist      SOG     Twd     Twa      Tws    Gust    Awa      Aws   Waves\n");
+   snprintf (line, MAX_SIZE_LINE, " pOr:      %3d %-12s%-12s %6s %6s %7.2f°   %7.2lf  %7.2lf  %6.0lf° %6.0lf° %7.2lf %7.2lf %6.0lf° %7.2lf %7.2lf\n", \
       route->t[0].toIndexWp,
       latToStr (route->t[0].lat, par.dispDms, strLat), lonToStr (route->t[0].lon, par.dispDms, strLon), \
       newDate (zone.dataDate [0], (zone.dataTime [0]/100) + route->t[0].time, strDate), \
       motorTribordBabord (route->t[0].motor, route->t[0].amure, shortStr, SMALL_SIZE), \
       route->t[0].lCap, route->t[0].ld, route->t[0].sog, \
-      route->t[0].twd, route->t[0].tws, MS_TO_KN * route->t[0].g, route->t[0].w);
+      route->t[0].twd, twa, route->t[0].tws, 
+      MS_TO_KN * route->t[0].g, awa, aws, route->t[0].w);
 
    strncat (str, line, maxLength - strlen (str));
    for (int i = 1; i < route->n; i++) {
+      twa = fTwa (route->t[i].lCap, route->t[i].twd);
+      fAwaAws (twa, route->t[i].tws, route->t[i].sog, &awa, &aws);
       if ((fabs(route->t[i].lon) > 180.0) || (fabs (route->t[i].lat) > 90.0))
          snprintf (line, MAX_SIZE_LINE, " Isoc %3d: Erreur sur latitude ou longitude\n", i-1);   
       else
-         snprintf (line, MAX_SIZE_LINE, " Isoc %3d: %3d %-12s%-12s %s %6s %7.2f°   %7.2f  %7.2lf  %6.0lf° %7.2lf %7.2lf %7.2lf\n", \
+         snprintf (line, MAX_SIZE_LINE, " Isoc %3d: %3d %-12s%-12s %s %6s %7.2f°   %7.2f  %7.2lf  %6.0lf° %6.0lf° %7.2lf %7.2lf %6.0lf° %7.2lf %7.2lf\n", \
             i-1,
             route->t[i].toIndexWp,
             latToStr (route->t[i].lat, par.dispDms, strLat), lonToStr (route->t[i].lon, par.dispDms, strLon), \
             newDate (zone.dataDate [0], (zone.dataTime [0]/100) + route->t[i].time, strDate), \
             motorTribordBabord (route->t[i].motor, route->t[i].amure, shortStr, SMALL_SIZE), \
             route->t[i].lCap, route->t[i].ld, route->t[i].sog,
-            route->t[i].twd, route->t[i].tws, MS_TO_KN * route->t[i].g, route->t[i].w);
+            route->t[i].twd, fTwa (route->t[i].lCap, route->t[i].twd), route->t[i].tws,
+            MS_TO_KN * route->t[i].g, awa, aws, route->t[i].w);
       strncat (str, line, maxLength - strlen (str));
    }
    
-   snprintf (line, MAX_SIZE_LINE, " Avr %73s  %5.2lf          %7.2lf %7.2lf %7.2lf\n", " ", \
+   snprintf (line, MAX_SIZE_LINE, " Avr %77s  %5.2lf                  %7.2lf %7.2lf                 %7.2lf\n", " ", \
       route->avrSog, route->avrTws, MS_TO_KN * route->avrGust, route->avrWave); 
    strncat (str, line, maxLength - strlen (str));
-   snprintf (line, MAX_SIZE_LINE, " Max %73s  %5.2lf          %7.2lf %7.2lf %7.2lf\n", " ", \
+   snprintf (line, MAX_SIZE_LINE, " Max %77s  %5.2lf                  %7.2lf %7.2lf                 %7.2lf\n", " ", \
       route->maxSog, route->maxTws, MS_TO_KN * route->maxGust, route->maxWave); 
    strncat (str, line, maxLength - strlen (str));
    snprintf (line, MAX_SIZE_LINE, "\n Total distance: %7.2lf NM,    Motor distance: %7.2lf NM\n", route->totDist, route->motorDist);
