@@ -47,7 +47,6 @@ extern const char *CURRENT_URL [];
 /*! functions defined in rutil.c */
 extern bool   isSea (double lat, double lon);
 extern bool   mostRecentFile (const char *directory, const char *pattern, char *name);
-extern double lonCanonize (double lon);
 extern char   *formatThousandSep (char *buffer, int value);
 extern bool   gpsToStr (char *buffer, size_t maxLength);
 extern void   *getGPS (void *data);
@@ -63,6 +62,7 @@ extern double getCoord (const char *str);
 extern long   getFileSize (const char *fileName);
 extern char   *latToStr (double lat, int type, char* str);
 extern char   *lonToStr (double lon, int type, char* str);
+extern char   *durationToStr (double duration, char *res, size_t len);
 extern void   initZone (Zone *zone);
 extern double offsetLocalUTC ();
 extern char   *epochToStr (time_t t, bool seconds, char *str, size_t len);
@@ -107,5 +107,7 @@ extern bool   findLastTracePoint (const char *fileName, double *lat, double *lon
 extern bool   distanceTraceDone (const char *fileName, double *od, double *ld, double *rd, double *sog);
 extern bool   infoDigest (const char *fileName, double *od, double *ld, double *rd, double *sog);
 extern bool   isDayLight (double t, double lat, double lon);
+extern void   initWayPoints ();
+extern void   initWithMostRecentGrib ();
 
 

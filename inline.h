@@ -1,15 +1,18 @@
 /*! this file contains small inlines functions
  to be included in s source files */
 
-/*! return pythagore distance */
-static inline double dist (double x, double y) {
-   return sqrt (x*x + y*y);
-}
-
 /*! true if P (lat, lon) is within the zone */
 static inline bool isInZone (double lat, double lon, Zone *zone) {
    return (lat >= zone->latMin) && (lat <= zone->latMax) && (lon >= zone->lonLeft) && (lon <= zone->lonRight);
 }
+
+/*! return lon on ]-180, 180 ] interval */
+static inline double lonCanonize (double lon) {
+   lon = fmod (lon, 360);
+   if (lon > 180) lon -= 360;
+   else if (lon <= -180) lon += 360;
+   return lon;
+} 
 
 /*! true wind direction */
 static inline double fTwd (double u, double v) {
@@ -22,27 +25,19 @@ static inline double fTws (double u, double v) {
     return MS_TO_KN * sqrt ((u * u) + (v * v));
 }
 
-/*! return TWA between 0.. 360 
-   note : tribord amure if twa > 180 */
-static inline double ffTwa (double cog, double tws) {
-   double twa =  fmod ((cog - tws), 360.0);
-   if (twa < 0) twa += 360; 
-   return twa;
-}
-
-/*! return TWA between 0.. 360 */
-static inline double fTwa (double cog, double twd) {
-   double twa = (cog > twd) ? cog - twd : cog - twd + 360;   //angle of the boat with the wind
-   if (twa > 360) twa -= 360; 
-   return twa;
+/*! return TWA between -180 and 180
+   note : tribord amure if twa < 0 */
+static inline double fTwa (double heading, double twd) {
+   double val =  fmod ((twd - heading), 360.0);
+   //if (twa < 0) twa += 360; 
+   return (val > 180) ? val - 360 : (val < -180) ? val + 360 : val;
 }
 
 /*! return AWA and AWS Apparent Wind Angle and Speed */
 static inline void fAwaAws (double twa, double tws, double sog, double *awa, double *aws) {
    double a = tws * sin (DEG_TO_RAD * twa);
    double b = tws * cos (DEG_TO_RAD * twa) + sog;
-   *awa = RAD_TO_DEG * atan2 (a, b) + 360;
-   while (*awa > 360) *awa -= 360;
+   *awa = RAD_TO_DEG * atan2 (a, b);
    *aws = sqrt (a*a + b*b);
 }
 
@@ -72,7 +67,9 @@ static inline double orthoCap (double lat1, double lon1, double lat2, double lon
 /*! direct loxodromic dist from origi to dest */
 static inline double loxoDist (double lat1, double lon1, double lat2, double lon2) {
    double coeffLat = cos (DEG_TO_RAD * (lat1 + lat2)/2);
-   return 60 * dist ((lat1 - lat2), (lon2 - lon1) * coeffLat);
+   double dLat = lat2 - lat1;
+   double dLon = lon2 - lon1;
+   return 60 * sqrt (dLat * dLat + dLon *dLon) * coeffLat;
 }
 
 /*! return orthodomic distance in nautical miles */
@@ -82,7 +79,7 @@ static inline double orthoDist (double lat1, double lon1, double lat2, double lo
         sin(lat1 * DEG_TO_RAD) * sin(lat2 * DEG_TO_RAD) + 
         cos(lat1 * DEG_TO_RAD) * cos(lat2 * DEG_TO_RAD) * cos(theta * DEG_TO_RAD)
     );
-    return fabs (60 * (180/M_PI) * distRad);
+    return fabs (60 * RAD_TO_DEG * distRad);
 }
 
 /*! find in polar boat speed or wave coeff */

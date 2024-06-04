@@ -127,7 +127,8 @@ static inline int forwardSectorOptimize (Pp *pOr, Pp *pDest, int nIsoc, Isoc iso
          && ((par.kFactor == 0)
             || ((par.kFactor == 1) && (sector [nIsoc%2][iSector].vmc >= sector [(nIsoc-1)%2][iSector].vmc)) // Best !
             || ((par.kFactor == 2) && (sector [nIsoc%2][iSector].dd <= sector [(nIsoc-1)%2][iSector].dd))
-            || ((par.kFactor == 3) && (sector [nIsoc%2][iSector].vmc >= sector [(nIsoc-1)%2][iSector].vmc) && (sector [nIsoc%2][iSector].dd <= sector [(nIsoc-1)%2][iSector].dd))
+            || ((par.kFactor == 3) && (sector [nIsoc%2][iSector].vmc >= sector [(nIsoc-1)%2][iSector].vmc) && \
+                  (sector [nIsoc%2][iSector].dd <= sector [(nIsoc-1)%2][iSector].dd))
             || (fabs (sector [nIsoc%2][iSector].dd - sector [(nIsoc-1)%2][iSector].dd) < epsilon)))        // no wind, no change, we keep
       {
          optIsoc [k] = optIsoc [iSector];
@@ -177,7 +178,7 @@ static int buildNextIsochrone (Pp *pOr, Pp *pDest, Isoc isoList, int isoLen, dou
          twa = fTwa (cog, twd);
          //printf ("twd: %.0lf, cog: %d, twa: %.0lf\n", twd, cog, twa); 
          //angle of the boat with the wind
-         newPt.amure = (twa < 180) ? BABORD : TRIBORD;
+         newPt.amure = (twa > 0) ? TRIBORD : BABORD;
          newPt.toIndexWp = pDest->toIndexWp;
          //speed of the boat considering twa and wind speed (tws) in polar
          double efficiency = (isDayLight (t, isoList [k].lat, isoList [k].lon)) ? par.dayEfficiency : par.nightEfficiency;
@@ -188,8 +189,8 @@ static int buildNextIsochrone (Pp *pOr, Pp *pDest, Isoc isoList, int isoLen, dou
             sog = sog * (waveCorrection / 100.0);
          }
          if ((!motor) && (newPt.amure != isoList [k].amure)) {       // changement amure
-            if (fabs (twa) < 90) penalty = par.penalty0;             // virement de bord
-            else penalty = par.penalty1;                             // empannage
+            if (fabs (twa) < 90) penalty = par.penalty0 / 60.0;      // virement de bord
+            else penalty = par.penalty1 / 60.0;                      // empannage
          }
          else penalty = 0;
          // printf ("sog = %.2lf\n", sog);
@@ -444,7 +445,7 @@ void storeRoute (Pp *pOr, Pp *pDest, double lastStepDuration) {
       route.t [i+1].id = pt.id;
       route.t [i+1].father = pt.father;
       route.t [i+1].motor = ptLast.motor;
-      route.t [i+1].amure = pt.amure;
+      route.t [i+1].amure = ptLast.amure;
       route.t [i+1].toIndexWp = pt.toIndexWp;
       ptLast = pt;
    }
@@ -453,7 +454,7 @@ void storeRoute (Pp *pOr, Pp *pDest, double lastStepDuration) {
    route.t [0].id = pOr->id;
    route.t [0].father = pOr->father;
    route.t [0].motor = ptLast.motor;
-   route.t [0].amure = pt.amure;
+   route.t [0].amure = ptLast.amure;
    route.t [0].toIndexWp = pt.toIndexWp;
    statRoute (lastStepDuration);
    saveRoute ();
@@ -476,50 +477,60 @@ static char *motorTribordBabord (bool motor, int amure, char* str, size_t len) {
 bool routeToStr (SailRoute *route, char *str, size_t maxLength) {
    char line [MAX_SIZE_LINE], strDate [MAX_SIZE_LINE];
    char strLat [MAX_SIZE_LINE], strLon [MAX_SIZE_LINE];  
-   char shortStr [SMALL_SIZE];
-   double awa, aws;
+   char shortStr [SMALL_SIZE], strDur [MAX_SIZE_LINE], strMot [MAX_SIZE_LINE];
+   double awa, aws, maxAws = 0.0, sumAws = 0.0;
    double twa = fTwa (route->t[0].lCap, route->t[0].twd);
    fAwaAws (twa, route->t[0].tws, route->t[0].sog, &awa, &aws);
 
-   strcpy (str, " No         WP Lat        Lon         Date-Time         M/T/B     COG \
-      Dist      SOG     Twd     Twa      Tws    Gust    Awa      Aws   Waves\n");
-   snprintf (line, MAX_SIZE_LINE, " pOr:      %3d %-12s%-12s %6s %6s %7.2f°   %7.2lf  %7.2lf  %6.0lf° %6.0lf° %7.2lf %7.2lf %6.0lf° %7.2lf %7.2lf\n", \
-      route->t[0].toIndexWp,
+   strcpy (str, "  No  WP Lat        Lon         Date-Time         M/T/B  COG\
+     Dist     SOG  Twd   Twa      Tws    Gust  Awa      Aws   Waves\n");
+   snprintf (line, MAX_SIZE_LINE, " pOr %3d %-12s%-12s %6s %6s %4.0lf° %7.2lf %7.2lf %4d° %4.0lf° %7.2lf %7.2lf %4.0lf° %7.2lf %7.2lf\n", \
+      route->t[0].toIndexWp,\
       latToStr (route->t[0].lat, par.dispDms, strLat), lonToStr (route->t[0].lon, par.dispDms, strLon), \
       newDate (zone.dataDate [0], (zone.dataTime [0]/100) + route->t[0].time, strDate), \
       motorTribordBabord (route->t[0].motor, route->t[0].amure, shortStr, SMALL_SIZE), \
       route->t[0].lCap, route->t[0].ld, route->t[0].sog, \
-      route->t[0].twd, twa, route->t[0].tws, 
+      (int) (route->t[0].twd + 360) % 360,\
+      twa, route->t[0].tws, \
       MS_TO_KN * route->t[0].g, awa, aws, route->t[0].w);
 
    strncat (str, line, maxLength - strlen (str));
    for (int i = 1; i < route->n; i++) {
       twa = fTwa (route->t[i].lCap, route->t[i].twd);
       fAwaAws (twa, route->t[i].tws, route->t[i].sog, &awa, &aws);
+      if (aws > maxAws) maxAws = aws;
+      sumAws += aws;
       if ((fabs(route->t[i].lon) > 180.0) || (fabs (route->t[i].lat) > 90.0))
          snprintf (line, MAX_SIZE_LINE, " Isoc %3d: Erreur sur latitude ou longitude\n", i-1);   
       else
-         snprintf (line, MAX_SIZE_LINE, " Isoc %3d: %3d %-12s%-12s %s %6s %7.2f°   %7.2f  %7.2lf  %6.0lf° %6.0lf° %7.2lf %7.2lf %6.0lf° %7.2lf %7.2lf\n", \
-            i-1,
-            route->t[i].toIndexWp,
+         snprintf (line, MAX_SIZE_LINE, "%4d %3d %-12s%-12s %s %6s %4.0lf° %7.2f %7.2lf %4d° %4.0lf° %7.2lf %7.2lf %4.0lf° %7.2lf %7.2lf\n", \
+            i-1,\
+            route->t[i].toIndexWp,\
             latToStr (route->t[i].lat, par.dispDms, strLat), lonToStr (route->t[i].lon, par.dispDms, strLon), \
             newDate (zone.dataDate [0], (zone.dataTime [0]/100) + route->t[i].time, strDate), \
             motorTribordBabord (route->t[i].motor, route->t[i].amure, shortStr, SMALL_SIZE), \
-            route->t[i].lCap, route->t[i].ld, route->t[i].sog,
-            route->t[i].twd, fTwa (route->t[i].lCap, route->t[i].twd), route->t[i].tws,
+            route->t[i].lCap, route->t[i].ld, route->t[i].sog,\
+            (int) (route->t[i].twd + 360) % 360,\
+            fTwa (route->t[i].lCap, route->t[i].twd), route->t[i].tws,\
             MS_TO_KN * route->t[i].g, awa, aws, route->t[i].w);
       strncat (str, line, maxLength - strlen (str));
    }
    
-   snprintf (line, MAX_SIZE_LINE, " Avr %77s  %5.2lf                  %7.2lf %7.2lf                 %7.2lf\n", " ", \
-      route->avrSog, route->avrTws, MS_TO_KN * route->avrGust, route->avrWave); 
+   snprintf (line, MAX_SIZE_LINE, " Avr %65s  %5.2lf             %7.2lf %7.2lf       %7.2lf %7.2lf\n", " ", \
+      route->avrSog, route->avrTws, MS_TO_KN * route->avrGust, sumAws / route->n, route->avrWave); 
    strncat (str, line, maxLength - strlen (str));
-   snprintf (line, MAX_SIZE_LINE, " Max %77s  %5.2lf                  %7.2lf %7.2lf                 %7.2lf\n", " ", \
-      route->maxSog, route->maxTws, MS_TO_KN * route->maxGust, route->maxWave); 
+   snprintf (line, MAX_SIZE_LINE, " Max %65s  %5.2lf             %7.2lf %7.2lf       %7.2lf %7.2lf\n", " ", \
+      route->maxSog, route->maxTws, MS_TO_KN * route->maxGust, maxAws, route->maxWave); 
    strncat (str, line, maxLength - strlen (str));
-   snprintf (line, MAX_SIZE_LINE, "\n Total distance: %7.2lf NM,    Motor distance: %7.2lf NM\n", route->totDist, route->motorDist);
+   snprintf (line, MAX_SIZE_LINE, "\n Total distance   : %7.2lf NM,   Motor distance: %7.2lf NM\n", route->totDist, route->motorDist);
    strncat (str, line, maxLength - strlen (str));
-   snprintf (line, MAX_SIZE_LINE, " Total Duration: %7.2lf hours, Motor Duration: %7.2lf hours\n", route->duration, route->motorDuration);
+   snprintf (line, MAX_SIZE_LINE, " Total Duration   : %s, Motor Duration: %s\n", \
+      durationToStr (route->duration, strDur, sizeof (strDur)), durationToStr (route->motorDuration, strMot, sizeof (strMot)));
+   strncat (str, line, maxLength - strlen (str));
+
+   newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours + route->duration, strDate);
+   snprintf (line, MAX_SIZE_LINE, " Arrival Date&Time: %s", newDate (zone.dataDate [0], \
+      zone.dataTime [0]/100 + par.startTimeInHours + route->duration, strDate));
    strncat (str, line, maxLength - strlen (str));
    return true;
 }
@@ -579,7 +590,7 @@ static inline bool goalP (Pp *pFrom, Pp *pDest, double t, double dt, double *tim
    // findCurrentGrib (pFrom->lat, pFrom->lon, t - tDeltaCurrent, &uCurr, &vCurr, &currTwd, &currTws);
    // ATTENTION Courant non pris en compte dans la suite !!!
    twa = fTwa (cog, tws);      // angle of the boat with the wind
-   *amure = (twa < 180) ? BABORD : TRIBORD;
+   *amure = (twa > 0) ? TRIBORD : BABORD;
    *motor =  ((maxSpeedInPolarAt (tws * par.xWind, &polMat) < par.threshold) && (par.motorSpeed > 0));
    // printf ("maxSpeedinPolar: %.2lf\n", maxSpeedInPolarAt (tws, &polMat));
    double efficiency = (isDayLight (t, pFrom->lat, pFrom->lon)) ? par.dayEfficiency : par.nightEfficiency;
@@ -588,9 +599,9 @@ static inline bool goalP (Pp *pFrom, Pp *pDest, double t, double dt, double *tim
       sog = sog * (waveCorrection / 100.0);
    }
    *timeTo = *distance/sog;
-   if ((!(*motor)) && (pDest->amure != pFrom->amure)) { // changement amure
-      if (fabs (twa) < 90) penalty = par.penalty0;      // virement de bord
-      else penalty = par.penalty1;                      // empannage Jibe
+   if ((!(*motor)) && (pDest->amure != pFrom->amure)) {     // changement amure
+      if (fabs (twa) < 90) penalty = par.penalty0 / 60.0;   // virement de bord
+      else penalty = par.penalty1 / 60.0;                   // empannage Jibe
    }
    else penalty = 0;
    return ((sog * (dt - penalty)) > *distance);

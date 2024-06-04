@@ -9,6 +9,39 @@
 #include "inline.h"
 #include "engine.h"
 
+/*! Make initialization following parameter file load */
+static void initScenarioOption () {
+   char str [MAX_SIZE_LINE];
+   int iFlow;
+   if (par.gribFileName [0] != '\0') {
+      iFlow = WIND;
+      readGrib (&iFlow);
+      if (readGribRet == 0) {
+         fprintf (stderr, "Error in initScenario: Unable to read grib file: %s\n ", par.gribFileName);
+         return;
+      }
+      printf ("Grib loaded    : %s\n", par.gribFileName);
+      printf ("Grib DateTime0 : %s\n", gribDateTimeToStr (zone.dataDate [0], zone.dataTime [0], str, sizeof (str)));
+   }
+
+   if (par.currentGribFileName [0] != '\0') {
+      iFlow = CURRENT;
+      readGrib (&iFlow);
+      printf ("Cur grib loaded: %s\n", par.currentGribFileName);
+      printf ("Grib DateTime0 : %s\n", gribDateTimeToStr (currentZone.dataDate [0], currentZone.dataTime [0], str, sizeof (str)));
+   }
+   if (readPolar (par.polarFileName, &polMat))
+      printf ("Polar loaded   : %s\n", par.polarFileName);
+      
+   if (readPolar (par.wavePolFileName, &wavePolMat))
+      printf ("Polar loaded   : %s\n", par.wavePolFileName);
+   
+   nIsoc = 0;
+   route.n = 0;
+   route.destinationReached = false;
+   initWayPoints ();
+}
+
 /*! Manage command line option reduced to one character */
 void optionManage (char option) {
 	FILE *f = NULL;
@@ -88,6 +121,15 @@ void optionManage (char option) {
          printf ("coeff: %.2lf\n", findPolar (twa, w, wavePolMat)/100.0);
       }
       break;
+   case 'r': // routing
+      initZone (&zone);
+      if (par.mostRecentGrib) // most recent grib will replace existing grib
+         initWithMostRecentGrib ();
+      initScenarioOption ();
+      routingLaunch ();
+      routeToStr (&route, buffer, sizeof (buffer));
+      printf ("%s\n", buffer);
+      break;
    case 's': // isIsea
       readIsSea (par.isSeaFileName);
       if (tIsSea == NULL) printf ("in readIsSea : bizarre\n");
@@ -111,8 +153,8 @@ void optionManage (char option) {
          printf ("COG = ");
          scanf ("%lf", &cog);
          printf ("TWS = ");
-         scanf ("%lf", &tws);
-         printf ("fTwa = %.2lf, ffTwa = %.2lf\n", fTwa (cog, tws), ffTwa (cog, tws));
+         scanf ("%lf", &twa);
+         printf ("fTwa = %.2lf\n",fTwa (cog, twa));
       }
    break;
    case 'z': //

@@ -1,7 +1,6 @@
 /*! compilation gcc -Wall -c rutil.c */
 #include <glib.h>
 #include <curl/curl.h>
-#include <pthread.h>
 #include <gps.h>
 #include <float.h>   
 #include <limits.h>
@@ -18,8 +17,8 @@
 #include <math.h>
 #include "eccodes.h"
 #include "rtypes.h"
-#include "inline.h"
 #include "shapefil.h"
+#include "inline.h"
 #include <locale.h>
 
 static const char *CSV_SEP = ";,\t";
@@ -289,6 +288,7 @@ char *dollarSubstitute (const char* str, char *res, size_t maxSize) {
 /*! translate str in double for latitude longitudes */
 double getCoord (const char *str) {
    double deg = 0.0, min = 0.0, sec = 0.0;
+   bool minFound = false;
    int sign = 1;
    char *pt = NULL;
    const char *neg = "SsWwOo"; // value returned is negative if south or West
@@ -300,7 +300,7 @@ double getCoord (const char *str) {
       }
       neg += 1;
    }
-   // fin degrees
+   // find degrees
    while (*str && (! (isdigit (*str) || (*str == '-') || (*str == '+')))) 
       str++;
    deg  = strtod (str, NULL);
@@ -308,6 +308,7 @@ double getCoord (const char *str) {
    deg = fabs (deg);
    // find minutes
    if ((strchr (str, '\'') != NULL)) {
+      minFound = true;
       if ((pt = strstr (str, "°")) != NULL) // degree ° is UTF8 coded with 2 bytes
          pt += 2;
       else 
@@ -319,7 +320,7 @@ double getCoord (const char *str) {
          min = strtod (pt, NULL);
    }
    // find seconds
-   if ((strchr (str, '"') != NULL)) {
+   if (minFound && (strchr (str, '"') != NULL)) {
       sec = strtod (strchr (str, '\'') + 1, NULL);
    }
    return sign * (deg + min/60.0 + sec/3600.0);
@@ -396,12 +397,18 @@ char *lonToStr (double lon, int type, char *str) {
    return str;
 }
 
-/*! return lon on ]-180, 180 ] interval */
-double lonCanonize (double lon) {
-   lon = fmod (lon, 360);
-   if (lon > 180) lon -= 360;
-   else if (lon <= -180) lon += 360;
-   return lon;
+/*! convert hours in string with days, hours, minutes */
+char *durationToStr (double duration, char *res, size_t len) {
+   int nDays, nHours, nMin;
+   nDays = duration / 24;
+   nHours = fmod (duration, 24.0);
+   nMin = 60 * fmod (duration, 1.0);
+   if (nDays == 0)
+      snprintf (res, len, "%02d:%02d", nHours, nMin); 
+   else
+      snprintf (res, len, "%d Days %02d:%02d", nDays, nHours, nMin);
+   // printf ("Duration: %.2lf hours, equivalent to %d days, %02d:%02d\n", duration, nDays, nHours, nMin);
+   return res;
 } 
 
 /*! send SMTP request with right parameters to grib mail provider */
@@ -691,9 +698,8 @@ time_t gribDateTimeToEpoch (long date, long time) {
    tm0.tm_mday = date % 100;
    tm0.tm_hour = time / 100;
    tm0.tm_min = time % 100;
-   tm0.tm_isdst = -1;                                       // avoid adjustments with hours summer winter
-   //return timegm (&tm0);                                  // converion struct tm en time_t NON PORTABLE
-   return mktime (&tm0);                                  // converion struct tm en time_t
+   tm0.tm_isdst = -1;                        // avoid adjustments with hours summer winter
+   return mktime (&tm0);                                 
 }
 
 /*! return difference in hours between two zones (current zone and Wind zone) */
@@ -1212,12 +1218,17 @@ static bool readGribLists (const char *fileName, Zone *zone) {
       fprintf (stderr, "Error in readGribLists: Malloc zone.shortName\n");
       return (false);
    }
-   CODES_CHECK(codes_index_get_string(index,"shortName",zone->shortName, &zone->nShortName),0);
+   CODES_CHECK(codes_index_get_string(index,"shortName", zone->shortName, &zone->nShortName),0);
    CODES_CHECK(codes_index_get_size (index, "dataDate", &zone->nDataDate),0);
    CODES_CHECK (codes_index_get_long (index,"dataDate", zone->dataDate, &zone->nDataDate),0);
    CODES_CHECK(codes_index_get_size (index, "dataTime", &zone->nDataTime),0);
    CODES_CHECK (codes_index_get_long (index,"dataTime", zone->dataTime, &zone->nDataTime),0);
    codes_index_delete (index);
+   // replace unknown by gust ? (GFS case where gust identified by specific indicatorOfParameter)
+   for (size_t i = 0; i < zone->nShortName; i++) {
+      if (strcmp (zone->shortName [i], "unknown") == 0)
+         strcpy (zone->shortName [i], "gust?");
+   }
    return true;
 }
 
@@ -1761,7 +1772,7 @@ bool readParam (const char *fileName) {
       }
       else if (sscanf (pLine, "MOST_RECENT_GRIB:%d", &par.mostRecentGrib) > 0);
       else if (sscanf (pLine, "START_TIME:%lf", &par.startTimeInHours) > 0);
-      else if (sscanf (pLine, "T_STEP:%lf", &par.tStep) > 0);
+      else if (sscanf (pLine, "T_STEP:%d", &par.tStep) > 0);
       else if (sscanf (pLine, "RANGE_COG:%d", &par.rangeCog) > 0);
       else if (sscanf (pLine, "COG_STEP:%d", &par.cogStep) > 0);
       else if (sscanf (pLine, "MAX_ISO:%d", &par.maxIso) > 0);
@@ -1788,8 +1799,8 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "J_FACTOR:%d", &par.jFactor) > 0);
       else if (sscanf (pLine, "K_FACTOR:%d", &par.kFactor) > 0);
       else if (sscanf (pLine, "MIN_PT:%d", &par.minPt) > 0);
-      else if (sscanf (pLine, "PENALTY0:%lf", &par.penalty0) > 0);
-      else if (sscanf (pLine, "PENALTY1:%lf", &par.penalty1) > 0);
+      else if (sscanf (pLine, "PENALTY0:%d", &par.penalty0) > 0);
+      else if (sscanf (pLine, "PENALTY1:%d", &par.penalty1) > 0);
       else if (sscanf (pLine, "N_SECTORS:%d", &par.nSectors) > 0);
       else if (sscanf (pLine, "ISOC_DISP:%d", &par.style) > 0);
       else if (sscanf (pLine, "COLOR_DISP:%d", &par.showColors) > 0);
@@ -1873,13 +1884,13 @@ bool writeParam (const char *fileName, bool header, bool password) {
       fprintf (f, "SHP:             %s\n", par.shpFileName [i]);
 
    fprintf (f, "START_TIME:      %.2lf\n", par.startTimeInHours);
-   fprintf (f, "T_STEP:          %.2lf\n", par.tStep);
+   fprintf (f, "T_STEP:          %d\n", par.tStep);
    fprintf (f, "RANGE_COG:       %d\n", par.rangeCog);
    fprintf (f, "COG_STEP:        %d\n", par.cogStep);
    fprintf (f, "MAX_ISO:         %d\n", par.maxIso);
    fprintf (f, "SPECIAL:         %d\n", par.special);
-   fprintf (f, "PENALTY0:        %.2lf\n", par.penalty0);
-   fprintf (f, "PENALTY1:        %.2lf\n", par.penalty1);
+   fprintf (f, "PENALTY0:        %d\n", par.penalty0);
+   fprintf (f, "PENALTY1:        %d\n", par.penalty1);
    fprintf (f, "MOTOR_S:         %.2lf\n", par.motorSpeed);
    fprintf (f, "THRESHOLD:       %.2lf\n", par.threshold);
    fprintf (f, "DAY_EFFICIENCY:  %.2lf\n", par.dayEfficiency);
@@ -1954,7 +1965,7 @@ void *getGPS() {
             fprintf (stderr, "Error in getGPS: gps_read\n");
          } else {
             if (gps_data.set & PACKET_SET) {
-               /*   
+               /*  
                printf("Latitude   : %lf, Longitude: %lf\n", gps_data.fix.latitude, gps_data.fix.longitude);
                printf("Altitude   : %lf meters\n", gps_data.fix.altitude);
                printf("Fix Quality: %d\n", gps_data.fix.status);
@@ -2272,5 +2283,27 @@ bool isDayLight (double t, double lat, double lon) {
    if (lat > 75.0) return  (tm0.tm_mon > 3 && tm0.tm_mon < 9); // specific for high latitides
    if (lat < -75.0) return ! (tm0.tm_mon > 3 && tm0.tm_mon < 9);
    return (tm0.tm_hour >= 6) && (tm0.tm_hour <= 18);
+}
+
+/*! reset way route with only pDest */
+void initWayPoints () {
+   wayPoints.n = 0;
+   wayPoints.totOrthoDist = 0;
+   wayPoints.totLoxoDist = 0;
+   wayPoints.t [0].lat = par.pDest.lat;
+   wayPoints.t [0].lon = par.pDest.lon;
+}
+
+/*! replace gribFileName with most recent file found ing grib ditrectory */
+void initWithMostRecentGrib () {
+   char fileName [MAX_SIZE_FILE_NAME];
+   par.gribFileName [0] = '\0';
+   if ((strlen (par.workingDir) + strlen ("grib/"))  < sizeof (par.gribFileName)) { 
+      strncat (par.gribFileName, par.workingDir, MAX_SIZE_FILE_NAME - strlen (par.workingDir));
+      strncat (par.gribFileName, "grib/", MAX_SIZE_FILE_NAME - 5);
+      mostRecentFile (par.gribFileName, ".gr", fileName); // most recent grib file found
+      if ((strlen (par.gribFileName) + strlen (fileName))  < sizeof (par.gribFileName))
+         strncat (par.gribFileName, fileName, MAX_SIZE_FILE_NAME - strlen (par.gribFileName));
+   }
 }
 

@@ -299,7 +299,7 @@ typedef struct {
 typedef struct {
    int maxPoiVisible;                        // poi visible if <= maxPoiVisible
    int opt;                                  // 0 if no optimization, else number of opt algorithm
-   double tStep;                             // hours
+   int tStep;                                // hours
    int cogStep;                              // step of cog in degrees
    int rangeCog;                             // range of cog from x - RANGE_GOG, x + RAGE_COG+1
    int maxIso;                               // max number of isochrones
@@ -354,8 +354,8 @@ typedef struct {
    int focalDisp;                            // display focal point 
    int infoDisp;                             // display digest information
    int speedDisp;                            // Speed of Display 
-   double penalty0;                          // penalty in hours when amure change front
-   double penalty1;                          // penalty in hours when amure change back
+   int penalty0;                             // penalty in minutes when amure change front
+   int penalty1;                             // penalty in minutes when amure change back
    double motorSpeed;                        // motor speed if used
    double threshold;                         // threshold for motor use
    double nightEfficiency;                   // efficiency of team at night
