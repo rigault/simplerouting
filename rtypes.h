@@ -37,6 +37,7 @@
 #define MAX_N_POL_MAT_COLS    128
 #define MAX_N_POL_MAT_LINES   128
 #define MAX_SIZE_LINE         256		         // max size of pLine in text files
+#define MAX_SIZE_URL          512		         // max size of a URL
 #define MAX_SIZE_DATE         32                // max size of a string with date inside
 #define MAX_SIZE_BUFFER       100000
 #define MAX_N_TIME_STAMPS     512
@@ -396,3 +397,4 @@ typedef struct {
    time_t time;   // epoch time
    bool   OK;
 } MyGpsData;
+

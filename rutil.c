@@ -105,6 +105,33 @@ const char *CURRENT_URL [N_CURRENT_URL * 2] = {
    "Gascogne",          "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Gascogne.grb"
 };
 
+/*! concat all files prefixied by prefix and suffix == step in fileRes */
+bool concat (const char *prefix, int step, int max, char *fileRes) {
+   FILE *fRes = NULL;
+   if ((fRes = fopen (fileRes, "w")) == NULL) {
+      fprintf (stderr, "Error in concat: Cannot write: %s\n", fileRes);
+      return false;
+   }
+
+   for (int i = 0; i <= max; i += step) {
+      char fileName [MAX_SIZE_FILE_NAME];
+      snprintf (fileName, sizeof(fileName), "%s%03d", prefix, i);
+      FILE *f = fopen(fileName, "r");
+      if (f == NULL) {
+         fprintf (stderr, "Error in concat: opening impossible %s\n", fileName);
+         return false;
+      }
+      char buffer[MAX_SIZE_LINE];
+      size_t n;
+      while ((n = fread(buffer, 1, sizeof(buffer), f)) > 0) {
+         fwrite(buffer, 1, n, fRes);
+      }
+      fclose(f);
+   }
+   fclose(fRes);
+   return true;
+}
+
 /*! say if point is in sea */
 bool isSea (double lat, double lon) {
    if (tIsSea == NULL) return true;
@@ -359,6 +386,20 @@ char *newDate (long intDate, double nHours, char *res) {
    mktime (&tm0);                         // adjust tm0 struct (manage day, mon year overflow)
    snprintf (res, MAX_SIZE_LINE, "%4d/%02d/%02d %02d:%02d", tm0.tm_year + 1900, tm0.tm_mon + 1, tm0.tm_mday,\
       tm0.tm_hour, tm0.tm_min);
+   return res;
+}
+
+/*! return date and time using week day after adding myTime (hours) to the Date */
+char *newDateWeekDay (long intDate, double nHours, char *res) {
+   struct tm tm0 = {0};
+   tm0.tm_year = (intDate / 10000) - 1900;
+   tm0.tm_mon = ((intDate % 10000) / 100) - 1;
+   tm0.tm_mday = intDate % 100;
+   tm0.tm_isdst = -1;                     // avoid adjustments with hours summer winter
+   int totalMinutes = (int)(nHours * 60);
+   tm0.tm_min += totalMinutes;
+   mktime (&tm0);                         // adjust tm0 struct (manage day, mon year overflow)
+   strftime (res, MAX_SIZE_LINE, "%a %H:%M", &tm0);
    return res;
 }
 
@@ -1351,13 +1392,11 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
    zone->allTimeStepOK = true;
    timeStep = zone->timeStamp [0];
    oldTimeStep = timeStep;
-   //int nMes = 0;
 
    // Loop on all the messages in a file
    while ((h = codes_handle_new_from_file(0, f, PRODUCT_GRIB, &err)) != NULL) {
       if (err != CODES_SUCCESS) CODES_CHECK (err, 0);
-      //printf ("message: %d\n", nMes);
-      //nMes += 1;
+      // printf ("message: %d\n", zone->nMessage);
 
       // Check if a bitmap applies
       CODES_CHECK(codes_get_long(h, "bitmapPresent", &bitmapPresent), 0);
@@ -1390,9 +1429,9 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
          if (iGrib == -1) return NULL;
          tGribData [iFlow] [iGrib].lat = lat; 
          tGribData [iFlow] [iGrib].lon = lon; 
-         if ((strcmp (shortName, "10u") == 0) || (strcmp (shortName, "u") == 0) || (strcmp (shortName, "ucurr") == 0))
+         if ((strcmp (shortName, "10u") == 0) /*|| (strcmp (shortName, "u") == 0) */|| (strcmp (shortName, "ucurr") == 0))
             tGribData [iFlow] [iGrib].u = val;
-         else if ((strcmp (shortName, "10v") == 0) || (strcmp (shortName, "v") == 0) || (strcmp (shortName, "vcurr") == 0))
+         else if ((strcmp (shortName, "10v") == 0) /*|| (strcmp (shortName, "v") == 0) */|| (strcmp (shortName, "vcurr") == 0))
             tGribData [iFlow] [iGrib].v = val;
          else if (strcmp (shortName, "gust") == 0)
             tGribData [iFlow] [iGrib].g = val;
@@ -2038,6 +2077,25 @@ char *buildMeteoUrl (int type, int i, char *url) {
    return url;
 }
 
+/*! URL for NOAA Wind delay hours before now at closest time 0Z, 6Z, 12Z, or 18Z 
+	Current 12 hours before new at 0Z */
+char *buildNoaaUrl (char *url, int topLat, int leftLon, int bottomLat, int rightLon, int timeStep) {
+   char fileName [MAX_SIZE_FILE_NAME];
+   time_t meteoTime = time (NULL) - (3600 * delay [0]);
+   struct tm * timeInfos = gmtime (&meteoTime);  // time x hours ago
+   // printf ("Delay: %d hours ago: %s\n", delay [type], asctime (timeInfos));
+   int yy = timeInfos->tm_year + 1900;
+   int mm = timeInfos->tm_mon + 1;
+   int dd = timeInfos->tm_mday;
+   int hh = (timeInfos->tm_hour / 6) * 6;    // select 0 or 6 or 12 or 18
+   //hh = 12;
+   const char *startUrl = "https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p50.pl?";
+   snprintf (fileName, MAX_SIZE_FILE_NAME, "gfs.t%02dz.pgrb2full.0p50.f%03d", hh, timeStep);
+   snprintf (url, MAX_SIZE_BUFFER, "%sdir=/gfs.%4d%02d%02d/%02d/atmos&var_GUST=on&var_PRATE=on&var_PRMSL=on&var_UGRD=on&var_VGRD=on&subregion=&toplat=%d&leftlon=%d&rightlon=%d&bottomlat=%d&file=/%s", startUrl, yy, mm, dd, hh, topLat, leftLon, rightLon, bottomLat, fileName); 
+
+   return url;
+}
+
 /*! call back for curlGet */
 static size_t WriteCallback (void* contents, size_t size, size_t nmemb, void* userp) {
    FILE* f = (FILE*)userp;
@@ -2071,7 +2129,7 @@ bool curlGet (char *url, char* outputFile) {
    curl_easy_cleanup(curl);
    fclose(f);
    if (http_code >= 400 || res != CURLE_OK) {
-      fprintf (stderr, "Errr in curlget: HTTP response code: %ld\n", http_code);
+      fprintf (stderr, "Error in curlget: HTTP response code: %ld\n", http_code);
       return false;
    }
    return true;
@@ -2089,7 +2147,9 @@ bool addTraceGPS (const char *fileName) {
       fprintf (stderr, "Error in addTracePoint: cannot write: %s\n", fileName);
       return false;
    }
-   fprintf (f, "%.2lf; %.2lf; %ld; %s\n", my_gps_data.lat, my_gps_data.lon, my_gps_data.time, epochToStr (my_gps_data.time, true, str, sizeof (str)));
+   fprintf (f, "%.2lf; %.2lf; %ld; %s; %4.0lf; %6.2lf\n", my_gps_data.lat, my_gps_data.lon, \
+      my_gps_data.time, epochToStr (my_gps_data.time, true, str, sizeof (str)),\
+      my_gps_data.cog, my_gps_data.sog);
    fclose (f);
    return true;
 }

@@ -45,6 +45,7 @@ extern const char *WIND_URL [];
 extern const char *CURRENT_URL [];
 
 /*! functions defined in rutil.c */
+extern bool   concat (const char *prefix, int step, int max, char *fileRes);
 extern bool   isSea (double lat, double lon);
 extern bool   mostRecentFile (const char *directory, const char *pattern, char *name);
 extern char   *formatThousandSep (char *buffer, int value);
@@ -78,6 +79,7 @@ extern double findRainGrib (double lat, double lon, double t);
 extern double findPressureGrib (double lat, double lon, double t);
 extern void   findCurrentGrib (double lat, double lon, double t, double *uCurr, double *vCurr, double *tcd, double *tcs);
 extern char   *newDate (long intDate, double myTime, char *res);
+extern char   *newDateWeekDay (long intDate, double myTime, char *res);
 extern char   *gribToStr (char *str, Zone *zone, size_t maxLength);
 extern double maxValInPol (PolMat *mat);
 extern void   bestVmg (double tws, PolMat *mat, double *vmgAngle, double *vmgSpeed);
@@ -98,6 +100,7 @@ extern bool   checkGribToStr (char *buffer, size_t maxLength);
 extern char   *strchrReplace (char *source, char cIn, char cOut, char *dest);
 extern char   *dollarSubstitute (const char* str, char *res, size_t len);
 extern char   *buildMeteoUrl (int type, int i, char *url);
+extern char   *buildNoaaUrl (char *url, int topLat, int leftLon, int bottomLat, int rightLon, int timeStep);
 extern bool   curlGet (char *url, char *outputFile); 
 extern void   updateIsSeaWithForbiddenAreas ();
 extern bool   isServerAccessible (const char *url);
