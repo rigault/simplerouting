@@ -10,7 +10,7 @@
 #include "engine.h"
 
 /*! Make initialization following parameter file load */
-static void initScenarioOption () {
+static void initScenarioOption (void) {
    char str [MAX_SIZE_LINE];
    int iFlow;
    if (par.gribFileName [0] != '\0') {
@@ -68,7 +68,7 @@ void optionManage (char option) {
       gribToStr (buffer, &zone, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       printf ("grib print...\n");
-      printGribFull (&zone, tGribData [WIND]);
+      printGrib (&zone, tGribData [WIND]);
       printf ("\n\nFollowing lines are suspects info...\n");
       checkGribToStr (buffer, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
@@ -92,12 +92,12 @@ void optionManage (char option) {
          printf ("%s", str);
       fclose (f);
       break;
-   case 'n': //network
+   case 'n': // network
       if (isServerAccessible ("http://www.google.com"))
          printf ("Network OK\n");
       else printf ("No network\n");
       break;
-   case 'p': //polar
+   case 'p': // polar
       readPolar (par.polarFileName, &polMat);
       polToStr (buffer, &polMat, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);

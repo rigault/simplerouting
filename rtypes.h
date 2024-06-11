@@ -20,8 +20,8 @@
 #define MISSING               (0.001)           // for grib file missing values
 #define MS_TO_KN              (3600.0/1852.0)
 #define KN_TO_MS              (1852.0/3600.0)
-#define RAD_TO_DEG            (180.0/M_PI)
-#define DEG_TO_RAD            (M_PI/180.0)
+#define RAD_TO_DEG            (180.0/G_PI)
+#define DEG_TO_RAD            (G_PI/180.0)
 #define SIZE_T_IS_SEA         (3601 * 1801)
 #define MAX_N_WAY_POINT       10
 #define PROG_WEB_SITE         "http://www.orange.com"  

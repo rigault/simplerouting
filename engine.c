@@ -42,10 +42,10 @@ struct {
 int      pId = 1;                               // global ID for points. -1 and 0 are reserved for pOr and pDest
 double   tDeltaCurrent = 0.0;                   // delta time in hours between Wind zone and current zone
 double   lastClosestDist;                       // closest distance to destination in last isochrone computed
-double   lastBestVmg = 0;                       // best VMG found up to now
+double   lastBestVmg = 0.0;                     // best VMG found up to now
 
 /*! return max speed of boat at tws for all twa */
-static inline double maxSpeedInPolarAt (double tws, PolMat *mat) {
+static inline double maxSpeedInPolarAt (double tws, const PolMat *mat) {
    double max = 0.0;
    double speed;
    for (int i = 1; i < mat->nLine; i++) {
@@ -83,7 +83,7 @@ static inline void initSector (int nIsoc, int nMax) {
 
 /*! reduce the size of Isolist 
    note influence of parameters par.nSector, par.jFactor and par.kFactor */
-static inline int forwardSectorOptimize (Pp *pOr, Pp *pDest, int nIsoc, Isoc isoList, int isoLen, Isoc optIsoc) {
+static inline int forwardSectorOptimize (const Pp *pOr, const Pp *pDest, int nIsoc, const Isoc isoList, int isoLen, Isoc optIsoc) {
    const double epsilon = 0.1;
    int iSector, k;
    double alpha, theta;
@@ -140,7 +140,7 @@ static inline int forwardSectorOptimize (Pp *pOr, Pp *pDest, int nIsoc, Isoc iso
 }
 
 /*! choice of algorithm used to reduce the size of Isolist */
-static inline int optimize (Pp *pOr, Pp *pDest, int nIsoc, int algo, Isoc isoList, int isoLen, Isoc optIsoc) {
+static inline int optimize (const Pp *pOr, const Pp *pDest, int nIsoc, int algo, const Isoc isoList, int isoLen, Isoc optIsoc) {
    switch (algo) {
       case 0: 
          memcpy (optIsoc, isoList, isoLen * sizeof (Pp)); 
@@ -153,7 +153,7 @@ static inline int optimize (Pp *pOr, Pp *pDest, int nIsoc, int algo, Isoc isoLis
 
 /*! build the new list describing the next isochrone, starting from isoList 
   returns length of the newlist built or -1 if error*/
-static int buildNextIsochrone (Pp *pOr, Pp *pDest, Isoc isoList, int isoLen, double t, double dt, Isoc newList, double *bestVmg) {
+static int buildNextIsochrone (const Pp *pOr, const Pp *pDest, const Isoc isoList, int isoLen, double t, double dt, Isoc newList, double *bestVmg) {
    Pp newPt;
    bool motor = false;
    int lenNewL = 0, directCog;
@@ -328,7 +328,7 @@ bool dumpRoute (const char *fileName, Pp dest) {
 }
 
 /*! store current route in history */
-static void saveRoute () {
+static void saveRoute (void) {
    int z = historyRoute.n;
    if (z < MAX_HISTORY_ROUTE) {
       memcpy (&historyRoute.r[z], &route, sizeof (SailRoute));
@@ -415,7 +415,7 @@ static void statRoute (double lastStepDuration) {
 }
 
 /*! store route */
-void storeRoute (Pp *pOr, Pp *pDest, double lastStepDuration) {
+void storeRoute (const Pp *pOr, const Pp *pDest, double lastStepDuration) {
    //route.destinationReached = (pDest.id == 0);
    int iFather;
    // bool found = false;
@@ -474,7 +474,7 @@ static char *motorTribordBabord (bool motor, int amure, char* str, size_t len) {
 
 /*! copy route in a string
    true if enough space, false if truncated */
-bool routeToStr (SailRoute *route, char *str, size_t maxLength) {
+bool routeToStr (const SailRoute *route, char *str, size_t maxLength) {
    char line [MAX_SIZE_LINE], strDate [MAX_SIZE_LINE];
    char strLat [MAX_SIZE_LINE], strLon [MAX_SIZE_LINE];  
    char shortStr [SMALL_SIZE], strDur [MAX_SIZE_LINE], strMot [MAX_SIZE_LINE];
@@ -537,7 +537,7 @@ bool routeToStr (SailRoute *route, char *str, size_t maxLength) {
 
 /*! copy route in a string
    true if enough space, false if truncated */
-bool OrouteToStr (SailRoute *route, char *str, size_t maxLength) {
+bool OrouteToStr (const SailRoute *route, char *str, size_t maxLength) {
    char line [MAX_SIZE_LINE];
    char strLat [MAX_SIZE_LINE];
    char strLon [MAX_SIZE_LINE];
@@ -575,7 +575,7 @@ bool OrouteToStr (SailRoute *route, char *str, size_t maxLength) {
 /*! return true if pDest can be reached from pFrom in less time than dt
    bestTime give the time to get from pFrom to pDest 
    motor true if goal reached with motor */
-static inline bool goalP (Pp *pFrom, Pp *pDest, double t, double dt, double *timeTo, double *distance, bool *motor, int *amure) {
+static inline bool goalP (const Pp *pFrom, const Pp *pDest, double t, double dt, double *timeTo, double *distance, bool *motor, int *amure) {
    double u, v, gust, w, twd, tws, twa, sog;
    double coeffLat = cos (DEG_TO_RAD * (pFrom->lat + pDest->lat)/2);
    double dLat = pDest->lat - pFrom->lat;
@@ -610,7 +610,7 @@ static inline bool goalP (Pp *pFrom, Pp *pDest, double t, double dt, double *tim
 /*! return closest point to pDest in Isoc 
   true if goal can be reached directly in dt from isochrone 
   side effect : pDest.father can be modified ! */
-static inline bool goal (Pp *pDest, int nIsoc, Isoc isoList, int len, double t, double dt, double *lastStepDuration, bool *motor, int *amure) {
+static inline bool goal (Pp *pDest, int nIsoc, const Isoc isoList, int len, double t, double dt, double *lastStepDuration, bool *motor, int *amure) {
    double bestTime = DBL_MAX;
    double time, distance;
    bool destinationReached = false;
@@ -638,7 +638,7 @@ static inline bool goal (Pp *pDest, int nIsoc, Isoc isoList, int len, double t, 
 }
 
 /*! return closest point to pDest in Isoc */ 
-static inline Pp closest (Isoc isoc, int n, Pp *pDest, int *index) {
+static inline Pp closest (const Isoc isoc, int n, const Pp *pDest, int *index) {
    Pp best = isoc [0];
    double d;
    int i;
@@ -740,7 +740,7 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
       lastBestVmg = theBestVmg;
       isoDesc [nIsoc].bestVmg = theBestVmg;
       isoDesc [nIsoc].size = optimize (pOr, pDest, nIsoc, par.opt, tempList, lTempList, isocArray [nIsoc]);
-      if ((isoDesc [nIsoc].size == 0) /*|| (! movePossible)*/) { // no Wind ... we copy
+      if (isoDesc [nIsoc].size == 0) { // no Wind ... we copy
          replicate (nIsoc);
       }
       isoDesc [nIsoc].first = findFirst (nIsoc);; 
