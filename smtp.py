@@ -12,7 +12,7 @@ smtp_password = sys.argv [4]
 
 # Destinataire et expéditeur
 from_email = "meteoinfoforrr@orange.fr"
-to_email = "query@saildocs.com"
+to_email = sys.argv [1]
 
 # Création du message
 msg = MIMEMultipart()
@@ -35,4 +35,4 @@ server.sendmail(from_email, to_email, msg.as_string())
 
 # Fermeture de la connexion
 server.quit()
-print ("In smtp.py: Message sent to: ", sys.argv [1], " subject: ", sys.argv [2], " body: ", sys.argv [3])
+print ("In smtp.py: Message sent to on port ", smtp_port, ": ", sys.argv [1], " subject: ", sys.argv [2], " body: ", sys.argv [3])
