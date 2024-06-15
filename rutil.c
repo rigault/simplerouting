@@ -1,8 +1,6 @@
-/*! compilation gcc -Wall -c rutil.c 
-  \file */
+/*! compilation: gcc -Wall -Wextra -pedantic -Werror -std=c11 -O2 -c rutil.c `pkg-config --cflags glib-2.0` */
 #include <glib.h>
 #include <curl/curl.h>
-#include <gps.h>
 #include <float.h>   
 #include <limits.h>
 #include <ctype.h>
@@ -16,19 +14,18 @@
 #include <unistd.h>
 #include <time.h>
 #include <math.h>
+#include <locale.h>
 #include "eccodes.h"
 #include "rtypes.h"
 #include "shapefil.h"
 #include "inline.h"
-#include <locale.h>
-
-static const char *CSV_SEP = ";,\t";
+#include "gpsutil.h"
 
 /*! store sail route calculated in engine.c by routing */  
 SailRoute route;
 
 /*! forbid zones is a set of polygons */
-Polygon forbidZones [MAX_N_FORBID_ZONE];
+MyPolygon forbidZones [MAX_N_FORBID_ZONE];
 
 /*! dictionnary of meteo services */
 struct DictElmt dicTab [4] = {{7, "Weather service US"}, {78, "DWD Germany"}, {85, "Meteo France"}, {98,"ECMWF European"}};
@@ -76,7 +73,6 @@ int readCurrentGribRet = -1;        // to check if readCurrentGrib is terminated
 /*! for shp file */
 int  nTotEntities = 0;              // cumulated number of entities
 Entity *entities = NULL;
-MyGpsData my_gps_data;
 
 const int delay [2] = {6, 12};       // 6 hours before now for wind, 12 hours for current
 
@@ -311,10 +307,10 @@ double getCoord (const char *str) {
    bool minFound = false;
    int sign = 1;
    char *pt = NULL;
-   const char *neg = "SsWwOo"; // value returned is negative if south or West
+   const char *neg = "SsWwOo";            // value returned is negative if south or West
    // find sign
    while (*neg) {
-      if (strchr (str, *neg) != NULL) { // south or West
+      if (strchr (str, *neg) != NULL) {   // south or West
          sign = -1;
          break;
       }
@@ -324,7 +320,7 @@ double getCoord (const char *str) {
    while (*str && (! (isdigit (*str) || (*str == '-') || (*str == '+')))) 
       str++;
    deg  = strtod (str, NULL);
-   if (deg < 0) sign = -1; // force sign if negative value found 
+   if (deg < 0) sign = -1;                // force sign if negative value found 
    deg = fabs (deg);
    // find minutes
    if ((strchr (str, '\'') != NULL)) {
@@ -684,20 +680,6 @@ void initZone (Zone *zone) {
    zone->nbLon = 0;
 }
 
-/*! return offset Local UTC in seconds */
-double offsetLocalUTC (void) {
-   time_t now;
-   time (&now);                           
-   struct tm local_tm = *localtime(&now);
-   struct tm utc_tm = *gmtime(&now);
-   time_t local_time = mktime(&local_tm);
-   time_t utc_time = mktime(&utc_tm);
-   double offsetSeconds = difftime(local_time, utc_time);
-   if (local_tm.tm_isdst > 0)
-        offsetSeconds += 3600;  // add one hour if summer time
-   return offsetSeconds;
-}
-      
 /*! convert epoch time to string with or without seconds */
 char *epochToStr (time_t t, bool seconds, char *str, size_t len) {
    struct tm *utc = gmtime (&t);
@@ -1258,9 +1240,9 @@ static bool readGribParameters (const char *fileName, Zone *zone) {
    }
  
    // create new handle from the first message in the file
-   h = codes_handle_new_from_file(0, f, PRODUCT_GRIB, &err);
-   if (h == NULL) {
+   if ((h = codes_handle_new_from_file(0, f, PRODUCT_GRIB, &err)) == NULL) {
        fprintf (stderr, "Error in readGribParameters: code handle from file : %s Code error: %s\n",fileName, codes_get_error_message(err)); 
+       fclose (f);
        return false;
    }
    fclose (f);
@@ -1401,9 +1383,11 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
          if (iGrib == -1) return NULL;
          tGribData [iFlow] [iGrib].lat = lat; 
          tGribData [iFlow] [iGrib].lon = lon; 
-         if ((strcmp (shortName, "10u") == 0) /*|| (strcmp (shortName, "u") == 0) */|| (strcmp (shortName, "ucurr") == 0))
+         // if ((strcmp (shortName, "10u") == 0) || (strcmp (shortName, "u") == 0) || (strcmp (shortName, "ucurr") == 0))
+         if ((strcmp (shortName, "10u") == 0) || (strcmp (shortName, "ucurr") == 0))
             tGribData [iFlow] [iGrib].u = val;
-         else if ((strcmp (shortName, "10v") == 0) /*|| (strcmp (shortName, "v") == 0) */|| (strcmp (shortName, "vcurr") == 0))
+         // else if ((strcmp (shortName, "10v") == 0) || (strcmp (shortName, "v") == 0) || (strcmp (shortName, "vcurr") == 0))
+         else if ((strcmp (shortName, "10v") == 0) || (strcmp (shortName, "vcurr") == 0))
             tGribData [iFlow] [iGrib].v = val;
          else if (strcmp (shortName, "gust") == 0)
             tGribData [iFlow] [iGrib].g = val;
@@ -1615,7 +1599,7 @@ static void analyseCoord (char *str, double *lat, double *lon) {
 
 /*! return true if p is in polygon po
   Ray casting algorithm */ 
-static bool isInPolygon (double lat, double lon, const Polygon *po) {
+static bool isInPolygon (double lat, double lon, const MyPolygon *po) {
    int i, j;
    bool inside = false;
    // printf ("isInPolygon lat:%.2lf lon: %.2lf\n", p.lat, p.lon);
@@ -1821,6 +1805,7 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "LEVEL_POI_DISP:%d", &par.maxPoiVisible) > 0);
       else if (sscanf (pLine, "SPEED_DISP:%d", &par.speedDisp) > 0);
       else if (sscanf (pLine, "TECHNO_DISP:%d", &par.techno) > 0);
+      else if (sscanf (pLine, "GPS_TYPE:%d", &par.gpsType) > 0);
       else if (sscanf (pLine, "WEBKIT:%255s", str) > 0)
          buildRootName (str, par.webkit);
       else if (strstr (pLine, "EDITOR:") != NULL) {
@@ -1943,6 +1928,8 @@ bool writeParam (const char *fileName, bool header, bool password) {
    fprintf (f, "WEBKIT:          %s\n", par.webkit);
    fprintf (f, "EDITOR:          %s\n", par.editor);
    fprintf (f, "SPREADSHEET:     %s\n", par.spreadsheet);
+   fprintf (f, "GPS_TYPE:        %d\n", par.gpsType);
+
    if (password)
       fprintf (f, "MAIL_PW:         %s\n", par.mailPw);
    for (int i = 0; i < par.nForbidZone; i++) {
@@ -1953,58 +1940,6 @@ bool writeParam (const char *fileName, bool header, bool password) {
    }
    fclose (f);
    return true;
-}
-
-/*! provide GPS information */
-void *getGPS () {
-   struct gps_data_t gps_data;
-   my_gps_data.OK = false;
-   if (gps_open("localhost", GPSD_TCP_PORT, &gps_data) == -1) {
-      fprintf(stderr, "Error: Unable to connect to GPSD.\n");
-      return NULL;
-   }
-   gps_stream(&gps_data, WATCH_ENABLE | WATCH_JSON, NULL);
-
-   while (true) {
-      if (gps_waiting(&gps_data, GPS_TIME_OUT)) {
-         if (gps_read(&gps_data, NULL, 0) == -1) {
-            fprintf (stderr, "Error in getGPS: gps_read\n");
-         } else {
-            if (gps_data.set & PACKET_SET) {
-               /*  
-               printf("Latitude   : %lf, Longitude: %lf\n", gps_data.fix.latitude, gps_data.fix.longitude);
-               printf("Altitude   : %lf meters\n", gps_data.fix.altitude);
-               printf("Fix Quality: %d\n", gps_data.fix.status);
-               printf("Satellites : %d\n", gps_data.satellites_visible);
-               printf("SOG        : %.2lfKn\n", MS_TO_KN * gps_data.fix.speed);
-               printf("COG        : %.0lf°\n", gps_data.fix.track);
-               printf("Time       : %ld\n\n", gps_data.fix.time.tv_sec);
-               */
-               if (isfinite(gps_data.fix.latitude) && isfinite(gps_data.fix.longitude) &&
-                  ((gps_data.fix.latitude != 0 || gps_data.fix.longitude != 0))) {
-                  // printf("Lat: %.2f, Lon: %.2f\n", gps_data.fix.latitude, gps_data.fix.longitude);
-                  // update GPS data
-                  my_gps_data.lat = gps_data.fix.latitude;
-                  my_gps_data.lon = gps_data.fix.longitude;
-                  my_gps_data.alt = gps_data.fix.altitude;
-                  my_gps_data.cog = gps_data.fix.track;
-                  my_gps_data.sog = MS_TO_KN * gps_data.fix.speed;
-                  my_gps_data.status = gps_data.fix.status;
-                  my_gps_data.nSat = gps_data.satellites_visible;
-                  my_gps_data.time = gps_data.fix.time.tv_sec;
-                  my_gps_data.OK = true;
-               }
-               else 
-                  my_gps_data.OK = false;
-            } else 
-               fprintf(stderr, "Error in getGPS: No fix available.\n");
-         }
-      }
-   }
-   gps_stream(&gps_data, WATCH_DISABLE, NULL);
-   gps_close(&gps_data);
-
-   return NULL;
 }
 
 /*! URL for METEO Consult Wind delay hours before now at closest time 0Z, 6Z, 12Z, or 18Z 

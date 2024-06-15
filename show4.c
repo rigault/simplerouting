@@ -5,6 +5,7 @@
  * \date 2024 
  * \file
  * \section Compilation
+ * gcc -c show4.c `pkg-config --cflags gtk4` -Wdeprecated-declarations
  * see "ccall4 file
  * \section Documentation
  * \li Doc produced by doxygen
@@ -30,11 +31,8 @@
 #include <sys/time.h>
 #include <time.h>
 #include <gtk/gtk.h>
-#include <cairo.h>
-#include <gps.h>
 #include <eccodes.h>
 #include <curl/curl.h>
-#include <pango/pangocairo.h>
 //#include <webkit2/webkit2.h>
 #include "shapefil.h"
 #include "rtypes.h"
@@ -42,8 +40,9 @@
 #include "inline.h"
 #include "engine.h"
 #include "option.h"
+#include "gpsutil.h"
 
-#define MAX_N_SURFACE         384            // 16 days with timeStep 1 hour
+#define MAX_N_SURFACE         (24*MAX_N_DAYS_WEATHER)            // 16 days with timeStep 1 hour
 #define MAIN_WINDOW_DEFAULT_WIDTH  1200
 #define MAIN_WINDOW_DEFAULT_HEIGHT 600
 #define APPLICATION_ID        "com.routing"  
@@ -208,7 +207,7 @@ static gboolean routingCheck (gpointer data);
 static void destroySurface ();
 
 /*! destroy the child window before exiting application */
-void on_parent_destroy(GtkWidget *widget, gpointer child_window) {
+void on_parent_destroy (GtkWidget *widget, gpointer child_window) {
    if (GTK_IS_WIDGET(child_window)) {
       gtk_window_destroy(GTK_WINDOW(child_window));
    }
@@ -279,13 +278,31 @@ static void spinner (const char *title, const char* str) {
 static void infoMessage (char *message, GtkMessageType typeMessage) {
    GtkWidget *dialogBox = gtk_message_dialog_new (GTK_WINDOW (window), GTK_DIALOG_MODAL, typeMessage, GTK_BUTTONS_NONE, "%s", message);
    gtk_dialog_add_button(GTK_DIALOG (dialogBox), "_OK", GTK_RESPONSE_OK);
-   gtk_window_present (GTK_WINDOW (dialogBox));
    g_signal_connect_swapped (dialogBox, "response", G_CALLBACK (gtk_window_destroy), dialogBox);
+   gtk_window_present (GTK_WINDOW (dialogBox));
 }
 
+/*! for remote files, no buttons 
+static void viewer (const char *url) {
+   const int WEB_WIDTH = 800;
+   const int WEB_HEIGHT = 450;
+   char title [MAX_SIZE_LINE];
+   snprintf  (title, sizeof (title), "View: %s", url);
+   GtkWidget *viewerWindow = gtk_application_window_new (app);
+   g_signal_connect (window, "destroy", G_CALLBACK(on_parent_destroy), viewerWindow);
+   gtk_window_set_default_size (GTK_WINDOW(viewerWindow), WEB_WIDTH, WEB_HEIGHT);
+   gtk_window_set_title(GTK_WINDOW(viewerWindow), title);
+   g_signal_connect(G_OBJECT(viewerWindow), "destroy", G_CALLBACK(gtk_window_destroy), NULL);
+   
+   GtkWidget *webView = webkit_web_view_new();
+   webkit_web_view_load_uri (WEBKIT_WEB_VIEW(webView), url);
+   gtk_window_set_child (GTK_WINDOW (viewerWindow), (GtkWidget *) webView);
+   gtk_window_present (GTK_WINDOW (viewerWindow));
+} */
+
+
 /*! open windy
-   Example: https://www.windytv.com/?36.908,-93.049,8,d:picker 
-*/
+   Example: https://www.windytv.com/?36.908,-93.049,8,d:picker */
 static void windy (GSimpleAction *action, GVariant *parameter, gpointer *data) {
    FILE *fs;
    const char *URL = "https://www.windy.com";
@@ -512,7 +529,7 @@ static inline double yToLat (double y) {
 }
 
 /*! draw a polygon */
-static void drawPolygon (cairo_t *cr, Polygon *po) {
+static void drawPolygon (cairo_t *cr, MyPolygon *po) {
    double x = getX (po->points[0].lon);
    double y = getY (po->points[0].lat);
    cairo_move_to (cr, x, y);
@@ -1001,7 +1018,7 @@ static gboolean drawAllIsochrones (cairo_t *cr, int style) {
    if (par.closestDisp) drawClosest (cr);
    if (par.focalDisp) drawFocal (cr);
    if (style == NOTHING) return true;
-   if (style == POINT) return drawAllIsochrones0 (cr);
+   if (style == JUST_POINT) return drawAllIsochrones0 (cr);
    CAIRO_SET_SOURCE_RGB_BLUE(cr);
    cairo_set_line_width(cr, 1.0);
    for (int i = 0; i < nIsoc; i++) {
@@ -1257,7 +1274,7 @@ static gboolean draw_shp_map (cairo_t *cr) {
 
    // Dessiner les entités
    for (int i = 0; i < nTotEntities; i++) {
-      if ((entities [i].nSHPType != POINT) && (! isRectangleIntersecting (entities[i].latMin, entities[i].latMax, entities[i].lonMin, entities[i].lonMax)))
+      if ((entities [i].nSHPType != SHPT_POINT) && (! isRectangleIntersecting (entities[i].latMin, entities[i].latMax, entities[i].lonMin, entities[i].lonMax)))
          continue;
       step = (dispZone.zoom < 5) ? 128 : (dispZone.zoom < 20) ? 64 : (dispZone.zoom < 50) ? 32 : (dispZone.zoom < 100) ? 16 : (dispZone.zoom < 500) ? 8 : 1;
       
@@ -1297,7 +1314,7 @@ static gboolean draw_shp_map (cairo_t *cr) {
          }
          cairo_stroke(cr);
          break;
-      case POINT:
+      case SHPT_POINT:
          CAIRO_SET_SOURCE_RGB_RED(cr); // points
          x = getX (entities[i].points[0].lon);
          y = getY (entities[i].points[0].lat);
@@ -2878,7 +2895,6 @@ static void traceReport () {
 
 /*! display trace information */
 static void traceDump () {
-   const char *CSV_SEP = ";";
    FILE *f = NULL;
    char line [MAX_SIZE_LINE], strLat [MAX_SIZE_LINE], strLon [MAX_SIZE_LINE];
    int count = 0, l = 2;
@@ -3844,15 +3860,16 @@ static void helpInfo () {
    const char *authors[2] = {PROG_AUTHOR, NULL};
    char str [MAX_SIZE_LINE];
    char strVersion [MAX_SIZE_LINE];
+   char strGps [MAX_SIZE_LINE];
   
    snprintf (strVersion, sizeof (strVersion), "%s\nGTK version: %d.%d.%d\nGlib version: %d.%d.%d\nCairo Version:%s\n \
-      GPSD version: %d.%d\nECCODES version from ECMWF: %s\n Curl version: %s\n Shapefil version: %s\n Compilation date: %s\n", 
+      GPS %s\nECCODES version from ECMWF: %s\n Curl version: %s\n Shapefil version: %s\n Compilation date: %s\n", 
       PROG_VERSION,
       gtk_get_major_version(), gtk_get_minor_version(), gtk_get_micro_version(),
       // webkit_get_major_version (), webkit_get_minor_version (),webkit_get_micro_version (), // ATT GTK4 CHANGE
       GLIB_MAJOR_VERSION, GLIB_MINOR_VERSION, GLIB_MICRO_VERSION,
       CAIRO_VERSION_STRING, 
-      GPSD_API_MAJOR_VERSION, GPSD_API_MINOR_VERSION,
+      gpsInfo (par.gpsType, strGps, MAX_SIZE_LINE),
       ECCODES_VERSION_STR, LIBCURL_VERSION, "1.56", 
       __DATE__);
    GtkWidget *p_about_dialog = gtk_about_dialog_new ();
@@ -4112,7 +4129,7 @@ static void gribNoaa (GSimpleAction *action, GVariant *parameter, gpointer *user
 
    label = gtk_label_new("Forecat Time in Days");
    gtk_label_set_xalign(GTK_LABEL(label), 0.0);
-   data->timeMaxSpin = GTK_SPIN_BUTTON(gtk_spin_button_new_with_range(0, 16, 1));
+   data->timeMaxSpin = GTK_SPIN_BUTTON(gtk_spin_button_new_with_range(0, MAX_N_DAYS_WEATHER, 1));
    gtk_spin_button_set_value(GTK_SPIN_BUTTON(data->timeMaxSpin), TIME_MAX);
    gtk_grid_attach(GTK_GRID(grid), label, 2, 2, 1, 1);
    gtk_grid_attach(GTK_GRID(grid), GTK_WIDGET(data->timeMaxSpin), 3, 2, 1, 1);
@@ -4278,6 +4295,7 @@ static void initScenario () {
    char str [MAX_SIZE_LINE];
    int poiIndex = -1;
    double unusedTime;
+
    if (par.gribFileName [0] != '\0') {
       iFlow = WIND;
       readGrib (&iFlow);
@@ -4765,7 +4783,7 @@ static void mailRequestBox (double lat1, double lon1, double lat2, double lon2) 
 
    strcpy (str, "Forecast time in days");
    GtkWidget *label_time_max = gtk_label_new (str);
-   spin_button_time_max = gtk_spin_button_new_with_range (1, 16, 1); // ATT : Global variable
+   spin_button_time_max = gtk_spin_button_new_with_range (1, MAX_N_DAYS_WEATHER, 1); // ATT : Global variable
    gtk_spin_button_set_value(GTK_SPIN_BUTTON (spin_button_time_max), par.gribTimeMax / 24);
    g_signal_connect (spin_button_time_max, "value-changed", G_CALLBACK(time_max_changed), NULL);
    gtk_label_set_xalign(GTK_LABEL (label_time_max), 0);
@@ -6254,7 +6272,6 @@ int main (int argc, char *argv[]) {
 
    vOffsetLocalUTC = offsetLocalUTC ();
    printf ("LocalTime - UTC: %.0lf hours\n", vOffsetLocalUTC / 3600.0);
-   g_thread_new ("GPS", getGPS, NULL);                 // launch GPS
 
    if (setlocale (LC_ALL, "C") == NULL) {              // very important for scanf decimal numbers
       fprintf (stderr, "Error in main: setlocale failed");
@@ -6296,10 +6313,11 @@ int main (int argc, char *argv[]) {
    }
    if (!ret) exit (EXIT_FAILURE);
 
+   g_thread_new ("GPS", getGPS, &par.gpsType);  // launch GPS with gpsType info
    initZone (&zone);
    initDispZone ();
    
-   if (par.mostRecentGrib)                // most recent grib will replace existing grib
+   if (par.mostRecentGrib)                      // most recent grib will replace existing grib
       initWithMostRecentGrib ();
    initScenario ();      
 

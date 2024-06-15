@@ -1,0 +1,14 @@
+#!/bin/bash
+gcc -Wall -Wextra -pedantic -Werror -Wformat=2 -std=c11 -O2 -c engine.c `pkg-config --cflags glib-2.0`
+gcc -Wall -Wextra -pedantic -Werror -Wformat=2 -std=c11 -O1 -c option.c `pkg-config --cflags glib-2.0`
+gcc -Wall -Wextra -pedantic -Werror -std=c11 -O2 -c rutil.c `pkg-config --cflags glib-2.0` 
+gcc -Wall -Werror -Wuninitialized -Wformat=2 -std=c11 -O1 -c routing.c `pkg-config --cflags glib-2.0`
+
+gcc routing.o option.o rutil.o engine.o -o routing -std=c11 -lcurl -lgps -lshp -leccodes -lm `pkg-config --cflags --libs glib-2.0`
+rm -f *.o
+mv routing ../.
+
+# x86_64-w64-mingw32-gcc
+
+
+

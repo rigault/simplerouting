@@ -5,7 +5,7 @@
 * sog = Speed over Ground of the boat
 * cog = Course over Ground  of the boat
 * */
-/*! compilation gcc -Wall -c engine.c */
+/*! compilation: gcc -Wall -Wextra -pedantic -Werror -Wformat=2 -std=c11 -O2 -c engine.c `pkg-config --cflags glib-2.0` */
 #include <glib.h>
 #include <float.h>   
 #include <limits.h>
@@ -40,7 +40,7 @@ struct {
 } sector [2][MAX_SIZE_ISOC];                    // we keep even and odd last sectors
 
 int      pId = 1;                               // global ID for points. -1 and 0 are reserved for pOr and pDest
-double   tDeltaCurrent = 0.0;                   // delta time in hours between Wind zone and current zone
+double   tDeltaCurrent = 0.0;                   // delta time in hours between wind zone and current zone
 double   lastClosestDist;                       // closest distance to destination in last isochrone computed
 double   lastBestVmg = 0.0;                     // best VMG found up to now
 
@@ -98,7 +98,6 @@ static inline int forwardSectorOptimize (const Pp *pOr, const Pp *pDest, int nIs
    isoDesc [nIsoc].focalLat = ptTarget.lat;
    isoDesc [nIsoc].focalLon = ptTarget.lon;
   
-   //ptTarget = pDest; 
    double beta = orthoCap (pOr->lat, pOr->lon, pDest->lat, pDest->lon);
    initSector (nIsoc % 2, par.nSectors);
    for (int i = 0; i < par.nSectors; i++)
@@ -118,7 +117,7 @@ static inline int forwardSectorOptimize (const Pp *pOr, const Pp *pDest, int nIs
          sector [nIsoc%2][iSector].nPt += 1;
       }
    }
-   // on retasse si certains secteurs vides ou faiblement peuples ou moins avances que precedent
+   // we keep only sectors that match conditions (not empti, vmc not too bad, kFactor dependant condition)
    k = 0;
    for (iSector = 0; iSector < par.nSectors; iSector++) {
       if ((sector [nIsoc%2][iSector].dd < DBL_MAX -1) 
@@ -478,7 +477,9 @@ bool routeToStr (const SailRoute *route, char *str, size_t maxLength) {
    char line [MAX_SIZE_LINE], strDate [MAX_SIZE_LINE];
    char strLat [MAX_SIZE_LINE], strLon [MAX_SIZE_LINE];  
    char shortStr [SMALL_SIZE], strDur [MAX_SIZE_LINE], strMot [MAX_SIZE_LINE];
-   double awa, aws, maxAws = 0.0, sumAws = 0.0;
+   double awa, aws;
+   double maxAws = 0.0;
+   double sumAws = 0.0;
    double twa = fTwa (route->t[0].lCap, route->t[0].twd);
    fAwaAws (twa, route->t[0].tws, route->t[0].sog, &awa, &aws);
 
@@ -687,7 +688,7 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
    double timeToReach = 0;
    int lTempList = 0;
    double timeLastStep;
-   int index; // index of closest point to pDest in insochrone
+   int index;                       // index of closest point to pDest in insochrone
    double theBestVmg;
    pOr->dd = orthoDist (pOr->lat, pOr->lon, pDest->lat, pDest->lon);
    pOr->vmc = 0;
@@ -695,7 +696,7 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
    pDest->toIndexWp = toIndexWp;
    lastClosestDist = pOr->dd;
    lastBestVmg = 0;
-   tempList [0] = *pOr; // liste avec un unique élément;
+   tempList [0] = *pOr;             // list with just one elemnet;
    initSector (nIsoc, par.nSectors); 
    
    if (goalP (pOr, pDest, t, dt, &timeToReach, &distance, &motor, &amure)) {

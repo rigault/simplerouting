@@ -2,7 +2,7 @@
 extern WayPointList wayPoints;
 
 /*! forbid zones */
-extern Polygon forbidZones [MAX_N_FORBID_ZONE];
+extern MyPolygon forbidZones [MAX_N_FORBID_ZONE];
 
 /*! Meteo service */
 extern struct DictElmt dicTab [];
@@ -33,8 +33,6 @@ extern int readCurrentGribRet;         // to check if readCurrentGrib is termina
 extern int    nTotEntities;
 extern Entity *entities;
 
-extern MyGpsData my_gps_data; 
-
 /*! for curlGet url */
 extern const int delay [];
 extern const char *WIND_URL [];
@@ -45,7 +43,6 @@ extern bool   concat (const char *prefix, int step, int max, const char *fileRes
 extern bool   isSea (double lat, double lon);
 extern bool   mostRecentFile (const char *directory, const char *pattern, char *name);
 extern char   *formatThousandSep (char *buffer, int value);
-extern void   *getGPS ();
 extern bool   initSHP (const char* nameFile);
 extern void   freeSHP (void);
 extern char   *buildRootName (const char *fileName, char *rootName);
@@ -56,7 +53,6 @@ extern char   *latToStr (double lat, int type, char* str);
 extern char   *lonToStr (double lon, int type, char* str);
 extern char   *durationToStr (double duration, char *res, size_t len);
 extern void   initZone (Zone *zone);
-extern double offsetLocalUTC (void);
 extern char   *epochToStr (time_t t, bool seconds, char *str, size_t len);
 extern time_t gribDateTimeToEpoch (long date, long time);
 extern char   *gribDateTimeToStr (long date, long time, char *str, size_t len);

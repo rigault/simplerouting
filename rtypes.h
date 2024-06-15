@@ -5,13 +5,14 @@
 
 #include <stdbool.h>
 #include <time.h>
-#include <pthread.h>
 #include <math.h>
+#define CSV_SEP ";,\t"
 #define GPS_TIME_OUT          2000000           // 2 s
 #define N_WIND_URL            6
 #define N_CURRENT_URL         6
 #define ROOT_GRIB_URL         "https://static1.mclcm.net/mc2020/int/cartes/marine/grib/" // Meteoconsult
-#define WORKING_DIR           "/home/rr/routing/"
+//#define WORKING_DIR           "/home/rr/routing/"
+#define WORKING_DIR           "" //ATT
 #define PARAMETERS_FILE       WORKING_DIR"par/routing.par" // default parameter file
 #define TEMP_FILE_NAME        "routing.tmp"  
 #define PROG_LOGO             "routing.png"  
@@ -32,14 +33,15 @@
    taking into account grib files and boat polars"
 #define MILLION               1000000
 #define NIL                   (-100000)
-#define MAX_N_ISOC            512               // max number of isochrones in isocArray
-#define MAX_SIZE_ISOC         100000            // max number of point in an isochrone
+#define MAX_N_DAYS_WEATHER    16               // Max number od days for weather forecast
+#define MAX_N_ISOC            (24*MAX_N_DAYS_WEATHER+1) // max number of isochrones in isocArray
+#define MAX_SIZE_ISOC         10000            // max number of point in an isochrone
 #define MAX_N_POL_MAT_COLS    128
 #define MAX_N_POL_MAT_LINES   128
 #define MAX_SIZE_LINE         256		         // max size of pLine in text files
 #define MAX_SIZE_URL          512		         // max size of a URL
 #define MAX_SIZE_DATE         32                // max size of a string with date inside
-#define MAX_SIZE_BUFFER       100000
+#define MAX_SIZE_BUFFER       10000
 #define MAX_N_TIME_STAMPS     512
 #define MAX_N_SHORT_NAME      64
 #define MAX_N_GRIB_LAT        1024
@@ -60,6 +62,7 @@
 #define N_PROVIDERS           8                 // for DictProvider dictTab size
 #define MAX_INDEX_ENTITY      512               // for shp. Index.
 
+enum {API_GPSD, NMEA_USB};                      // GPS way of finding information
 enum {WIND, CURRENT};                           // for grib information, either WIND or CURRENT
 enum {POLAR, WAVE_POLAR};                       // for polar information, either POLAR or WAVE
 enum {POI_SEL, PORT_SEL};                       // for editor or spreadsheet, call either POI or PORT
@@ -67,7 +70,7 @@ enum {BASIC, DD, DM, DMS};                      // degre, degre decimal, degre m
 enum {TRIBORD, BABORD};                         // amure
 enum {NO_COLOR, B_W, COLOR};                    // wind representation 
 enum {NONE, ARROW, BARBULE};                    // wind representation 
-enum {NOTHING, POINT, SEGMENT, BEZIER};         // bezier or segment representation
+enum {NOTHING, JUST_POINT, SEGMENT, BEZIER};    // bezier or segment representation
 enum {UNVISIBLE, NORMAL, CAT, PORT, NEW};       // for POI point of interest
 enum {RUNNING, STOPPED, NO_SOLUTION, EXIST_SOLUTION}; // for chooseDeparture.ret values
 enum {NO_ANIMATION, PLAY, LOOP};                // for animationActive status
@@ -86,10 +89,10 @@ typedef struct {
 
 /*! displayed zone */
 typedef struct {
-   guint xL;
-   guint xR;
-   guint yB;
-   guint yT;
+   unsigned int xL;
+   unsigned int xR;
+   unsigned int yB;
+   unsigned int yT;
    double latMin;
    double latMax;
    double lonLeft;
@@ -109,7 +112,7 @@ typedef struct {
 typedef struct {
     int n;
     Point *points;
-} Polygon;
+} MyPolygon;
 
 /* Structure for best departure time choice */
 typedef struct {
@@ -371,6 +374,7 @@ typedef struct {
    int  nForbidZone;                         // number of forbidden zones
    char forbidZone [MAX_N_FORBID_ZONE][MAX_SIZE_LINE]; // array of forbid zones
    int techno;                               // additionnal info display for tech experts
+   int gpsType;                              // 0 if gpsd API, 1 if NMEA port read
 } Par;
 
 /*! Isochrone */

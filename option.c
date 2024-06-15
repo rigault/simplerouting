@@ -1,4 +1,4 @@
-/*! compilation gcc -Wall -c option.c */
+/*! compilation: gcc -Wall -Wextra -pedantic -Werror -Wformat=2 -std=c11 -O1 -c option.c `pkg-config --cflags glib-2.0` */
 #include <glib.h>
 #include <stdbool.h>
 #include <string.h>
@@ -51,13 +51,13 @@ void optionManage (char option) {
    switch (option) {
    case 'c': // cap
       printf ("Lon1 = ");
-      scanf ("%lf", &lon);
+      if (scanf ("%lf", &lon) < 1) break;
       printf ("Lat1 = ");
-      scanf ("%lf", &lat);
+      if (scanf ("%lf", &lat) < 1) break;
       printf ("Lon2 = ");
-      scanf ("%lf", &lon2);
+      if (scanf ("%lf", &lon2) < 1) break;
       printf ("Lat2 = ");
-      scanf ("%lf", &lat2);
+      if (scanf ("%lf", &lat2) < 1) break;
       printf ("Direct cap1: %.2lf°,  Direct cap2: %.2lf°\n", directCap (lat, lon, lat2, lon2), directCap (lat2, lon2, lat, lon));
       printf ("Orthodist1 : %.2lf,   Orthodist2: %.2lf\n", orthoDist (lat, lon, lat2, lon2), orthoDist (lat2, lon2, lat, lon));
       printf ("Loxodist1  : %.2lf,   Loxodist2 : %.2lf\n", loxoDist(lat, lon, lat2, lon2), loxoDist (lat2, lon2, lat, lon));
@@ -103,9 +103,9 @@ void optionManage (char option) {
       printf ("%s\n", buffer);
       while (true) {
          printf ("twa true wind angle = ");
-         scanf ("%lf", &twa);
+         if (scanf ("%lf", &twa) < 1) break;
          printf ("tws true wind speed = ");
-         scanf ("%lf", &tws);
+         if (scanf ("%lf", &tws) < 1) break;
          printf ("speed over ground: %.2lf\n", findPolar (twa, tws, polMat));
       }
       break;
@@ -115,9 +115,9 @@ void optionManage (char option) {
       printf ("%s\n", buffer);
       while (true) {
          printf ("angle = " );
-         scanf ("%lf", &twa);
+         if (scanf ("%lf", &twa) < 1) break;
          printf ("w = ");
-         scanf ("%lf", &w);
+         if (scanf ("%lf", &w) < 1) break;
          printf ("coeff: %.2lf\n", findPolar (twa, w, wavePolMat)/100.0);
       }
       break;
@@ -136,9 +136,9 @@ void optionManage (char option) {
       // dumpIsSea ();
       while (1) {
          printf ("Lat = ");
-         scanf ("%lf", &lat);
+         if (scanf ("%lf", &lat) < 1) break;
          printf ("Lon = ");
-         scanf ("%lf", &lon);
+         if (scanf ("%lf", &lon) < 1) break;
          if (isSea (lat, lon))
             printf ("Sea\n");
          else printf ("Earth\n");
@@ -151,9 +151,9 @@ void optionManage (char option) {
    case 'w': // twa
       while (true) {
          printf ("COG = ");
-         scanf ("%lf", &cog);
+         if (scanf ("%lf", &cog) < 1) break;
          printf ("TWS = ");
-         scanf ("%lf", &twa);
+         if (scanf ("%lf", &twa) < 1) break;
          printf ("fTwa = %.2lf\n",fTwa (cog, twa));
       }
    break;
