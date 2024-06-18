@@ -115,7 +115,7 @@ static bool decode (char *line) {
    return false;
 }
 
-/*! Ecrit sur la sortie standart la trame decodee */
+/*! Ecrit sur la sortie standart la trame decodee 
 static void printResult (bool clear, bool verbose) {
    char d [SIZE_DATE_TIME];
    char t [SIZE_DATE_TIME];
@@ -140,7 +140,7 @@ static void printResult (bool clear, bool verbose) {
       // displayFrameBuff ();
    }
    printf ("\n");
-}
+}*/
 
 /*! convert to Epoch time date and time found in NMEA frame */
 static time_t strToEpoch (char date [], char time []) {
