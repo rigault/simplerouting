@@ -33,7 +33,7 @@
 #include <gtk/gtk.h>
 #include <eccodes.h>
 #include <curl/curl.h>
-//#include <webkit2/webkit2.h>
+///#include <webkit2/webkit2.h>
 #include "shapefil.h"
 #include "rtypes.h"
 #include "rutil.h"
@@ -45,6 +45,7 @@
 #define MAX_N_SURFACE         (24*MAX_N_DAYS_WEATHER)            // 16 days with timeStep 1 hour
 #define MAIN_WINDOW_DEFAULT_WIDTH  1200
 #define MAIN_WINDOW_DEFAULT_HEIGHT 600
+#define MY_RESPONSE_OK        0              // OK identifier for confirm box
 #define APPLICATION_ID        "com.routing"  
 #define MIN_ZOOM_POI_VISIBLE  30
 #define BOAT_UNICODE          "⛵"
@@ -106,6 +107,8 @@ typedef struct {
    char url [MAX_SIZE_URL];
 } DialogData;
 
+DialogData noaaData;
+
 cairo_surface_t *surface [MAX_N_SURFACE];
 cairo_t *surface_cr [MAX_N_SURFACE];
 char existSurface [MAX_N_SURFACE] = {false};
@@ -122,7 +125,7 @@ guint8 bwPalette [N_WIND_COLORS][3] = {{250,250,250}, {200, 200, 200}, {170, 170
 const double tTws [] = {0.0, 15.0, 20.0, 25.0, 30.0, 40.0};
 
 char   parameterFileName [MAX_SIZE_FILE_NAME];
-guint  context_id;                        // for statusBar
+// guint  context_id;                        // for statusBar
 int    selectedPol = 0;                   // select polar to draw. 0 = all
 double selectedTws = 0;                   // selected TWS for polar draw
 guint  gribMailTimeout;
@@ -273,13 +276,19 @@ static void spinner (const char *title, const char* str) {
    gtk_window_present (GTK_WINDOW (spinner_window));
 }
 
-/*! draw info message GTK_MESSAGE_INFO, GTK_MESSAGE_WARNING ou GTK_MESSAGE_ERROR
-static void OinfoMessage (char *message, GtkMessageType typeMessage) {
-   GtkWidget* dialogBox = gtk_dialog_new_with_buttons (message, GTK_WINDOW (window), GTK_DIALOG_MODAL, "_OK", GTK_RESPONSE_ACCEPT, NULL);
-   g_signal_connect_swapped (dialogBox, "response", G_CALLBACK (gtk_window_destroy), dialogBox);
-   gtk_window_present (GTK_WINDOW (dialogBox));
+/*! Confirm Box OK Cancel. Launch of callBack if OK */
+static void confirmBox (char *line, void (*callBack)()) {
+   GtkAlertDialog *confirmBox = gtk_alert_dialog_new ("%s", line);
+   const char *labels[] = { "_OK", "_Cancel", NULL};
+   gtk_alert_dialog_set_buttons (GTK_ALERT_DIALOG(confirmBox), labels);
+   gtk_alert_dialog_choose (confirmBox, GTK_WINDOW (window), NULL, callBack, NULL);
 }
-*/
+
+/*! draw info message GTK_MESSAGE_INFO, GTK_MESSAGE_WARNING ou GTK_MESSAGE_ERROR */
+static void infoMessage (char *message, GtkMessageType typeMessage) {
+   GtkAlertDialog *alertBox = gtk_alert_dialog_new ("%s", message);
+   gtk_alert_dialog_show (alertBox, GTK_WINDOW (window));
+}
 
 /* destroy window when OK is clicked */
 static void on_ok_button_clicked(GtkWidget *widget, gpointer window) {
@@ -287,7 +296,7 @@ static void on_ok_button_clicked(GtkWidget *widget, gpointer window) {
 }
 
 /*! draw info message GTK_MESSAGE_INFO, GTK_MESSAGE_WARNING ou GTK_MESSAGE_ERROR */
-static void infoMessage (char *message, GtkMessageType typeMessage) {
+static void NinfoMessage (char *message, GtkMessageType typeMessage) {
    GtkWidget *infoWindow = gtk_application_window_new (app);
    gtk_widget_set_size_request(infoWindow, 100, -1);
 
@@ -318,6 +327,86 @@ static void infoMessage (char *message, GtkMessageType typeMessage) {
    gtk_window_present (GTK_WINDOW (infoWindow));
 }
 
+/*! callback for entryBox change */
+static void entryBoxChange (GtkEditable *editable, gpointer user_data) {
+   gchar *name = (gchar *) user_data;
+   const gchar *text = gtk_editable_get_text (editable);
+   g_strlcpy (name, text, MAX_SIZE_BUFFER);
+   printf ("%s\n", name);
+}
+
+/* action when Cancel is clicked */
+static void onCancelButtonClicked (GtkWidget *widget, gpointer theWindow) {
+   gtk_window_destroy (GTK_WINDOW (theWindow));
+}
+
+/*! OK Cancel Line. Launch func if OK */
+static GtkWidget *OKCancelLine (void (*func)(), gpointer theWindow) {
+   GtkWidget *hBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+   GtkWidget *OKbutton = gtk_button_new_with_label ("OK");
+   GtkWidget *cancelButton = gtk_button_new_with_label ("Cancel");
+   gtk_box_append (GTK_BOX(hBox), OKbutton);
+   gtk_box_append (GTK_BOX(hBox), cancelButton);
+   g_signal_connect (OKbutton, "clicked", G_CALLBACK (func), theWindow);
+   g_signal_connect (cancelButton, "clicked", G_CALLBACK (onCancelButtonClicked), theWindow);
+   return hBox;
+}
+
+/*! draw info message GTK_MESSAGE_INFO, GTK_MESSAGE_WARNING ou GTK_MESSAGE_ERROR */
+static void entryBox (char *title, const char *message, char *strValue, void  (*callBack) ()) {
+   GtkWidget *entryWindow = gtk_application_window_new (app);
+   gtk_window_set_title (GTK_WINDOW (entryWindow), title);
+   
+   GtkWidget *vBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+   gtk_window_set_child (GTK_WINDOW (entryWindow), vBox);
+   
+   GtkWidget *hBox0 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+   GtkWidget *label = gtk_label_new (message);
+
+   GtkEntryBuffer *buffer = gtk_entry_buffer_new (strValue, -1);
+   GtkWidget *entryValue = gtk_entry_new_with_buffer (buffer);
+   int min_width = MAX (300, strlen (strValue) * 10);
+   gtk_widget_set_size_request (entryValue, min_width, -1);
+
+   gtk_box_append (GTK_BOX(hBox0), label);
+   gtk_box_append (GTK_BOX(hBox0), entryValue);
+
+   GtkWidget *hBox1 = OKCancelLine (callBack, entryWindow);
+
+   g_signal_connect (entryValue, "changed", G_CALLBACK (entryBoxChange), strValue);
+   gtk_box_append (GTK_BOX(vBox), hBox0);
+   gtk_box_append (GTK_BOX(vBox), hBox1);
+
+   gtk_window_present (GTK_WINDOW (entryWindow));
+}
+
+/* Dialog box for file selection */
+GtkFileDialog* selectFile (char * title, char * dirName, char *nameFilter, char *strFilter0, char*strFilter1) {
+   char directory [MAX_SIZE_DIR_NAME];
+
+   GtkFileDialog* fileDialog = gtk_file_dialog_new ();
+   gtk_file_dialog_set_title (fileDialog, title);
+
+   // initial folder   
+   snprintf (directory, sizeof (directory), "%s%s", par.workingDir, dirName);
+   GFile *gDirectory = g_file_new_for_path (directory);
+   gtk_file_dialog_set_initial_folder (fileDialog, gDirectory);
+   g_object_unref (gDirectory);
+
+   // filter
+   GtkFileFilter *filter = gtk_file_filter_new();
+   gtk_file_filter_set_name (filter, nameFilter);
+   gtk_file_filter_add_pattern (filter, strFilter0);
+   gtk_file_filter_add_pattern (filter, strFilter1);
+
+   GListStore *filter_list = g_list_store_new (GTK_TYPE_FILE_FILTER);
+   g_list_store_append (filter_list, filter);
+
+   gtk_file_dialog_set_filters (fileDialog, (GListModel *) filter_list);
+   g_object_unref (filter);
+   
+   return fileDialog;
+}
 
 /*! for remote files, no buttons 
 static void viewer (const char *url) {
@@ -335,7 +424,7 @@ static void viewer (const char *url) {
    webkit_web_view_load_uri (WEBKIT_WEB_VIEW(webView), url);
    gtk_window_set_child (GTK_WINDOW (viewerWindow), (GtkWidget *) webView);
    gtk_window_present (GTK_WINDOW (viewerWindow));
-} */
+}*/
 
 
 /*! open windy
@@ -1525,7 +1614,8 @@ static void statusBarUpdate () {
       dispZone.zoom,
       (gribRequestRunning || readGribRet == -1) ? "WAITING GRIB" : "");
 
-   gtk_statusbar_push(GTK_STATUSBAR(statusbar), context_id, sStatus);
+   gtk_label_set_text (GTK_LABEL (statusbar), sStatus);
+   // gtk_statusbar_push(GTK_STATUSBAR(statusbar), context_id, sStatus);
 }
 
 /*! draw scale, scaleLen is for one degree. Modified if not ad hoc */
@@ -1979,43 +2069,34 @@ static void on_draw_polar_event (GtkDrawingArea *area, cairo_t *cr, int width, i
       gtk_widget_queue_draw (polar_drawing_area);
 }
 
-/*! find index in polar to draw */
-static void on_filter_changed (GtkComboBox *widget, gpointer user_data) {
-   GtkWidget *filter_combo = (GtkWidget *) user_data;
-   selectedPol = gtk_combo_box_get_active(GTK_COMBO_BOX(filter_combo));
+/*! callback DropDown to find index in polar to draw */
+static void cbPolarFilterDropDown (GObject *dropDown, GParamSpec *pspec, gpointer user_data) {
+   selectedPol = gtk_drop_down_get_selected (GTK_DROP_DOWN(dropDown));
+   printf ("polar Filter index: %d\n", selectedPol);
    if (polar_drawing_area != NULL)
       gtk_widget_queue_draw (polar_drawing_area);
 }
 
 /*! combo filter zone for polar */
 static GtkWidget *create_filter_combo (int type) {
-   char str [MAX_SIZE_LINE];
-   GtkTreeIter iter;
-   // Create model for list
-   GtkListStore *filter_store = gtk_list_store_new(1, G_TYPE_STRING);
-   // printf ("in create_filter_combo\n");
+   printf ("create_filter_combo\n");
    PolMat *ptMat = (type == WAVE_POLAR) ? &wavePolMat : &polMat; 
-   
-   // add filters to model
-   gtk_list_store_append (filter_store, &iter);
-   gtk_list_store_set (filter_store, &iter, 0, "All", -1);  
+   char str [MAX_SIZE_LINE];
+
+   // Create GlistStore to store strings
+   GtkStringList *string_list = gtk_string_list_new (NULL);
+   gtk_string_list_append (string_list, "All");
    for (int c = 1; c < ptMat->nCol; c++) {
-      gtk_list_store_append (filter_store, &iter);
       snprintf (str, sizeof (str), "%.2lf %s", ptMat->t [0][c], (type == WAVE_POLAR) ? "m. Wave Height" : "Knots. Wind Speed.");
-      gtk_list_store_set (filter_store, &iter, 0, str, -1);
+      gtk_string_list_append (string_list, str);
    }
+   // Create dropdown
+   GtkWidget *dropDown = gtk_drop_down_new(G_LIST_MODEL(string_list), NULL);
+   gtk_drop_down_set_selected(GTK_DROP_DOWN(dropDown), 0);
+   g_signal_connect(dropDown, "notify::selected", G_CALLBACK(cbPolarFilterDropDown), NULL);
 
-   // Create combo box
-   GtkWidget *filter_combo = gtk_combo_box_new_with_model(GTK_TREE_MODEL(filter_store));
-
-   // Create and configre rendered to display text
-   GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
-   gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(filter_combo), renderer, TRUE);
-   gtk_cell_layout_set_attributes(GTK_CELL_LAYOUT(filter_combo), renderer, "text", 0, NULL);
-   g_signal_connect(G_OBJECT(filter_combo), "changed", G_CALLBACK(on_filter_changed), filter_combo);
-   // Select first line as default
-   gtk_combo_box_set_active(GTK_COMBO_BOX(filter_combo), 0);
-   return filter_combo;
+   g_object_unref(string_list);
+   return dropDown;
 }
 
 /*! display polar matrix */
@@ -2107,7 +2188,7 @@ static void polarDraw () {
       return;
    }
 
-   // Créer la fenêtre principale
+   // Main window creation
    GtkWidget *polWindow = gtk_application_window_new (app);
    gtk_window_set_default_size(GTK_WINDOW (polWindow), POLAR_WIDTH, POLAR_HEIGHT);
    strncat (line, (polarType == WAVE_POLAR) ? par.wavePolFileName : par.polarFileName, MAX_SIZE_LINE - strlen (line));
@@ -2115,11 +2196,11 @@ static void polarDraw () {
    g_signal_connect (window, "destroy", G_CALLBACK(on_parent_destroy), polWindow);
    g_signal_connect (G_OBJECT(polWindow), "destroy", G_CALLBACK(gtk_window_destroy), NULL);
 
-   // Créer un conteneur de type boîte
+   // vertical box container creation
    GtkWidget *vBox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 5);
    gtk_window_set_child (GTK_WINDOW (polWindow), vBox);
    
-   // Créer une zone de dessin
+   // drawing area creation
    polar_drawing_area = gtk_drawing_area_new ();
    gtk_widget_set_hexpand (polar_drawing_area, TRUE);
    gtk_widget_set_vexpand (polar_drawing_area, TRUE);
@@ -2146,7 +2227,7 @@ static void polarDraw () {
    segmentOrBezier = (ptMat->nLine < MIN_POINT_FOR_BEZIER) ? SEGMENT : BEZIER;
    gtk_check_button_set_active ((GtkCheckButton *) ((segmentOrBezier == SEGMENT) ? segmentRadio : bezierRadio), TRUE);
 
-   // Créer le widget GtkScale
+   // GtkScale widget creation
   
    int maxScale = ptMat->t[0][ptMat->nCol-1];      // max value of wind or waves
    // printf ("maxScale: %d\n", maxScale);
@@ -2167,18 +2248,21 @@ static void polarDraw () {
    gtk_box_append (GTK_BOX (hBox), scale);
    gtk_box_append (GTK_BOX (hBox), scaleLabel);
 
-   // Création de la barre d'état
-   GtkWidget *polStatusbar = gtk_statusbar_new ();
-   guint context_id = gtk_statusbar_get_context_id (GTK_STATUSBAR(polStatusbar), "Statusbar");
+   GtkWidget *separator = gtk_separator_new (GTK_ORIENTATION_HORIZONTAL);
+
+   // status bar creation 
    snprintf (sStatus, sizeof (sStatus), "nCol: %2d   nLig: %2d   max: %2.2lf", \
       ptMat->nCol, ptMat->nLine, maxValInPol (ptMat));
-   gtk_statusbar_push (GTK_STATUSBAR (polStatusbar), context_id, sStatus);
+   GtkWidget *polStatusbar = gtk_label_new (sStatus);
+
    gtk_box_append (GTK_BOX (vBox), hBox);
    gtk_box_append (GTK_BOX (vBox), polar_drawing_area);
+   gtk_box_append (GTK_BOX (vBox), separator);
    gtk_box_append (GTK_BOX (vBox), polStatusbar);
 
    if (polar_drawing_area != NULL)
       gtk_widget_queue_draw (polar_drawing_area);
+
    gtk_window_present (GTK_WINDOW (polWindow));
 }
 
@@ -2204,30 +2288,31 @@ static double getDepartureTimeInHour (struct tm *start) {
    return (startTime - theTime0)/3600.0;                       // calculated in hours
 } 
 
-/*! Response when calendar choice done */
-static void calendarResponse (GtkDialog *dialog, gint response_id, gpointer user_data) {
+/*! when OK in calendar is clicked */
+static void on_ok_button_cal_clicked(GtkWidget *widget, gpointer window) {
+    gtk_window_destroy(GTK_WINDOW(window));
+    // printf ("startInfo before: %s, startTime: %lf\n", asctime (&startInfo), par.startTimeInHours);
+    par.startTimeInHours = getDepartureTimeInHour (&startInfo); 
+    // printf ("startInfo after: %s, startTime: %lf\n", asctime (&startInfo), par.startTimeInHours);
+    if ((par.startTimeInHours < 0) || (par.startTimeInHours > zone.timeStamp [zone.nTimeStamp -1])) {
+       gtk_window_destroy (GTK_WINDOW (window));
+       infoMessage ("start time should be within grib window time !", GTK_MESSAGE_WARNING);
+    }
+    else {
+       route.ret = 0;             // mean routing not terminated
+       g_thread_new ("routingLaunch", routingLaunch, NULL); // launch routing
+       routingTimeout = g_timeout_add (ROUTING_TIME_OUT, routingCheck, NULL);
+       spinner ("Isochrone building", " ");
+    }
+}
+
+/*! when now in calendar is clicked */
+static void on_now_button_cal_clicked (GtkWidget *widget, gpointer window) {
    time_t currentTime = time (NULL);
    struct tm *gmtTime = gmtime (&currentTime);
-   if (response_id == -1) {      // select left button with current date
-      startInfo = *gmtTime;
-   }
-        
-   if ((response_id == GTK_RESPONSE_ACCEPT) || (response_id == -1)) {
-      // printf ("startInfo before: %s, startTime: %lf\n", asctime (&startInfo), par.startTimeInHours);
-      par.startTimeInHours = getDepartureTimeInHour (&startInfo); 
-      // printf ("startInfo after: %s, startTime: %lf\n", asctime (&startInfo), par.startTimeInHours);
-      if ((par.startTimeInHours < 0) || (par.startTimeInHours > zone.timeStamp [zone.nTimeStamp -1])) {
-         gtk_window_destroy (GTK_WINDOW (dialog));
-         infoMessage ("start time should be within grib window time !", GTK_MESSAGE_WARNING);
-      }
-      else {
-         route.ret = 0;             // mean routing not terminated
-         g_thread_new ("routingLaunch", routingLaunch, NULL); // launch routing
-         routingTimeout = g_timeout_add (ROUTING_TIME_OUT, routingCheck, NULL);
-         spinner ("Isochrone building", " ");
-      }
-   }
-   gtk_window_destroy (GTK_WINDOW (dialog));
+   startInfo = *gmtTime;
+   gtk_window_destroy(GTK_WINDOW(window));
+   on_ok_button_cal_clicked (widget, window);
 }
 
 /*! year month date for fCalendar */
@@ -2250,22 +2335,18 @@ static void fCalendar (struct tm *start) {
    snprintf (str, sizeof (str), "%d/%02d/%02d %02d:%02d UTC", gmtTime->tm_year + 1900, gmtTime->tm_mon + 1, 
       gmtTime->tm_mday, gmtTime->tm_hour, gmtTime->tm_min);
 
-   GtkWidget* dialogBox = gtk_dialog_new_with_buttons("Pick a Date", GTK_WINDOW (window), GTK_DIALOG_MODAL, 
-                       str, GTK_RESPONSE_NONE, "OK", GTK_RESPONSE_ACCEPT, "Cancel", GTK_RESPONSE_CANCEL, NULL);
-
-   GtkWidget *content_area = gtk_dialog_get_content_area (GTK_DIALOG(dialogBox));
-
-   g_signal_connect (dialogBox, "destroy", G_CALLBACK (gtk_window_destroy), NULL);
-   g_signal_connect_swapped (dialogBox, "response", G_CALLBACK (calendarResponse), dialogBox);
-
+   GtkWidget *calWindow = gtk_application_window_new (app);
+   gtk_window_set_title (GTK_WINDOW (calWindow), "Pick a Date");
    GtkWidget *vBox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 5);
+   gtk_window_set_child (GTK_WINDOW (calWindow), (GtkWidget *) vBox);
+
    GtkWidget *calendar = gtk_calendar_new();
    GDateTime *date = g_date_time_new_utc (start->tm_year + 1900, start->tm_mon + 1, start->tm_mday, 0, 0, 0);
    gtk_calendar_select_day (GTK_CALENDAR(calendar), date);
    g_signal_connect(calendar, "day-selected", G_CALLBACK (dateUpdate), NULL);
    g_date_time_unref (date);
 
-   // Créer les libellés et les boutons de sélection
+   // Create labels and selection buttons
    GtkWidget *labelHour = gtk_label_new("Hour");
    GtkWidget *spinHour = gtk_spin_button_new_with_range(0, 23, 1);
    gtk_spin_button_set_value(GTK_SPIN_BUTTON(spinHour), start->tm_hour);
@@ -2276,18 +2357,30 @@ static void fCalendar (struct tm *start) {
    gtk_spin_button_set_value(GTK_SPIN_BUTTON(spinMinutes), start->tm_min);
    g_signal_connect (spinMinutes, "value_changed", G_CALLBACK (intSpinUpdate), &start->tm_min);
 
-   // Créer une boîte de disposition horizontale
-   GtkWidget *hBox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 5);
-   gtk_box_append (GTK_BOX (hBox), labelHour);
-   gtk_box_append (GTK_BOX (hBox), spinHour);
-   gtk_box_append (GTK_BOX (hBox), labelMinutes);
-   gtk_box_append (GTK_BOX (hBox), spinMinutes);
+   // Create horizontal box
+   GtkWidget *hBox0 = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 5);
+   gtk_box_append (GTK_BOX (hBox0), labelHour);
+   gtk_box_append (GTK_BOX (hBox0), spinHour);
+   gtk_box_append (GTK_BOX (hBox0), labelMinutes);
+   gtk_box_append (GTK_BOX (hBox0), spinMinutes);
+   
+   // Create last horizontal box
+   GtkWidget *hBox1 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+   GtkWidget *nowButton = gtk_button_new_with_label (str);
+   GtkWidget *OKbutton = gtk_button_new_with_label ("OK");
+   GtkWidget *cancelButton = gtk_button_new_with_label ("Cancel");
+   gtk_box_append (GTK_BOX(hBox1), nowButton);
+   gtk_box_append (GTK_BOX(hBox1), OKbutton);
+   gtk_box_append (GTK_BOX(hBox1), cancelButton);
 
    gtk_box_append (GTK_BOX (vBox), calendar);
-   gtk_box_append (GTK_BOX (vBox), hBox);
+   gtk_box_append (GTK_BOX (vBox), hBox0);
+   gtk_box_append (GTK_BOX (vBox), hBox1);
+   g_signal_connect (nowButton, "clicked", G_CALLBACK (on_now_button_cal_clicked), calWindow);
+   g_signal_connect (OKbutton, "clicked", G_CALLBACK (on_ok_button_cal_clicked), calWindow);
+   g_signal_connect (cancelButton, "clicked", G_CALLBACK (onCancelButtonClicked), calWindow);
 
-   gtk_box_append (GTK_BOX (content_area), vBox);
-   gtk_window_present (GTK_WINDOW (dialogBox));
+   gtk_window_present (GTK_WINDOW (calWindow));
 }
 
 /*! one line for niceReport () */
@@ -2516,7 +2609,6 @@ static void niceReport (SailRoute *route, double computeTime) {
    snprintf (line, sizeof (line), "%.2lf\n", route->totDist/route->duration);
    lineReport (grid, 20, "utilities-system-monitor-symbolic", "Mean Speed Over Ground", line);
 
-
    // setup drawing area for stat
    GtkWidget *hBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
 
@@ -2613,20 +2705,18 @@ static gboolean bestDepartureCheck (gpointer data) {
    return TRUE;
 }
 
-/*! action when choose departure request box */
-static void chooseDepartureResponse (GtkDialog *dialog, gint response_id, gpointer user_data) {
-   printf ("Response departurep: %d %d\n", response_id, GTK_RESPONSE_ACCEPT);
-   if (response_id == GTK_RESPONSE_ACCEPT) {
-      chooseDeparture.ret = RUNNING;             // mean not terminated
-      simulationReportExist = false;
-      g_thread_new("chooseDepartureLaunch", bestTimeDeparture, NULL); // launch routing
-      routingTimeout = g_timeout_add (ROUTING_TIME_OUT, bestDepartureCheck, NULL);
-      spinner ("Simulation Running", "It can take a while !!! ");
-   }
-   gtk_window_destroy (GTK_WINDOW (dialog));
+/*! when OK in departure box is clicked */
+static void on_ok_button_dep_clicked (GtkWidget *widget, gpointer theWindow) {
+   printf ("Response departurep\n");;
+   chooseDeparture.ret = RUNNING;             // mean not terminated
+   simulationReportExist = false;
+   g_thread_new ("chooseDepartureLaunch", bestTimeDeparture, NULL); // launch routing
+   routingTimeout = g_timeout_add (ROUTING_TIME_OUT, bestDepartureCheck, NULL);
+   spinner ("Simulation Running", "It can take a while !!! ");
+   gtk_window_destroy(GTK_WINDOW (theWindow));
 }
 
-/*! launch all routing in ordor to choose best departure time */
+/*! launch all routing in order to choose best departure time */
 static void on_choose_departure_button_clicked (GtkWidget *widget, gpointer data) {
    if (! isInZone (par.pOr.lat, par.pOr.lon, &zone) && (par.constWindTws == 0)) {
      infoMessage ("Origin point not in wind zone", GTK_MESSAGE_WARNING);
@@ -2640,17 +2730,16 @@ static void on_choose_departure_button_clicked (GtkWidget *widget, gpointer data
    chooseDeparture.tBegin = 0;
    chooseDeparture.tEnd = zone.timeStamp [zone.nTimeStamp - 1];
    
-   // Création de la boîte de dialogue ATT Global variable
-   GtkWidget *dialogBox = gtk_dialog_new_with_buttons ("Simulation", \
-      GTK_WINDOW(window), GTK_DIALOG_MODAL, "OK", GTK_RESPONSE_ACCEPT, "Cancel", GTK_RESPONSE_CANCEL, NULL);
+   GtkWidget *depWindow = gtk_application_window_new (app);
+   gtk_window_set_title (GTK_WINDOW (depWindow), "Simulation");
 
-   GtkWidget *content_area = gtk_dialog_get_content_area (GTK_DIALOG (dialogBox));
-   //gtk_widget_set_size_request (dialogiBox, 400, -1);
+   GtkWidget *vBox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 5);
+   gtk_window_set_child (GTK_WINDOW (depWindow), (GtkWidget *) vBox);
 
    GtkWidget *grid = gtk_grid_new ();   
    gtk_grid_set_column_spacing (GTK_GRID(grid), 10);
    gtk_grid_set_row_spacing (GTK_GRID(grid), 5);
-   
+
    GtkWidget *label_time_step = gtk_label_new("Time Step");
    GtkWidget *spin_button_time_step = gtk_spin_button_new_with_range (1, 12, 1);
    gtk_spin_button_set_value (GTK_SPIN_BUTTON (spin_button_time_step), chooseDeparture.tStep);
@@ -2674,10 +2763,13 @@ static void on_choose_departure_button_clicked (GtkWidget *widget, gpointer data
    gtk_label_set_xalign(GTK_LABEL (label_maxi), 0);
    gtk_grid_attach(GTK_GRID (grid), label_maxi,       0, 2, 1, 1);
    gtk_grid_attach(GTK_GRID (grid), spin_button_maxi, 1, 2, 1, 1);
+
+   GtkWidget *hBox = OKCancelLine (on_ok_button_dep_clicked, depWindow);
+
+   gtk_box_append (GTK_BOX (vBox), grid);
+   gtk_box_append (GTK_BOX (vBox), hBox);
    
-   g_signal_connect_swapped (dialogBox, "response", G_CALLBACK (chooseDepartureResponse), dialogBox);
-   gtk_box_append(GTK_BOX (content_area), grid);
-   gtk_window_present (GTK_WINDOW (dialogBox));
+   gtk_window_present (GTK_WINDOW (depWindow));
 }
 
 /*! Callback for stop button */
@@ -2820,49 +2912,29 @@ static void historyReset  () {
    gtk_widget_queue_draw(drawing_area);
 }
 
-/*! Response for URL change */
-static void newTraceResponse (GtkDialog *dialog, gint response_id, gpointer user_data) {
+/*! Response for new Trace OK */
+static void newTraceResponse (GtkWidget *widget, gpointer entryWindow) {
    FILE *f;
-   if (response_id == GTK_RESPONSE_ACCEPT) {
-      printf ("Trace name OK: %s\n", traceName);
-      if ((f = fopen (traceName, "r")) != NULL) {// check if file already exist
-         infoMessage ("This name already exist ! Retry...", GTK_MESSAGE_ERROR );
-         fclose (f);
-      }
-      else {
-         strncpy (par.traceFileName, traceName, MAX_SIZE_FILE_NAME);
-      }
+   printf ("Trace name OK: %s\n", traceName);
+   if ((f = fopen (traceName, "r")) != NULL) {// check if file already exist
+      infoMessage ("In newTraceResponse: This name already exist ! Retry...", GTK_MESSAGE_ERROR );
+      fclose (f);
    }
-   gtk_window_destroy (GTK_WINDOW (dialog));
+   else {
+      strncpy (par.traceFileName, traceName, MAX_SIZE_FILE_NAME);
+      if ((f = fopen (traceName, "w")) == NULL) 
+         infoMessage ("In NewTraceResponse: Impossible to Write", GTK_MESSAGE_ERROR );
+      else
+         fclose (f);
+   }
+   gtk_window_destroy (GTK_WINDOW (entryWindow));
    gtk_widget_queue_draw (drawing_area);
-}
-
-/*! callback for newTrace change */
-static void traceChange (GtkEditable *editable, gpointer user_data) {
-   gchar *name = (gchar *) user_data;
-   const gchar *text = gtk_editable_get_text (editable);
-   g_strlcpy (name, text, MAX_SIZE_BUFFER);
-   printf ("Trace name: %s\n", name);
 }
 
 /*! new Trace */
 static void newTrace () {
    strncpy (traceName, par.traceFileName, MAX_SIZE_FILE_NAME);
-   GtkWidget *dialogBox = gtk_dialog_new_with_buttons("New Trace", GTK_WINDOW(window), GTK_DIALOG_MODAL, "_OK", GTK_RESPONSE_ACCEPT,
-                                           "_Cancel", GTK_RESPONSE_CANCEL, NULL);
-   GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialogBox));
-
-   int min_width = MAX (300, strlen (traceName) * 10);
-   gtk_widget_set_size_request(dialogBox, min_width, -1);
-   GtkEntryBuffer *buffer = gtk_entry_buffer_new (traceName, -1);
-   GtkWidget *trace_entry = gtk_entry_new_with_buffer (buffer);
-
-   // g_signal_connect(dialogBox, "destroy", G_CALLBACK(urlWindowDestroy), NULL);
-   g_signal_connect_swapped (dialogBox, "response", G_CALLBACK (newTraceResponse), dialogBox);
-   g_signal_connect (trace_entry, "changed", G_CALLBACK (traceChange), traceName);
-
-   gtk_box_append(GTK_BOX(content_area), trace_entry);
-   gtk_window_present (GTK_WINDOW (dialogBox));
+   entryBox ("New Trace", "Trace: ", traceName, newTraceResponse);
 }
 
 /*! Edit trace  */
@@ -3004,43 +3076,25 @@ static void traceDump () {
    gtk_window_present (GTK_WINDOW (traceWindow));
 }
 
-/*! callback for openTrace */
-static void on_open_trace_response (GtkDialog *dialog, int response) {
-   if (response == GTK_RESPONSE_ACCEPT) {
-      GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
-      g_autoptr(GFile) file = gtk_file_chooser_get_file (chooser);
-      if (file != NULL) {
-         gchar *fileName = g_file_get_path(file);
-         if (fileName != NULL) {
-            strncpy (par.traceFileName, fileName, MAX_SIZE_FILE_NAME); 
-            g_free(fileName);
-            traceReport ();
-            gtk_widget_queue_draw (drawing_area);
-         }
-     }
+/* call back for openSecnario */
+void cbOpenTrace (GObject* source_object, GAsyncResult* res, gpointer data) {
+   GFile* file = gtk_file_dialog_open_finish ((GtkFileDialog *) source_object, res, NULL);
+   if (file != NULL) {
+      gchar *fileName = g_file_get_path(file);
+      printf ("File selected: %s\n", fileName);
+      if (fileName != NULL) {
+         strncpy (par.traceFileName, fileName, MAX_SIZE_FILE_NAME); 
+         g_free(fileName);
+         traceReport ();
+         gtk_widget_queue_draw (drawing_area);
+      }
    }
-   gtk_window_destroy (GTK_WINDOW (dialog));
 }
 
 /*! Select trace file and read trace file */
 static void openTrace () {
-   char directory [MAX_SIZE_DIR_NAME];
-   snprintf (directory, sizeof (directory), "%strace", par.workingDir);
-   GtkWidget *dialog = gtk_file_chooser_dialog_new ("Open Trace", GTK_WINDOW (window), GTK_FILE_CHOOSER_ACTION_OPEN,
-                       "_Cancel", GTK_RESPONSE_CANCEL, "_Open", GTK_RESPONSE_ACCEPT, NULL);
-
-   GFile *gDirectory = g_file_new_for_path(directory);
-   gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog), gDirectory, NULL);
-   g_object_unref(gDirectory);
-
-   GtkFileFilter *filter = gtk_file_filter_new();
-   gtk_file_filter_set_name(filter, "Trace Files");
-   gtk_file_filter_add_pattern(filter, "*.csv");
-   gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
-   g_object_unref (filter);
-
-   gtk_window_present (GTK_WINDOW (dialog));
-   g_signal_connect (dialog, "response", G_CALLBACK (on_open_trace_response), NULL);
+   GtkFileDialog* fileDialog = selectFile ("Open Trace", "trace", "Trace Files", "*.csv", "*.csv");
+   gtk_file_dialog_open (fileDialog, GTK_WINDOW (window), NULL, cbOpenTrace, NULL);
 }
 
 /*! display Points of Interest information */
@@ -3497,14 +3551,16 @@ static void parInfo () {
 }
 
 /*! Call back point of interest */
-static void cbEditPoi (GtkDialog *dialog, gint response_id, gpointer user_data) {
-   if (response_id == GTK_RESPONSE_ACCEPT) {
+static void cbPoiEdit (GObject* source_object, GAsyncResult* res, gpointer data) {
+   int responseId = gtk_alert_dialog_choose_finish ((GtkAlertDialog*) source_object , res, NULL);
+   printf ("poiEdit Call Back : %d\n", responseId);  
+   if (responseId == MY_RESPONSE_OK) {
+      printf ("poiEdit Call Back OK\n");
       nPoi = 0;
       nPoi = readPoi (par.poiFileName);
       nPoi += readPoi (par.portFileName);
       gtk_widget_queue_draw (drawing_area);
    }
-   gtk_window_destroy (GTK_WINDOW (dialog));
 }
 
 /*! edit poi or port */
@@ -3519,10 +3575,7 @@ static void poiEdit (GSimpleAction *action, GVariant *parameter, gpointer *data)
    }
    pclose (fs);
    snprintf (line, sizeof (line), "Confirm loading: %s", (comportement == POI_SEL) ? par.poiFileName: par.portFileName);
-   GtkWidget *dialogBox = gtk_dialog_new_with_buttons (line, \
-         GTK_WINDOW(window), GTK_DIALOG_MODAL, "OK", GTK_RESPONSE_ACCEPT, "Cancel", GTK_RESPONSE_CANCEL, NULL);
-   g_signal_connect_swapped (dialogBox, "response", G_CALLBACK (cbEditPoi), dialogBox);
-   gtk_window_present (GTK_WINDOW (dialogBox));
+   confirmBox (line, cbPoiEdit);
 }
 
 /*!  Function to draw the speedometer */
@@ -3921,14 +3974,6 @@ static void helpInfo () {
    gtk_window_present (GTK_WINDOW (p_about_dialog)); // ATT GTK4 CHANGE
 }
 
-/*! callback for URL change */
-static void url_entry_changed (GtkEditable *editable, gpointer user_data) {
-   gchar *url = (gchar *) user_data;
-   const gchar *text = gtk_editable_get_text (editable);
-   g_strlcpy (url, text, MAX_SIZE_BUFFER);
-   printf ("url: %s\n", url);
-}
-
 /*! check if readGrib is terminated (wind) */
 static gboolean readGribCheck (gpointer data) {
    // printf ("readGribCheck\n");
@@ -3987,7 +4032,7 @@ static void loadGribFile (int type, char *fileName) {
 }
 
 /*! getMeteoConsult */
-void * getMeteoConsult (void *data) {
+void *getMeteoConsult (void *data) {
    if (! curlGet (urlRequest.url, urlRequest.outputFileName)) {
       readGribRet = 0;
       return NULL;
@@ -4000,19 +4045,16 @@ void * getMeteoConsult (void *data) {
 }
 
 /*! Response for URL change */
-static void urlWindowResponse (GtkDialog *dialog, gint response_id, gpointer user_data) {
-   printf ("Response URL win: %d %d\n", response_id, GTK_RESPONSE_ACCEPT);
+static void urlResponse (GtkWidget *widget, gpointer entryWindow) {
    printf ("urlRequest.url: %s\n", urlRequest.url);
    printf ("urlRequest.outputFileName: %s\n", urlRequest.outputFileName);
-   if (response_id == GTK_RESPONSE_ACCEPT) {
-      strncat (urlRequest.outputFileName, strrchr (urlRequest.url, '/'), MAX_SIZE_LINE - strlen (urlRequest.outputFileName));
-      printf ("urlRequest.outputFileName: %s\n", urlRequest.outputFileName);
-      readGribRet = -1; // Global variable
-      g_thread_new("readGribThread", getMeteoConsult, NULL);
-      spinner ("Grib meteoConsultDownload and decoding", " ");
-      gribReadTimeout = g_timeout_add (READ_GRIB_TIME_OUT, readGribCheck, NULL);
-   }
-   gtk_window_destroy (GTK_WINDOW (dialog));
+   strncat (urlRequest.outputFileName, strrchr (urlRequest.url, '/'), MAX_SIZE_LINE - strlen (urlRequest.outputFileName));
+   printf ("urlRequest.outputFileName: %s\n", urlRequest.outputFileName);
+   readGribRet = -1; // Global variable
+   g_thread_new("readGribThread", getMeteoConsult, NULL);
+   spinner ("Grib meteoConsultDownload and decoding", " ");
+   gribReadTimeout = g_timeout_add (READ_GRIB_TIME_OUT, readGribCheck, NULL);
+   gtk_window_destroy (GTK_WINDOW (entryWindow));
 }
    
 /*! build meteoconsult url then download it and load the grib file */ 
@@ -4023,22 +4065,7 @@ static void urlDownloadGrib (gpointer user_data) {
    snprintf (urlRequest.outputFileName, sizeof (urlRequest.outputFileName), (typeFlow == WIND) ? "%sgrib": "%scurrentgrib", par.workingDir);
    buildMeteoUrl (urlRequest.urlType, index, urlRequest.url);
    printf ("url: %s\n", urlRequest.url);
-
-   GtkWidget *dialogBox = gtk_dialog_new_with_buttons ("Meteo consult URL", GTK_WINDOW(window), GTK_DIALOG_MODAL, "_OK", GTK_RESPONSE_ACCEPT,
-                                           "_Cancel", GTK_RESPONSE_CANCEL, NULL);
-   GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialogBox));
-
-   int min_width = MAX (300, strlen(urlRequest.url) * 10);
-   gtk_widget_set_size_request(dialogBox, min_width, -1);
-
-   GtkEntryBuffer *buffer = gtk_entry_buffer_new(urlRequest.url, -1);
-   GtkWidget *url_entry = gtk_entry_new_with_buffer(buffer);
-
-   g_signal_connect_swapped(dialogBox, "response", G_CALLBACK (urlWindowResponse), dialogBox);
-   g_signal_connect(url_entry, "changed", G_CALLBACK (url_entry_changed), urlRequest.url);
-
-   gtk_box_append(GTK_BOX(content_area), url_entry);
-   gtk_window_present (GTK_WINDOW (dialogBox));
+   entryBox ("MeteoConsult", "URL: ", urlRequest.url, urlResponse);
 }
 
 /*! update NOAA URL */
@@ -4091,33 +4118,32 @@ static void *getGribNoaaAll (void *user_data) {
 }
 
 /*! Manage response to NOAA dialog box */
-static void on_noaa_dialog_response (GtkDialog *dialog, gint response_id, gpointer user_data) {
-   if (response_id == GTK_RESPONSE_ACCEPT) {
-      DialogData *data = (DialogData *)user_data;
-      readGribRet = -1; // Global variable
-      g_thread_new("readGribThread", getGribNoaaAll, data);
-      spinner ("Grib NOAA Download and decoding", " ");
-      gribReadTimeout = g_timeout_add (READ_GRIB_TIME_OUT, readGribCheck, NULL);
-   }
-   gtk_window_destroy(GTK_WINDOW(dialog));
+static void on_ok_button_noaa_clicked (GtkWidget *widget, gpointer theWindow) {
+   readGribRet = -1; // Global variable
+   g_thread_new("readGribThread", getGribNoaaAll, &noaaData);
+   spinner ("Grib NOAA Download and decoding", " ");
+   gribReadTimeout = g_timeout_add (READ_GRIB_TIME_OUT, readGribCheck, NULL);
+   gtk_window_destroy (GTK_WINDOW (theWindow));
 }
 
 /*! Dialog box to Manage NOAA URL and lauch downloadinf*/
 static void gribNoaa (GSimpleAction *action, GVariant *parameter, gpointer *userData) {
    GtkWidget *label;
-   DialogData *data = g_malloc(sizeof(DialogData));
+   //DialogData *data = g_malloc(sizeof(DialogData));
+   DialogData *data = &noaaData;
    // const int TOP_LAT= 55, BOTTOM_LAT = 40, LEFT_LON =-20, RIGHT_LON = 0;
    const int TIME_STEP = 3, TIME_MAX = 2;
    //data->bottomLat = BOTTOM_LAT, data->topLat = TOP_LAT, data->leftLon = LEFT_LON, data->rightLon = RIGHT_LON;
    data->bottomLat = zone.latMin, data->topLat = zone.latMax, data->leftLon = zone.lonLeft, data->rightLon = zone.lonRight;
    data->timeStep = TIME_STEP, data->timeMax = TIME_MAX;
 
-   GtkWidget *dialogBox = gtk_dialog_new_with_buttons("NOAA URL", GTK_WINDOW(window), GTK_DIALOG_MODAL,
-           "_OK", GTK_RESPONSE_ACCEPT, "_Cancel", GTK_RESPONSE_CANCEL, NULL);
+   GtkWidget *noaaWindow = gtk_application_window_new (app);
+   gtk_window_set_title (GTK_WINDOW (noaaWindow), "NOAA");
 
-   GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialogBox));
+   GtkWidget *vBox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 5);
+   gtk_window_set_child (GTK_WINDOW (noaaWindow), (GtkWidget *) vBox);
+
    GtkWidget *grid = gtk_grid_new();
-   gtk_box_append(GTK_BOX(content_area), grid);
 
    buildNoaaUrl (data->url, data->topLat, data->leftLon, data->bottomLat, data->rightLon, 0);
 
@@ -4190,138 +4216,86 @@ static void gribNoaa (GSimpleAction *action, GVariant *parameter, gpointer *user
    g_signal_connect(data->timeStepSpin, "value-changed", G_CALLBACK(updateNoaaUrl), data);
    g_signal_connect(data->timeMaxSpin, "value-changed", G_CALLBACK(updateNoaaUrl), data);
 
-   g_signal_connect(dialogBox, "response", G_CALLBACK(on_noaa_dialog_response), data);
-   gtk_window_present (GTK_WINDOW (dialogBox));
+   GtkWidget *hBox = OKCancelLine (on_ok_button_noaa_clicked, noaaWindow);
+
+   gtk_box_append (GTK_BOX (vBox), grid);
+   gtk_box_append (GTK_BOX (vBox), hBox);
+
+   gtk_window_present (GTK_WINDOW (noaaWindow));
 }
 
-/*! callback for openGrib */
-static void on_open_grib_response (GtkDialog *dialog, int response) {
-   if (response == GTK_RESPONSE_ACCEPT) {
-      GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
-      g_autoptr(GFile) file = gtk_file_chooser_get_file (chooser);
-      if (file != NULL) {
-         gchar *fileName = g_file_get_path(file);
-         if (fileName != NULL) {
-            printf ("Fichier sélectionné : %s\n", fileName);
-            loadGribFile (typeFlow, fileName);
-            g_free(fileName);
-         }
-     }
+/*! callback for openPolar */
+void cbOpenGrib (GObject* source_object, GAsyncResult* res, gpointer data) {
+   GFile* file = gtk_file_dialog_open_finish ((GtkFileDialog *) source_object, res, NULL);
+   if (file != NULL) {
+      gchar *fileName = g_file_get_path(file);
+      printf ("File selected: %s\n", fileName);
+      if (fileName != NULL) {
+         loadGribFile (typeFlow, fileName);
+         g_free(fileName);
+      }
    }
-   gtk_window_destroy (GTK_WINDOW (dialog));
 }
 
 /*! Select grib file and read grib file, fill gribData */
 static void openGrib (GSimpleAction *action, GVariant *parameter, gpointer *data) {
    typeFlow = GPOINTER_TO_INT (data);
-   char directory [MAX_SIZE_DIR_NAME];
-   snprintf (directory, sizeof (directory), (typeFlow == WIND) ? "%sgrib": "%scurrentgrib", par.workingDir);
-   GtkWidget *dialog = gtk_file_chooser_dialog_new ("Open Grib", GTK_WINDOW (window), GTK_FILE_CHOOSER_ACTION_OPEN,
-                       "_Cancel", GTK_RESPONSE_CANCEL, "_Open", GTK_RESPONSE_ACCEPT, NULL);
-
-   GFile *gDirectory = g_file_new_for_path(directory);
-   gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog), gDirectory, NULL);
-   g_object_unref(gDirectory);
-
-   GtkFileFilter *filter = gtk_file_filter_new();
-   gtk_file_filter_set_name(filter, "Grib Files");
-   gtk_file_filter_add_pattern(filter, "*.gr*");
-   gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
-   g_object_unref (filter);
-
-   gtk_window_present (GTK_WINDOW (dialog));
-   g_signal_connect (dialog, "response", G_CALLBACK (on_open_grib_response), NULL);
+   GtkFileDialog* fileDialog;
+   if (typeFlow == WIND)
+      fileDialog = selectFile ("Open Grib", "grib", "Grib Files", "*.gr*", ".*gr*");
+   else
+      fileDialog = selectFile ("Open Current Grib", "currentgrib", "Current GribFiles", "*.gr*", "*.gr");
+   gtk_file_dialog_open (fileDialog, GTK_WINDOW (window), NULL, cbOpenGrib, NULL);
 }
 
 /*! callback for openPolar */
-static void on_open_polar_response (GtkDialog *dialog, int response) {
-   if (response == GTK_RESPONSE_ACCEPT) {
-      GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
-      g_autoptr(GFile) file = gtk_file_chooser_get_file (chooser);
-      if (file != NULL) {
-         gchar *fileName = g_file_get_path(file);
-         if (fileName != NULL) {
-            if (strstr (fileName, "polwave.csv") == NULL) {
-               readPolar (fileName, &polMat);
-               strncpy (par.polarFileName, fileName, sizeof (par.polarFileName) - 1);
-               polarType = POLAR;
-               polarDraw (); 
-            }
-            else {
-               readPolar (fileName, &wavePolMat);
-               strncpy (par.wavePolFileName, fileName, sizeof (par.wavePolFileName) - 1);
-               polarType = WAVE_POLAR;
-               polarDraw (); 
-            }
-            g_free(fileName);
+void cbOpenPolar (GObject* source_object, GAsyncResult* res, gpointer data) {
+   GFile* file = gtk_file_dialog_open_finish ((GtkFileDialog *) source_object, res, NULL);
+   if (file != NULL) {
+      gchar *fileName = g_file_get_path(file);
+      printf ("File selected: %s\n", fileName);
+      if (fileName != NULL) {
+         if (strstr (fileName, "polwave.csv") == NULL) {
+            readPolar (fileName, &polMat);
+            strncpy (par.polarFileName, fileName, sizeof (par.polarFileName) - 1);
+            polarType = POLAR;
+            polarDraw (); 
          }
+         else {
+            readPolar (fileName, &wavePolMat);
+            strncpy (par.wavePolFileName, fileName, sizeof (par.wavePolFileName) - 1);
+            polarType = WAVE_POLAR;
+            polarDraw (); 
+         }
+         g_free(fileName);
      }
    }
-   gtk_window_destroy (GTK_WINDOW (dialog));
 }
 
 /*! Select polar file and read polar file, fill polMat */
 static void openPolar () {
-   char directory [MAX_SIZE_DIR_NAME];
-   snprintf (directory, sizeof (directory), "%spol", par.workingDir);
-   GtkWidget *dialog = gtk_file_chooser_dialog_new("Open Polar",  GTK_WINDOW (window), GTK_FILE_CHOOSER_ACTION_OPEN, \
-                       "_Cancel", GTK_RESPONSE_CANCEL, "_Open", GTK_RESPONSE_ACCEPT, NULL);
-
-   gtk_window_set_default_size(GTK_WINDOW(dialog), 400, 300);
-
-   GFile *gDirectory = g_file_new_for_path(directory);
-   gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog), gDirectory, NULL);
-   g_object_unref(gDirectory);
-
-   GtkFileFilter *filter = gtk_file_filter_new();
-   gtk_file_filter_set_name(filter, "Polar Files");
-   gtk_file_filter_add_pattern(filter, "*.pol");
-   gtk_file_filter_add_pattern(filter, "*.csv");
-   gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
-   g_object_unref (filter);
-   
-   gtk_window_present (GTK_WINDOW (dialog));
-   g_signal_connect (dialog, "response", G_CALLBACK (on_open_polar_response), NULL);
+   GtkFileDialog* fileDialog = selectFile ("Open Polar", "pol", "Polar Files", "*.csv", "*.pol");
+   gtk_file_dialog_open (fileDialog, GTK_WINDOW (window), NULL, cbOpenPolar, NULL);
 }
 
-/*! call back for save Scenario */
-static void on_save_scenario_response (GtkDialog *dialog, int response) {
-   if (response == GTK_RESPONSE_ACCEPT) {
-      GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
-      g_autoptr(GFile) file = gtk_file_chooser_get_file (chooser);
-      if (file != NULL) {
-         gchar *fileName = g_file_get_path(file);
-         if (fileName != NULL) {
-            printf ("Fichier sélectionné : %s\n", fileName);
-            printf ("Mail Pw Exist: %d\n", par.storeMailPw);
-            writeParam (fileName, false, par.storeMailPw);
-            g_free(fileName);
-         }
-     }
+/*! callback for openPolar */
+void cbSaveScenario (GObject* source_object, GAsyncResult* res, gpointer data) {
+   GFile* file = gtk_file_dialog_save_finish ((GtkFileDialog *) source_object, res, NULL);
+   if (file != NULL) {
+      gchar *fileName = g_file_get_path(file);
+      if (fileName != NULL) {
+         printf ("File: %s\n", fileName);
+         printf ("Mail Pw Exist: %d\n", par.storeMailPw);
+         writeParam (fileName, false, par.storeMailPw);
+         g_free(fileName);
+      }
    }
-   gtk_window_destroy (GTK_WINDOW (dialog));
 }
 
-/*! Write parameter file and initialize context */
+/*! Select polar file and read polar file, fill polMat */
 static void saveScenario () {
-   char directory [MAX_SIZE_DIR_NAME];
-   snprintf (directory, sizeof (directory), "%spar", par.workingDir);
-   GtkWidget *dialog = gtk_file_chooser_dialog_new("Save As", GTK_WINDOW (window), GTK_FILE_CHOOSER_ACTION_SAVE,
-                       "_Cancel", GTK_RESPONSE_CANCEL, "_Save", GTK_RESPONSE_ACCEPT, NULL);
-   GFile *gDirectory = g_file_new_for_path(directory);
-   gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog), gDirectory, NULL);
-   g_object_unref(gDirectory);
-
-   GtkFileFilter *filter = gtk_file_filter_new();
-   gtk_file_filter_set_name (filter, "Parameter Files");
-   gtk_file_filter_add_pattern(filter, "*.par");
-   gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
-   GtkFileChooser *chooser = GTK_FILE_CHOOSER(dialog);
-
-   // Définit un nom de fichier par défaut
-   gtk_file_chooser_set_current_name (chooser, "new_file.par");
-   gtk_window_present (GTK_WINDOW (dialog));
-   g_signal_connect (dialog, "response", G_CALLBACK (on_save_scenario_response), NULL);
+   GtkFileDialog *fileDialog = selectFile ("Save as", "par", "Parameter Files", "*.par", "*.par");
+   gtk_file_dialog_save (fileDialog, GTK_WINDOW (window), NULL, cbSaveScenario, NULL);
 }
 
 /*! Make initialization following parameter file load */
@@ -4379,8 +4353,9 @@ static void initScenario () {
 }
 
 /*! Call back editScenario */
-static void cbEditScenario (GtkDialog *dialog, gint response_id, gpointer user_data) {
-   if (response_id == GTK_RESPONSE_ACCEPT) {
+static void cbScenarioEdit (GObject* source_object, GAsyncResult* res, gpointer data) {
+   int responseId = gtk_alert_dialog_choose_finish ((GtkAlertDialog*) source_object , res, NULL);
+   if (responseId == MY_RESPONSE_OK) {
       readParam (parameterFileName);
       initScenario ();
       if (readGribRet == 0) {
@@ -4388,7 +4363,6 @@ static void cbEditScenario (GtkDialog *dialog, gint response_id, gpointer user_d
       }
       gtk_widget_queue_draw (drawing_area);
    }
-   gtk_window_destroy (GTK_WINDOW (dialog));
 }
 
 /*! Edit parameter file  */
@@ -4402,51 +4376,31 @@ static void editScenario () {
    }
    pclose (fs);
    snprintf (line, sizeof (line), "Confirm loading: %s", parameterFileName);
-   GtkWidget *dialogBox = gtk_dialog_new_with_buttons (line, \
-         GTK_WINDOW(window), GTK_DIALOG_MODAL, "OK", GTK_RESPONSE_ACCEPT, "Cancel", GTK_RESPONSE_CANCEL, NULL);
-   g_signal_connect_swapped (dialogBox, "response", G_CALLBACK (cbEditScenario), dialogBox);
-   gtk_window_present (GTK_WINDOW (dialogBox));
+   confirmBox (line, cbScenarioEdit);
 }
 
-/* call back for openSecnario */
-static void on_open_scenario_response (GtkDialog *dialog, int response) {
-   if (response == GTK_RESPONSE_ACCEPT) {
-      GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
-      g_autoptr(GFile) file = gtk_file_chooser_get_file (chooser);
-      if (file != NULL) {
-         gchar *fileName = g_file_get_path(file);
-         if (fileName != NULL) {
-            strncpy (parameterFileName, fileName, MAX_SIZE_FILE_NAME);
-            readParam (fileName);
-            initScenario ();
-            if (readGribRet == 0)
-               infoMessage ("Error in readgrib", GTK_MESSAGE_ERROR);
-            g_free(fileName);
-            gtk_widget_queue_draw (drawing_area);
-         }
-     }
+/* call back for openScenario */
+void cbOpenScenario (GObject* source_object, GAsyncResult* res, gpointer data) {
+   GFile* file = gtk_file_dialog_open_finish ((GtkFileDialog *) source_object, res, NULL);
+   if (file != NULL) {
+      gchar *fileName = g_file_get_path(file);
+      printf ("File selected: %s\n", fileName);
+      if (fileName != NULL) {
+         strncpy (parameterFileName, fileName, MAX_SIZE_FILE_NAME);
+         readParam (fileName);
+         initScenario ();
+         if (readGribRet == 0)
+            infoMessage ("Error in readgrib", GTK_MESSAGE_ERROR);
+         g_free(fileName);
+         gtk_widget_queue_draw (drawing_area);
+      }
    }
-   gtk_window_destroy (GTK_WINDOW (dialog));
 }
 
 /*! Read parameter file and initialize context */
 static void openScenario () {
-   char directory [MAX_SIZE_DIR_NAME];
-   snprintf (directory, sizeof (directory), "%spar", par.workingDir);
-   GtkWidget *dialog = gtk_file_chooser_dialog_new ("Open Parameters",  GTK_WINDOW (window), GTK_FILE_CHOOSER_ACTION_OPEN, \
-                       "_Cancel", GTK_RESPONSE_CANCEL, "_Open", GTK_RESPONSE_ACCEPT, NULL);
-   GFile *gDirectory = g_file_new_for_path(directory);
-   gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog), gDirectory, NULL);
-   g_object_unref(gDirectory);
-
-   GtkFileFilter *filter = gtk_file_filter_new();
-   gtk_file_filter_set_name(filter, "Parameter Files");
-   gtk_file_filter_add_pattern(filter, "*.par");
-   gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
-   g_object_unref (filter);
-
-   gtk_window_present (GTK_WINDOW (dialog));
-   g_signal_connect (dialog, "response", G_CALLBACK (on_open_scenario_response), NULL);
+   GtkFileDialog* fileDialog =selectFile ("Open Parameters", "par", "Parameter Files", "*.par", "*.par");
+   gtk_file_dialog_open (fileDialog, GTK_WINDOW (window), NULL, cbOpenScenario, NULL);
 }
 
 /*! provides meta information about grib file, called by gribInfo */
@@ -4694,9 +4648,10 @@ static void resolution_changed (GtkSpinButton *spin_button, gpointer user_data) 
    updateMailRequestBox ();
 }
 
-/*! Callback model combo box indice */
-static void model_combo_changed (GtkComboBox *widget, gpointer user_data) {
-   provider = gtk_combo_box_get_active(GTK_COMBO_BOX(widget));
+/*! Callback change mail provider */
+static void cbMailDropDown (GObject *dropDown, GParamSpec *pspec, gpointer user_data) {
+   provider = gtk_drop_down_get_selected (GTK_DROP_DOWN(dropDown));
+   g_print ("Selected provider: %d\n", provider);
    par.gribTimeMax = maxTimeRange ();
    updateMailRequestBox ();
 }
@@ -4708,14 +4663,15 @@ static void password_entry_changed (GtkEditable *editable, gpointer user_data) {
 }
 
 /*! action when closing mail request box */
-static void mailRequestBoxResponse (GtkDialog *dialog, gint response_id, gpointer user_data) {
+static void on_ok_button_mail_clicked(GtkWidget *widget, gpointer theWindow) {
+//static void mailRequestBoxResponse (GtkDialog *dialog, gint response_id, gpointer user_data) {
    FILE *fs;
    char buffer [MAX_SIZE_BUFFER] = "";
    char *ptBuffer, *ptBuffer1;
    char command [MAX_SIZE_LINE * 2] = "";
    char newPw [MAX_SIZE_NAME];
    dollarSubstitute (par.mailPw, newPw, MAX_SIZE_NAME);
-   if (response_id == GTK_RESPONSE_ACCEPT) {
+   //if (response_id == GTK_RESPONSE_ACCEPT) {
       if (smtpGribRequestPython (provider, mailRequestPar.lat1, mailRequestPar.lon1, mailRequestPar.lat2, mailRequestPar.lon2, buffer, MAX_SIZE_BUFFER)) { 
          ptBuffer = strchr (buffer, ' ');          // delete first words 
          ptBuffer1 = strchr (ptBuffer + 1, ' ');   // delete second word 
@@ -4733,9 +4689,10 @@ static void mailRequestBoxResponse (GtkDialog *dialog, gint response_id, gpointe
       else {
          infoMessage ("Error SMTP request Python, check connectivity and mail Password", GTK_MESSAGE_ERROR);
       }
-   }
-   gtk_window_destroy (GTK_WINDOW (dialog));
+   //}
+   gtk_window_destroy (GTK_WINDOW (theWindow));
 }
+
 
 /*! mail request dialog box */
 static void mailRequestBox (double lat1, double lon1, double lat2, double lon2) {
@@ -4752,11 +4709,13 @@ static void mailRequestBox (double lat1, double lon1, double lat2, double lon2) 
 
    GtkWidget *separator = gtk_separator_new  (GTK_ORIENTATION_HORIZONTAL);
 
-   GtkWidget* dialogBox = gtk_dialog_new_with_buttons ("Launch mail Grib request", \
-      GTK_WINDOW (window), GTK_DIALOG_MODAL, "OK", GTK_RESPONSE_ACCEPT, "Cancel", GTK_RESPONSE_CANCEL, NULL);
-   
-   GtkWidget *content_area = gtk_dialog_get_content_area (GTK_DIALOG (dialogBox));
-   gtk_widget_set_size_request (dialogBox, 400, -1);
+   GtkWidget *mailWindow = gtk_application_window_new (app);
+   gtk_window_set_title (GTK_WINDOW (mailWindow), "Launch Mail Grib Request");
+
+   GtkWidget *vBox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 5);
+   gtk_window_set_child (GTK_WINDOW (mailWindow), (GtkWidget *) vBox);
+
+   gtk_widget_set_size_request (mailWindow, 400, -1);
    GtkWidget *grid = gtk_grid_new();   
    gtk_grid_set_column_spacing (GTK_GRID(grid), 10);
    gtk_grid_set_row_spacing (GTK_GRID(grid), 5);
@@ -4768,30 +4727,22 @@ static void mailRequestBox (double lat1, double lon1, double lat2, double lon2) 
    gtk_grid_attach(GTK_GRID (grid), label_buffer,               1, 0, 3, 1);
    
    GtkWidget *label_model = gtk_label_new ("Model"); 
-   GtkListStore *liststore = gtk_list_store_new (1, G_TYPE_STRING);
-   // Add lements to list
-   
-   GtkTreeIter iter;
+
+   /* Create GlistStore to store strings */
+   GtkStringList *string_list = gtk_string_list_new (NULL);
    for (int i = 0;  i < N_PROVIDERS; i++) {
-      gtk_list_store_append (liststore, &iter);
-      gtk_list_store_set (liststore, &iter, 0, providerTab [i].libelle, -1);
+      snprintf (str, sizeof (str), "%s", providerTab [i].libelle);
+      gtk_string_list_append (string_list, str);
    }
+   // GtkWidget *dropDown = gtk_drop_down_new_from_strings (providerArray);
+   GtkWidget *dropDown = gtk_drop_down_new (G_LIST_MODEL(string_list), NULL);
 
-   // Create combobox and define its model
-   GtkWidget *model_combo_box = gtk_combo_box_new_with_model(GTK_TREE_MODEL(liststore));
-   g_object_unref(liststore);
-
-   // Create rendred for text in combobox
-   GtkCellRenderer *myRenderer = gtk_cell_renderer_text_new();
-   gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(model_combo_box), myRenderer, TRUE);
-   gtk_cell_layout_set_attributes(GTK_CELL_LAYOUT(model_combo_box), myRenderer, "text", 0, NULL);
-   gtk_combo_box_set_active(GTK_COMBO_BOX(model_combo_box), provider);
-
-   g_signal_connect(model_combo_box, "changed", G_CALLBACK (model_combo_changed), NULL);
+   gtk_drop_down_set_selected ((GtkDropDown *) dropDown, 0);
+   g_signal_connect (dropDown, "notify::selected", G_CALLBACK (cbMailDropDown), NULL);
 
    gtk_label_set_xalign(GTK_LABEL(label_model), 0);
-   gtk_grid_attach(GTK_GRID(grid), label_model,          0, 1, 1, 1);
-   gtk_grid_attach(GTK_GRID(grid), model_combo_box,      1, 1, 3, 1);
+   gtk_grid_attach(GTK_GRID(grid), label_model,   0, 1, 1, 1);
+   gtk_grid_attach(GTK_GRID(grid), dropDown,      1, 1, 3, 1);
 
    // Create Time Step and Time Max
    GtkWidget *label_resolution = gtk_label_new("Resolution");
@@ -4846,9 +4797,12 @@ static void mailRequestBox (double lat1, double lon1, double lat2, double lon2) 
       gtk_grid_attach (GTK_GRID (grid), password_entry, 1, 7, 1, 1);
    }
 
-   g_signal_connect_swapped (dialogBox, "response", G_CALLBACK (mailRequestBoxResponse), dialogBox);
-   gtk_box_append(GTK_BOX (content_area), grid);
-   gtk_window_present (GTK_WINDOW (dialogBox));
+   GtkWidget *hBox = OKCancelLine (on_ok_button_mail_clicked, mailWindow);
+
+   gtk_box_append (GTK_BOX (vBox), grid);
+   gtk_box_append (GTK_BOX (vBox), hBox);
+   // g_object_unref (string_list);
+   gtk_window_present (GTK_WINDOW (mailWindow));
 }
 
 /*! For testing */
@@ -4923,21 +4877,21 @@ static GtkWidget *createRadioButtonWindDisp (char *name, GtkWidget *tab_display,
 }
 
 /*! CallBack for disp choice Avr or Gust or Rain or Pressure */
-static void on_combo_box_disp_changed (GtkComboBoxText *combo_box, gpointer user_data) {
-   par.averageOrGustDisp = gtk_combo_box_get_active(GTK_COMBO_BOX(combo_box));
+static void cbDropDownDisp (GObject *dropDown, GParamSpec *pspec, gpointer user_data) {
+   par.averageOrGustDisp = gtk_drop_down_get_selected (GTK_DROP_DOWN (dropDown));
    gtk_widget_queue_draw (drawing_area); // Draw all
    destroySurface ();
 }
 
 /*! CallBack for Isochrone choice */
-static void on_combo_box_Isoc_changed (GtkComboBoxText *combo_box, gpointer user_data) {
-   par.style = gtk_combo_box_get_active(GTK_COMBO_BOX(combo_box));
+static void cbDropDownIsoc (GObject *dropDown, GParamSpec *pspec, gpointer user_data) {
+   par.style = gtk_drop_down_get_selected (GTK_DROP_DOWN (dropDown));
    gtk_widget_queue_draw (drawing_area); // Draw all
 }
 
 /*! CallBack for DMS choice */
-static void on_combo_box_DMS_changed (GtkComboBoxText *combo_box, gpointer user_data) {
-   par.dispDms = gtk_combo_box_get_active(GTK_COMBO_BOX(combo_box));
+static void cbDropDownDMS (GObject *dropDown, GParamSpec *pspec, gpointer user_data) {
+   par.dispDms = gtk_drop_down_get_selected (GTK_DROP_DOWN (dropDown));
    statusBarUpdate ();
 }
 
@@ -5061,7 +5015,7 @@ static void change () {
    g_signal_connect (entry_origin_lat, "changed", G_CALLBACK (onLatChange), &par.pOr.lat);
    g_signal_connect (entry_origin_lon, "changed", G_CALLBACK (onLonChange), &par.pOr.lon);
 
-   // Crate destination
+   // Create destination
    entry_dest_lat = latToEntry (par.pDest.lat);
    entry_dest_lon = lonToEntry (par.pDest.lon);
    labelCreate (tab_param, "Dest. Lat",                    0, 2);
@@ -5125,7 +5079,7 @@ static void change () {
    gtk_grid_attach(GTK_GRID(tab_param), spin_tStep,           1, 12, 1, 1);
    g_signal_connect (spin_tStep, "value-changed", G_CALLBACK (intSpinUpdate), &par.tStep);
 
-   // Crate cog step and cog range
+   // Create cog step and cog range
    labelCreate (tab_param, "Cog Step",                   0, 13);
    GtkWidget *spin_cog = gtk_spin_button_new_with_range (1, 20, 1);
    gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin_cog), par.cogStep);
@@ -5158,7 +5112,7 @@ static void change () {
    gtk_grid_attach(GTK_GRID(tab_tec), spin_max_iso,      1, 2, 1, 1);
    g_signal_connect (spin_max_iso, "value-changed", G_CALLBACK (intSpinUpdate), &par.maxIso);
 
-   // Crate JFactor
+   // Create JFactor
    labelCreate (tab_tec, "jFactor",                       0, 3);
    GtkWidget *spin_jFactor = gtk_spin_button_new_with_range (0, 1000, 10);
    gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin_jFactor), par.jFactor);
@@ -5237,38 +5191,27 @@ static void change () {
    
    // Create combo box for Avr/gust/rain/pressure
    labelCreate (tab_display, "Wind/Gust/Rain/Pressure",     0, 3);
-   GtkWidget *combo_box_disp = gtk_combo_box_text_new();
-   gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_box_disp), NULL, "Wind");
-   gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_box_disp), NULL, "Gust");
-   gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_box_disp), NULL, "Waves");
-   gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_box_disp), NULL, "Rain");
-   gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_box_disp), NULL, "Pressure");
-   gtk_grid_attach (GTK_GRID(tab_display), combo_box_disp, 1, 3, 1, 1);
-   gtk_combo_box_set_active(GTK_COMBO_BOX (combo_box_disp), par.averageOrGustDisp);
+   const char *arrayDisp [] = {"Wind", "Gust", "Waves", "Rain", "Pressure", NULL};
+   GtkWidget *dropDownDisp = gtk_drop_down_new_from_strings (arrayDisp);
+   gtk_drop_down_set_selected ((GtkDropDown *) dropDownDisp, par.averageOrGustDisp);
+   gtk_grid_attach (GTK_GRID(tab_display), dropDownDisp, 1, 3, 1, 1);
+   g_signal_connect (dropDownDisp, "notify::selected", G_CALLBACK (cbDropDownDisp), NULL);
 
-   g_signal_connect(combo_box_disp, "changed", G_CALLBACK (on_combo_box_disp_changed), NULL);
-   
    // Create combo box for Isochrones
    labelCreate (tab_display, "Isoc.",                       0, 4);
-   GtkWidget *combo_box_Isoc = gtk_combo_box_text_new();
-   gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_box_Isoc), NULL, "None");
-   gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_box_Isoc), NULL, "Points");
-   gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_box_Isoc), NULL, "Segment");
-   gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_box_Isoc), NULL, "Bezier");
-   gtk_grid_attach (GTK_GRID(tab_display), combo_box_Isoc, 1, 4, 1, 1);
-   gtk_combo_box_set_active(GTK_COMBO_BOX (combo_box_Isoc), par.style);
-   g_signal_connect(combo_box_Isoc, "changed", G_CALLBACK (on_combo_box_Isoc_changed), NULL);
+   const char *arrayIsoc [] = {"None", "Points", "Segment", "Bezier", NULL};
+   GtkWidget *dropDownIsoc = gtk_drop_down_new_from_strings (arrayIsoc);
+   gtk_drop_down_set_selected ((GtkDropDown *) dropDownIsoc, par.style);
+   gtk_grid_attach (GTK_GRID(tab_display), dropDownIsoc, 1, 4, 1, 1);
+   g_signal_connect (dropDownIsoc, "notify::selected", G_CALLBACK (cbDropDownIsoc), NULL);
 
    // Create combo box for DMS (Degree Minutes Second) representaton
    labelCreate (tab_display, "DMS",                       2, 4);
-   GtkWidget *combo_box_DMS = gtk_combo_box_text_new();
-   gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_box_DMS), NULL, "Basic");
-   gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_box_DMS), NULL, "DD");
-   gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_box_DMS), NULL, "DM");
-   gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_box_DMS), NULL, "DMS");
-   gtk_grid_attach (GTK_GRID(tab_display), combo_box_DMS, 3, 4, 1, 1);
-   gtk_combo_box_set_active(GTK_COMBO_BOX (combo_box_DMS), par.dispDms);
-   g_signal_connect(combo_box_DMS, "changed", G_CALLBACK (on_combo_box_DMS_changed), NULL);
+   const char *arrayDMS [] = {"Basic", "DD", "DM", "DMS", NULL};
+   GtkWidget *dropDownDMS = gtk_drop_down_new_from_strings (arrayDMS);
+   gtk_drop_down_set_selected ((GtkDropDown *) dropDownDMS, par.dispDms);
+   gtk_grid_attach (GTK_GRID(tab_display), dropDownDMS, 3, 4, 1, 1);
+   g_signal_connect (dropDownDMS, "notify::selected", G_CALLBACK (cbDropDownDMS), NULL);
 
    // Checkbox: "waves"
    GtkWidget *checkboxWave = gtk_check_button_new_with_label("Waves");
@@ -5297,7 +5240,7 @@ static void change () {
    GtkWidget *separator1 = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
    gtk_grid_attach(GTK_GRID(tab_display), separator1, 0, 6, 10, 1);
 
-   // Crate GtkScale POI widget
+   // Create GtkScale POI widget
    const int MAX_LEVEL_POI_VISIBLE = 5; 
    GtkWidget *labelNumber = gtk_label_new (g_strdup_printf("POI: %d", par.maxPoiVisible));
    gtk_grid_attach(GTK_GRID (tab_display), labelNumber, 0, 7, 1, 1);
@@ -5311,7 +5254,7 @@ static void change () {
    g_signal_connect (levelVisible, "value-changed", G_CALLBACK (on_level_poi_visible_changed), labelNumber);
    gtk_grid_attach(GTK_GRID(tab_display), levelVisible, 1, 7, 2, 1);
   
-   // Crate GtkScale Display Speed widget
+   // Create GtkScale Display Speed widget
    GtkWidget *labelSpeedDisplay = gtk_label_new (g_strdup_printf("Display Speed: %d", par.speedDisp));
    gtk_grid_attach(GTK_GRID (tab_display), labelSpeedDisplay, 0, 8, 1, 1);
    gtk_widget_set_margin_start (labelSpeedDisplay, 4);
@@ -5375,46 +5318,27 @@ static void on_center_map (GtkWidget *widget, gpointer data) {
    gtk_widget_queue_draw (drawing_area);
 }
 
-/*! poi Name change */
-static void poi_entry_changed (GtkEditable *editable, gpointer user_data) {
-   char *ptPoiName = (gchar *) user_data;
-   const gchar *text = gtk_editable_get_text (editable);
-   g_strlcpy (poiName, text, MAX_SIZE_NAME);
-   printf ("poi: %s\n", ptPoiName);
-}
-
 /*! Response for poi change */
-static void poi_name_response (GtkDialog *dialog, gint response_id, gpointer user_data) {
-   printf ("Response POI : %d %d\n", response_id, GTK_RESPONSE_ACCEPT);
+static void poiNameResponse (GtkWidget *widget, gpointer entryWindow) {
    if (menuWindow != NULL) popoverFinish (menuWindow);
-   if (response_id == GTK_RESPONSE_ACCEPT) {
-      strncpy (tPoi [nPoi].name, poiName, MAX_SIZE_POI_NAME);
-      tPoi [nPoi].lon = xToLon (whereIsPopup.x);
-      tPoi [nPoi].lat = yToLat (whereIsPopup.y);
-      tPoi [nPoi].level = 1;
-      tPoi [nPoi].type = NEW;
-      nPoi += 1;
-      gtk_widget_queue_draw (drawing_area);
-   }
-   gtk_window_destroy (GTK_WINDOW (dialog));
+   strncpy (tPoi [nPoi].name, poiName, MAX_SIZE_POI_NAME);
+   tPoi [nPoi].lon = xToLon (whereIsPopup.x);
+   tPoi [nPoi].lat = yToLat (whereIsPopup.y);
+   tPoi [nPoi].level = 1;
+   tPoi [nPoi].type = NEW;
+   nPoi += 1;
+   gtk_widget_queue_draw (drawing_area);
+   gtk_window_destroy (GTK_WINDOW (entryWindow));
 }
 
 /*! poi name */ 
 static void poiNameChoose () {
+   strcpy (poiName, "example");
    if (nPoi >= MAX_N_POI) {
       infoMessage ("Number of poi exceeded", GTK_MESSAGE_ERROR);
       return;
    }
-   
-   GtkWidget *dialogBox = gtk_dialog_new_with_buttons("Poi Name", GTK_WINDOW (window), GTK_DIALOG_MODAL,
-                       "_OK", GTK_RESPONSE_ACCEPT, "_Cancel", GTK_RESPONSE_CANCEL, NULL);
-
-   GtkWidget *content_area = gtk_dialog_get_content_area (GTK_DIALOG(dialogBox));
-   GtkWidget *poiName_entry = gtk_entry_new ();
-   g_signal_connect_swapped (dialogBox, "response", G_CALLBACK (poi_name_response), dialogBox);
-   g_signal_connect (poiName_entry, "changed", G_CALLBACK (poi_entry_changed), poiName);
-   gtk_box_append(GTK_BOX (content_area), poiName_entry);
-   gtk_window_present (GTK_WINDOW (dialogBox));
+   entryBox ("Poi Name", "Name: ", poiName, poiNameResponse);
 }
 
 /*! create wayPoint */
@@ -6022,22 +5946,18 @@ static void app_activate (GApplication *application) {
    PangoAttrList *attrs = pango_attr_list_new();
    PangoAttribute *attr = pango_attr_weight_new(PANGO_WEIGHT_BOLD);
    pango_attr_list_insert(attrs, attr);
-   attr = pango_attr_foreground_new (65535, 0, 0);       // red
+   attr = pango_attr_foreground_new (65535, 0, 0);      // red
    pango_attr_list_insert(attrs, attr);
    gtk_label_set_attributes (GTK_LABEL(labelInfoRoute), attrs);
    gtk_label_set_xalign(GTK_LABEL (labelInfoRoute), 0); // left justified
 
    // Create statusbar (Global Variable)
-   statusbar = gtk_statusbar_new();
-   gtk_widget_set_size_request (statusbar, -1, 30);
-   gtk_widget_set_hexpand (statusbar, TRUE); 
-   context_id = gtk_statusbar_get_context_id(GTK_STATUSBAR(statusbar), "Statusbar");
+   statusbar = gtk_label_new ("Statusbar");              // global variable
 
    // Create drawing area (Global Variable)
    drawing_area = gtk_drawing_area_new();
    gtk_widget_set_hexpand(drawing_area, TRUE);
    gtk_widget_set_vexpand(drawing_area, TRUE);
-
    gtk_drawing_area_set_draw_func (GTK_DRAWING_AREA (drawing_area), drawGribCallback, NULL, NULL);
 
    // Create event controller for mouse motion
@@ -6074,12 +5994,13 @@ static void app_activate (GApplication *application) {
    g_signal_connect(window, "notify", G_CALLBACK(on_fullscreen_notify), NULL);
 
    g_timeout_add_seconds (GPS_TIME_INTERVAL, update_GPS_callback, gpsInfo);
-   
+
+   GtkWidget *separator = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
    gtk_box_append (GTK_BOX (vBox), toolBox);
    gtk_box_append (GTK_BOX (vBox), labelInfoRoute);
    gtk_box_append (GTK_BOX (vBox), drawing_area);
+   gtk_box_append (GTK_BOX (vBox), separator);
    gtk_box_append (GTK_BOX (vBox), statusbar);
-   statusBarUpdate ();
    gtk_window_present (GTK_WINDOW (window));   
 }
 

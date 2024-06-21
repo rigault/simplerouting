@@ -41,6 +41,18 @@ struct DictProvider providerTab [N_PROVIDERS] = {
    {"gmngrib@globalmarinenet.net", "GlobalMarinet GFS",      ""}
 };
 
+/*const char *providerArray [N_PROVIDERS + 1] = {
+   "Saildocs Wind GFS",
+   "Saildocs Wind ECWMF",
+   "Saildocs Wind ICON",
+   "Saildocs Wind ARPEGE",
+   "Saildocs Wind Arome",
+   "Saildocs Current RTOFS",
+   "MailaSail Wind GFS",
+   "GlobalMarinet GFS",
+   NULL
+};*/
+
 /*! list of wayPoint */
 WayPointList wayPoints;
 

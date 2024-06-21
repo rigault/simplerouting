@@ -37,6 +37,7 @@
 #include "rtypes.h"
 #include "rutil.h"
 #include "option.h"
+#include "gpsutil.h"
 
 double vOffsetLocalUTC; 
 char   parameterFileName [MAX_SIZE_FILE_NAME];
@@ -44,9 +45,6 @@ char   parameterFileName [MAX_SIZE_FILE_NAME];
 /*! make initializations and call opionManage () */
 int main (int argc, char *argv[]) {
    bool ret = true;
-
-   vOffsetLocalUTC = offsetLocalUTC ();
-   printf ("LocalTime - UTC: %.0lf hours\n", vOffsetLocalUTC / 3600.0);
 
    if (setlocale (LC_ALL, "C") == NULL) {              // very important for scanf decimal numbers
       fprintf (stderr, "Error in main: setlocale failed");
