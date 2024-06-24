@@ -25,16 +25,16 @@ struct {
    char time [SIZE_DATE_TIME];
    char date [SIZE_DATE_TIME];
    char status;
-   float lat;
+   double lat;
    char NS;
-   float lon;
+   double lon;
    char EW;
-   float sog;
-   float cog;
+   double sog;
+   double cog;
    int quality;
    int numSV;
-   float hdop;
-   float alt;
+   double hdop;
+   double alt;
    char uAlt;
 } gpsRecord;
 
@@ -103,13 +103,13 @@ static bool decode (char *line) {
    char lig [MAX_ROWS];
    strcpymod (lig, line);
    // printf ("decode: %s\n", lig);
-   if (sscanf (lig, "$GPRMC, %[0-9.], %c, %f, %c, %f, %c, %f, %f, %[0-9],", gpsRecord.time, &gpsRecord.status, \
+   if (sscanf (lig, "$GPRMC, %[0-9.], %c, %lf, %c, %lf, %c, %lf, %lf, %[0-9],", gpsRecord.time, &gpsRecord.status, \
          &gpsRecord.lat, &gpsRecord.NS, &gpsRecord.lon, &gpsRecord.EW, &gpsRecord.sog, &gpsRecord.cog, gpsRecord.date) >= 1) 
       return true;
-   if (sscanf (lig, "$GPGGA, %[0-9.], %f, %c, %f, %c, %d, %d, %f, %f, %c", gpsRecord.time , &gpsRecord.lat, &gpsRecord.NS, \
+   if (sscanf (lig, "$GPGGA, %[0-9.], %lf, %c, %lf, %c, %d, %d, %lf, %lf, %c", gpsRecord.time , &gpsRecord.lat, &gpsRecord.NS, \
          &gpsRecord.lon, &gpsRecord.EW, &gpsRecord.quality, &gpsRecord.numSV, &gpsRecord.hdop, &gpsRecord.alt, &gpsRecord.uAlt) >= 1) 
       return true; 
-   if (sscanf (lig, "$GPGLL, %f, %c, %f, %c, %[0-9.], %c", &gpsRecord.lat, &gpsRecord.NS, &gpsRecord.lon, &gpsRecord.EW, \
+   if (sscanf (lig, "$GPGLL, %lf, %c, %lf, %c, %[0-9.], %c", &gpsRecord.lat, &gpsRecord.NS, &gpsRecord.lon, &gpsRecord.EW, \
          gpsRecord.time, &gpsRecord.status ) >= 1)
       return true; 
    return false;

@@ -5,7 +5,7 @@
 * sog = Speed over Ground of the boat
 * cog = Course over Ground  of the boat
 * */
-/*! compilation: gcc -Wall -Wextra -pedantic -Werror -Wformat=2 -std=c11 -O2 -c engine.c `pkg-config --cflags glib-2.0` */
+/*! compilation: gcc -c engine.c `pkg-config --cflags glib-2.0` */
 #include <glib.h>
 #include <float.h>   
 #include <limits.h>
@@ -31,7 +31,7 @@ HistoryRoute historyRoute = {0};
 ChooseDeparture chooseDeparture;                  // for choice of departure time
 
 /*! following global variable could be static but linking issue */
-double    pOrTtoPDestCog = 0;                      // cog from pOr to pDest.
+double    pOrToPDestCog = 0;                      // cog from pOr to pDest.
 
 struct {
    double dd;
@@ -89,8 +89,8 @@ static inline int forwardSectorOptimize (const Pp *pOr, const Pp *pDest, int nIs
    double alpha, theta;
    double thetaStep = 360.0 / par.nSectors;
    Pp ptTarget;
-   double dLat = -par.jFactor * cos (DEG_TO_RAD * pOrTtoPDestCog);  // nautical miles in N S direction
-   double dLon = -par.jFactor * sin (DEG_TO_RAD * pOrTtoPDestCog) / cos (DEG_TO_RAD * (pOr->lat + pDest->lat)/2); // nautical miles in E W direction
+   double dLat = -par.jFactor * cos (DEG_TO_RAD * pOrToPDestCog);  // nautical miles in N S direction
+   double dLon = -par.jFactor * sin (DEG_TO_RAD * pOrToPDestCog) / cos (DEG_TO_RAD * (pOr->lat + pDest->lat)/2); // nautical miles in E W direction
 
    memset (&ptTarget, 0, sizeof (Pp));
    ptTarget.lat = pOr->lat + dLat / 60; 
@@ -210,7 +210,7 @@ static int buildNextIsochrone (const Pp *pOr, const Pp *pDest, const Isoc isoLis
          newPt.sector = 0;
          if (isSea (newPt.lat, newPt.lon)) {
             newPt.dd = orthoDist (newPt.lat, newPt.lon, pDest->lat, pDest->lon);
-            double alpha = orthoCap (pOr->lat, pOr->lon, newPt.lat, newPt.lon) - pOrTtoPDestCog;
+            double alpha = orthoCap (pOr->lat, pOr->lon, newPt.lat, newPt.lon) - pOrToPDestCog;
          
             newPt.vmc = orthoDist (newPt.lat, newPt.lon, pOr->lat, pOr->lon) * cos (DEG_TO_RAD * alpha);
             if (newPt.vmc > *bestVmg) *bestVmg = newPt.vmc;
@@ -256,7 +256,7 @@ bool isoDescToStr (char *str, size_t maxLength) {
          latToStr (isoDesc [i].focalLat, par.dispDms, strLat), lonToStr (isoDesc [i].focalLon, par.dispDms, strLon));
       if ((strlen (str) + strlen (line)) > maxLength) 
          return false;
-      strncat (str, line, maxLength - strlen (str)); 
+      g_strlcat (str, line, maxLength);
    }
    return true;
 }
@@ -276,7 +276,7 @@ bool allIsocToStr (char *str, size_t maxLength) {
             lonToStr (pt.lon, par.dispDms, strLon), pt.id, pt.father, pt.amure, pt.motor);
          if ((strlen (str) + strlen (line)) > maxLength) 
             return false;
-         strncat (str, line, maxLength - strlen (str));
+         g_strlcat (str, line, maxLength);
       }
    }
    return true;
@@ -495,7 +495,7 @@ bool routeToStr (const SailRoute *route, char *str, size_t maxLength) {
       twa, route->t[0].tws, \
       MS_TO_KN * route->t[0].g, awa, aws, route->t[0].w);
 
-   strncat (str, line, maxLength - strlen (str));
+   g_strlcat (str, line, maxLength);
    for (int i = 1; i < route->n; i++) {
       twa = fTwa (route->t[i].lCap, route->t[i].twd);
       fAwaAws (twa, route->t[i].tws, route->t[i].sog, &awa, &aws);
@@ -514,25 +514,25 @@ bool routeToStr (const SailRoute *route, char *str, size_t maxLength) {
             (int) (route->t[i].twd + 360) % 360,\
             fTwa (route->t[i].lCap, route->t[i].twd), route->t[i].tws,\
             MS_TO_KN * route->t[i].g, awa, aws, route->t[i].w);
-      strncat (str, line, maxLength - strlen (str));
+      g_strlcat (str, line, maxLength);
    }
    
    snprintf (line, MAX_SIZE_LINE, " Avr %65s  %5.2lf             %7.2lf %7.2lf       %7.2lf %7.2lf\n", " ", \
       route->avrSog, route->avrTws, MS_TO_KN * route->avrGust, sumAws / route->n, route->avrWave); 
-   strncat (str, line, maxLength - strlen (str));
+   g_strlcat (str, line, maxLength);
    snprintf (line, MAX_SIZE_LINE, " Max %65s  %5.2lf             %7.2lf %7.2lf       %7.2lf %7.2lf\n", " ", \
       route->maxSog, route->maxTws, MS_TO_KN * route->maxGust, maxAws, route->maxWave); 
-   strncat (str, line, maxLength - strlen (str));
+   g_strlcat (str, line, maxLength);
    snprintf (line, MAX_SIZE_LINE, "\n Total distance   : %7.2lf NM,   Motor distance: %7.2lf NM\n", route->totDist, route->motorDist);
-   strncat (str, line, maxLength - strlen (str));
+   g_strlcat (str, line, maxLength);
    snprintf (line, MAX_SIZE_LINE, " Total Duration   : %s, Motor Duration: %s\n", \
       durationToStr (route->duration, strDur, sizeof (strDur)), durationToStr (route->motorDuration, strMot, sizeof (strMot)));
-   strncat (str, line, maxLength - strlen (str));
+   g_strlcat (str, line, maxLength);
 
    newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours + route->duration, strDate);
    snprintf (line, MAX_SIZE_LINE, " Arrival Date&Time: %s", newDate (zone.dataDate [0], \
       zone.dataTime [0]/100 + par.startTimeInHours + route->duration, strDate));
-   strncat (str, line, maxLength - strlen (str));
+   g_strlcat (str, line, maxLength);
    return true;
 }
 
@@ -548,7 +548,7 @@ bool OrouteToStr (const SailRoute *route, char *str, size_t maxLength) {
       route->t[0].id, route->t[0].father, route->t[0].motor, route->t[0].lCap, route->t[0].ld, route->t[0].ld/par.tStep,
       route->t[0].twd, route->t[0].tws, MS_TO_KN * route->t[0].g, route->t[0].w);
 
-   strncat (str, line, maxLength - strlen (str));
+   g_strlcat (str, line, maxLength);
    for (int i = 1; i < route->n; i++) {
       if ((fabs(route->t[i].lon) > 180.0) || (fabs (route->t[i].lat) > 90.0))
          snprintf (line, MAX_SIZE_LINE, " Isoc %3d: Erreur sur latitude ou longitude\n", i-1);   
@@ -559,17 +559,17 @@ bool OrouteToStr (const SailRoute *route, char *str, size_t maxLength) {
             route->t[i].id, route->t[i].father, route->t[i].motor,\
             route->t[i].lCap, route->t[i].ld, route->t[i].ld/par.tStep,
             route->t[i].twd, route->t[i].tws, MS_TO_KN * route->t[i].g, route->t[i].w);
-      strncat (str, line, maxLength - strlen (str));
+      g_strlcat (str, line, maxLength);
    }
    
    snprintf (line, MAX_SIZE_LINE, " Avr %85s  %7.2lf %7.2lf %7.2lf\n", " ", route->avrTws, MS_TO_KN * route->avrGust, route->avrWave); 
-   strncat (str, line, maxLength - strlen (str));
+   g_strlcat (str, line, maxLength);
    snprintf (line, MAX_SIZE_LINE, " Max %85s  %7.2lf %7.2lf %7.2lf\n", " ", route->maxTws, MS_TO_KN * route->maxGust, route->maxWave); 
-   strncat (str, line, maxLength - strlen (str));
+   g_strlcat (str, line, maxLength);
    snprintf (line, MAX_SIZE_LINE, "\n Total distance: %7.2lf NM,    Motor distance: %7.2lf NM\n", route->totDist, route->motorDist);
-   strncat (str, line, maxLength - strlen (str));
+   g_strlcat (str, line, maxLength);
    snprintf (line, MAX_SIZE_LINE, " Total Duration: %7.2lf hours, Motor Duration: %7.2lf hours\n", route->duration, route->motorDuration);
-   strncat (str, line, maxLength - strlen (str));
+   g_strlcat (str, line, maxLength);
    return true;
 }
 
@@ -692,7 +692,7 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
    double theBestVmg;
    pOr->dd = orthoDist (pOr->lat, pOr->lon, pDest->lat, pDest->lon);
    pOr->vmc = 0;
-   pOrTtoPDestCog = orthoCap (pOr->lat, pOr->lon, pDest->lat, pDest->lon);
+   pOrToPDestCog = orthoCap (pOr->lat, pOr->lon, pDest->lat, pDest->lon);
    pDest->toIndexWp = toIndexWp;
    lastClosestDist = pOr->dd;
    lastBestVmg = 0;

@@ -7,6 +7,7 @@ extern MyPolygon forbidZones [MAX_N_FORBID_ZONE];
 /*! Meteo service */
 extern struct DictElmt dicTab [];
 extern struct DictProvider providerTab [];
+extern const char *providerArray [N_PROVIDERS + 1];
 
 /*! polar description */
 extern PolMat polMat;

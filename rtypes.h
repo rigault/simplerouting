@@ -37,8 +37,8 @@
 #define MAX_N_DAYS_WEATHER    16               // Max number od days for weather forecast
 #define MAX_N_ISOC            (24*MAX_N_DAYS_WEATHER+1) // max number of isochrones in isocArray
 #define MAX_SIZE_ISOC         10000            // max number of point in an isochrone
-#define MAX_N_POL_MAT_COLS    128
-#define MAX_N_POL_MAT_LINES   128
+#define MAX_N_POL_MAT_COLS    64
+#define MAX_N_POL_MAT_LINES   64
 #define MAX_SIZE_LINE         256		         // max size of pLine in text files
 #define MAX_SIZE_URL          512		         // max size of a URL
 #define MAX_SIZE_DATE         32                // max size of a string with date inside

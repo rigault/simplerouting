@@ -1,4 +1,4 @@
-/*! compilation: gcc -Wall -Wextra -pedantic -Werror -Wformat=2 -std=c11 -O1 -c option.c `pkg-config --cflags glib-2.0` */
+/*! compilation: gcc -c option.c `pkg-config --cflags glib-2.0` */
 #include <glib.h>
 #include <stdbool.h>
 #include <string.h>

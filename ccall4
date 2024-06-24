@@ -1,10 +1,13 @@
 #!/bin/bash
-gcc -Wall -Wextra -pedantic -Werror -Wformat=2 -std=c11 -O2 -c engine.c `pkg-config --cflags glib-2.0`
-gcc -Wall -Wextra -pedantic -Werror -Wformat=2 -std=c11 -O1 -c option.c `pkg-config --cflags glib-2.0`
-gcc -Wall -Wextra -pedantic -Werror -std=c11 -O2 -c rutil.c `pkg-config --cflags glib-2.0` 
-gcc -Wall -Wextra -pedantic -Werror -std=c11 -O2 -c gpsutil.c 
+#CFLAGS="-Wall -Wextra -Wpedantic -Wformat=2 -Wno-unused-parameter -Wshadow -Wwrite-strings -Wstrict-prototypes"
+#CFLAGS="-Wold-style-definition -Wredundant-decls -Wnested-externs -Wmissing-include-dirs -O2 -std11"
+CFLAGS="-Wall -Wextra -pedantic -Werror -O2 -std=c11"
+
+gcc $CFLAGS -Wformat=2 -c engine.c `pkg-config --cflags glib-2.0`
+gcc $CFLAGS -Wformat=2 -c option.c `pkg-config --cflags glib-2.0`
+gcc -c rutil.c `pkg-config --cflags glib-2.0` 
+gcc $CFLAGS -Wformat=2 -c gpsutil.c 
 gcc -Wall -Wuninitialized -Wformat=2 -std=c11 -O1 -c show4.c `pkg-config --cflags gtk4`
-#gcc -Wformat=2 -std=c11 -O1 -c show4.c `pkg-config --cflags gtk4`
 #gcc -Wall -std=c11 -O1 -c show4.c `pkg-config --cflags gtk4` $(pkg-config --cflags webkit2gtk-4.1)
 
 #gcc show4.o option.o rutil.o engine.o -o routing -lcurl -pthread -lgps -lshp -leccodes -lm $(pkg-config --cflags --libs webkit2gtk-4.1) `pkg-config --cflags --libs gtk4`
@@ -12,4 +15,6 @@ gcc show4.o option.o rutil.o engine.o gpsutil.o -o routing -std=c11 -lcurl -lgps
 # -lnova required if libnova used
 rm -f *.o
 mv routing ../.
+
+
 

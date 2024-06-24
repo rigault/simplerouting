@@ -24,8 +24,6 @@
  * \section Usage
  * \li ./routing [-<option>] [<parameterFile>] */
 
-//#include <glib.h>
-#include <glib.h>
 #include <string.h>
 #include <stdlib.h>
 #include <locale.h>
@@ -39,7 +37,6 @@
 #include "option.h"
 #include "gpsutil.h"
 
-double vOffsetLocalUTC; 
 char   parameterFileName [MAX_SIZE_FILE_NAME];
 
 /*! make initializations and call opionManage () */
