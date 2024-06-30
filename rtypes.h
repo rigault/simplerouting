@@ -1,6 +1,6 @@
 /* this file includes in other file provides
 . Constant definition with #define
-. Type defition with typedef
+. Type definitions with typedef
 */
 
 #include <stdbool.h>
@@ -42,7 +42,7 @@
 #define MAX_SIZE_LINE         256		         // max size of pLine in text files
 #define MAX_SIZE_URL          512		         // max size of a URL
 #define MAX_SIZE_DATE         32                // max size of a string with date inside
-#define MAX_SIZE_BUFFER       10000
+#define MAX_SIZE_BUFFER       1000000
 #define MAX_N_TIME_STAMPS     512
 #define MAX_N_SHORT_NAME      64
 #define MAX_N_GRIB_LAT        1024
@@ -55,7 +55,7 @@
 #define MAX_N_SHP_FILES       4                 // max number of shape file
 #define MAX_N_POI             4096              // max number of poi in poi file
 #define SMALL_SIZE            5                 // for short string
-#define MAX_SIZE_POI_NAME     32                // max size of city name
+#define MAX_SIZE_POI_NAME     64                // max size of city name
 #define MAX_HISTORY_ROUTE     10                // max nimbedr of history route stored
 #define GPSD_TCP_PORT         "2947"            // TCP port for gps demon
 #define MAX_SIZE_FORBID_ZONE  100               // max size per forbidden zone

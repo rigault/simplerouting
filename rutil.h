@@ -80,7 +80,7 @@ extern bool   readIsSea (const char *fileName);
 extern int    readPoi (const char *fileName);
 extern bool   writePoi (const char *fileName);
 extern int    findPoiByName (const char *name, double *lat, double *lon);
-extern char   *poiToStr (char *str, size_t maxLength);
+extern char   *poiToStr (bool portCheck, char *str, size_t maxLength);
 extern bool   smtpGribRequestPython (int type, double lat1, double lon1, double lat2, double lon2, char *command, size_t maxLength);
 extern bool   checkGribToStr (char *buffer, size_t maxLength);
 extern char   *dollarSubstitute (const char* str, char *res, size_t len);

@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rtypes.h"  
-#define MAX_ROWS 1024
+#define MAX_SIZE_NMEA 1024
 #define SIZE_DATE_TIME 10
 #define SLEEP_TIME 1                   // seconds
 #define FLOW_INPUT_UNIX "/dev/ttyACM0" // NMEA USB converter
@@ -100,16 +100,16 @@ static void strcpymod (char *d, const char *s) {
 /* GPGLL : Latitude Longitude */
 /* vraie si a reussit a decoder la trame */
 static bool decode (char *line) {
-   char lig [MAX_ROWS];
+   char lig [MAX_SIZE_NMEA];
    strcpymod (lig, line);
    // printf ("decode: %s\n", lig);
-   if (sscanf (lig, "$GPRMC, %[0-9.], %c, %lf, %c, %lf, %c, %lf, %lf, %[0-9],", gpsRecord.time, &gpsRecord.status, \
+   if (sscanf (lig, "$GPRMC, %64[0-9.], %c, %lf, %c, %lf, %c, %lf, %lf, %64[0-9],", gpsRecord.time, &gpsRecord.status, \
          &gpsRecord.lat, &gpsRecord.NS, &gpsRecord.lon, &gpsRecord.EW, &gpsRecord.sog, &gpsRecord.cog, gpsRecord.date) >= 1) 
       return true;
-   if (sscanf (lig, "$GPGGA, %[0-9.], %lf, %c, %lf, %c, %d, %d, %lf, %lf, %c", gpsRecord.time , &gpsRecord.lat, &gpsRecord.NS, \
+   if (sscanf (lig, "$GPGGA, %64[0-9.], %lf, %c, %lf, %c, %d, %d, %lf, %lf, %c", gpsRecord.time , &gpsRecord.lat, &gpsRecord.NS, \
          &gpsRecord.lon, &gpsRecord.EW, &gpsRecord.quality, &gpsRecord.numSV, &gpsRecord.hdop, &gpsRecord.alt, &gpsRecord.uAlt) >= 1) 
       return true; 
-   if (sscanf (lig, "$GPGLL, %lf, %c, %lf, %c, %[0-9.], %c", &gpsRecord.lat, &gpsRecord.NS, &gpsRecord.lon, &gpsRecord.EW, \
+   if (sscanf (lig, "$GPGLL, %lf, %c, %lf, %c, %64[0-9.], %c", &gpsRecord.lat, &gpsRecord.NS, &gpsRecord.lon, &gpsRecord.EW, \
          gpsRecord.time, &gpsRecord.status ) >= 1)
       return true; 
    return false;
@@ -245,18 +245,20 @@ static void getGpsNmea () {
 #else
 /* get GPS information with NMEA decoding Unix like */
 static void getGpsNmea () {
-   FILE *flowInput;
-   char row [MAX_ROWS];
+   FILE *flowInput = NULL;
+   char row [MAX_SIZE_NMEA];
    char *line = &row [0];
    if ((flowInput = fopen (FLOW_INPUT_UNIX, "r")) == NULL) {
       fprintf (stderr, "In GetGpsNmeaUnix: cannot open input flow\n");
       exit (EXIT_FAILURE);
    }
    while (true) {
-      if (((line = fgets (line, MAX_ROWS, flowInput)) != NULL) && (*line == '$') && (checksumOK (row))) {
+      line = fgets (row, MAX_SIZE_NMEA, flowInput); 
+      if ((line != NULL) && (*line == '$') && (checksumOK (row))) {
          // printf ("%s\n", line);
          if (decode (line)) {
             copyGpsData ();
+         //}
          }
       }
    }

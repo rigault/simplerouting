@@ -246,7 +246,7 @@ bool isoDescToStr (char *str, size_t maxLength) {
    char strLon [MAX_SIZE_LINE];
    const int DIST_MAX = 100000;
    double distance;
-   strcpy (str, "No toWp Size First Closest Distance VMC      FocalLat  FocalLon\n");
+   strcpy (str, "No toWp Size First Closest Distance VMC      FocalLat    FocalLon\n");
    for (int i = 0; i < nIsoc; i++) {
       distance = isoDesc [i].distance;
       if (distance > DIST_MAX) distance = -1;
@@ -268,7 +268,7 @@ bool allIsocToStr (char *str, size_t maxLength) {
    char strLat [MAX_SIZE_LINE];
    char strLon [MAX_SIZE_LINE];
    Pp pt;
-   strcpy (str, "No  Lat         Lon             Id Father  Amure  Motor\n");
+   strcpy (str, "No  Lat         Lon               Id Father  Amure  Motor\n");
    for (int i = 0; i < nIsoc; i++) {
       for (int k = 0; k < isoDesc [i].size; k++) {
          pt = isocArray [i][k];
@@ -755,14 +755,10 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
    return NIL;
 }
 
-/*! launch routing wih parameters */
-void *routingLaunch () {
-   struct timeval t0, t1;
-   long ut0, ut1;
-   double lastStepDuration;
+/*! global variable initialization for routing */
+static void initRouting () {
    lastClosest = par.pOr;
    tDeltaCurrent = zoneTimeDiff (&currentZone, &zone); // global variable
-   Pp pNext;
    par.pOr.id = -1;
    par.pOr.father = -1;
    par.pDest.id = 0;
@@ -775,10 +771,19 @@ void *routingLaunch () {
       isoDesc [i].distance = DBL_MAX;
       isoDesc [i].bestVmg = 0;
    }
+   nIsoc = 0;
+}
+
+/*! launch routing wih parameters */
+void *routingLaunch () {
+   struct timeval t0, t1;
+   long ut0, ut1;
+   double lastStepDuration;
+   Pp pNext;
+   initRouting ();
 
    gettimeofday (&t0, NULL);
    ut0 = t0.tv_sec * MILLION + t0.tv_usec;
-   nIsoc = 0;
    double wayPointStartTime = par.startTimeInHours;
 
    //Launch routing
@@ -829,9 +834,11 @@ void *bestTimeDeparture () {
    chooseDeparture.tStop = chooseDeparture.tEnd; // default value
 
    for (int t = chooseDeparture.tBegin; t < chooseDeparture.tEnd; t += chooseDeparture.tStep) {
+      initRouting ();
       n = routing (&par.pOr, &par.pDest, -1, (double) t, par.tStep, &lastStep);
       if (n > 0) {
          duration = par.tStep * (n-1) + lastStep; // hours
+         // printf ("tStep: %d, part1: %d, lastStep: %.2lf\n", par.tStep, par.tStep * (n-1), lastStep);
          chooseDeparture.t [t] = duration;
          if (duration < minDuration) {
             minDuration = duration;
@@ -840,11 +847,11 @@ void *bestTimeDeparture () {
          if (duration > maxDuration) {
             maxDuration = duration;
          }
-         //printf ("Count: %d, time %d, last duration: %.2lf, min: %.2lf, bestTime: %d\n", chooseDeparture.count, t, duration, minDuration, chooseDeparture.bestTime);
+         // printf ("Count: %d, time %d, duration: %.2lf, min: %.2lf, bestTime: %d\n", chooseDeparture.count, t, duration, minDuration, chooseDeparture.bestTime);
       }
       else {
          chooseDeparture.tStop = t;
-         //printf ("Count: %d, time %d, Unreachable\n", chooseDeparture.count, t);
+         printf ("Count: %d, time %d, Unreachable\n", chooseDeparture.count, t);
          break;
       }
       chooseDeparture.count += 1;
@@ -856,7 +863,7 @@ void *bestTimeDeparture () {
       chooseDeparture.ret = EXIST_SOLUTION;
       routingLaunch ();
    }  
-   else chooseDeparture.ret = NO_SOLUTION; // no solution
+   else chooseDeparture.ret = NO_SOLUTION;
    return NULL;
 }
 

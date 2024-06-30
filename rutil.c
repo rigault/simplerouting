@@ -101,7 +101,6 @@ bool concat (const char *prefix, int step, int max, const char *fileRes) {
       fprintf (stderr, "Error in concat: Cannot write: %s\n", fileRes);
       return false;
    }
-
    for (int i = 0; i <= max; i += step) {
       char fileName [MAX_SIZE_FILE_NAME];
       snprintf (fileName, sizeof(fileName), "%s%03d", prefix, i);
@@ -287,7 +286,7 @@ bool isNumber (const char *name) {
 /*! replace $ by sequence */
 char *dollarSubstitute (const char* str, char *res, size_t maxSize) {
    res [0] = '\0';
-   if (str == NULL) NULL;
+   if (str == NULL) return NULL;
    int len = 0;
    for (size_t i = 0; (i < maxSize) && (str[i] != '\0'); ++i) {
       if (str[i] == '$') {
@@ -414,7 +413,7 @@ char *lonToStr (double lon, int type, char *str) {
    double mn = 60 * lon - 60 * (int) lon;
    double sec = 3600 * lon - (3600 * (int) lon) - (60 * (int) mn);
    char cc [10];
-   strcpy (cc, (lon > 0) ? "E  " : "W");
+   strcpy (cc, (lon > 0) ? "E" : "W");
    switch (type) {
    case BASIC: snprintf (str, MAX_SIZE_LINE, "%.2lf°", lon); break;
    case DD: snprintf (str, MAX_SIZE_LINE, "%06.2lf°%s", fabs (lon), cc); break;
@@ -518,7 +517,7 @@ bool smtpGribRequestPython (int type, double lat1, double lon1, double lat2, dou
    printf ("End command: %s\n", command);
    return true;
 }
-   
+
 /*! Read poi file and fill internal data structure. Return number of poi */
 int readPoi (const char *fileName) {
    char buffer [MAX_SIZE_LINE];
@@ -536,6 +535,8 @@ int readPoi (const char *fileName) {
          first = false;
          continue;
       }
+      if (*pLine == '#') 
+         continue;
       if ((latToken = strtok (pLine, CSV_SEP)) != NULL) {            // Lat
          if ((lonToken = strtok (NULL, CSV_SEP)) != NULL) {          // Lon
             if ((typeToken = strtok (NULL, CSV_SEP))!= NULL ) {      // Type
@@ -581,37 +582,29 @@ bool writePoi (const char *fileName) {
    return true;
 }
 
-/*! string to upper */
-static char* strToUpper (const char *name, char *upperName, size_t maxLength) {
-   char *pt = upperName;
-   size_t i = 0;
-   while (*name && (i < maxLength)) {
-      *upperName++ = toupper (*name++);
-      i += 1;
-   }
-   *upperName = '\0';
-   upperName = pt;
-   return upperName;
-}
-
 /*! give the point refered by its name. return index found, -1 if not found */
 int findPoiByName (const char *name, double *lat, double *lon) {
    const int MIN_NAME_LENGTH = 3;
-   char upperName [MAX_SIZE_NAME] = "";
-   char upperPoi [MAX_SIZE_NAME] = "";
-   strToUpper (name, upperName, MAX_SIZE_NAME);
+   int i;
+   gchar *upperPoi = NULL;;
+   gchar *upperName = g_utf8_strup (name, MAX_SIZE_NAME);
    g_strstrip (upperName);
-   if (strlen (upperName) <= MIN_NAME_LENGTH) 
+   if (strlen (upperName) <= MIN_NAME_LENGTH) {
+      free (upperPoi);
+      free (upperName);
       return -1;
-   for (int i = 0; i < nPoi; i++) {
-      strToUpper (tPoi [i].name, upperPoi, MAX_SIZE_NAME);
+   }
+   for (i = 0; i < nPoi; i++) {
+      upperPoi = g_utf8_strup (tPoi [i].name, MAX_SIZE_NAME);
       if (strstr (upperPoi, upperName) != NULL) {
          *lat = tPoi [i].lat;
          *lon = tPoi [i].lon;
-         return i;
+         break;
       }
    }
-   return -1;
+   free (upperPoi);
+   free (upperName);
+   return (i < nPoi) ? i : -1;
 }
 
 /*! printf poi table 
@@ -629,20 +622,19 @@ static void poiPrint () {
 } */
 
 /*! translate poi table into a string */
-char *poiToStr (char *str, size_t maxLength) {
+char *poiToStr (bool portCheck, char *str, size_t maxLength) {
    char line [MAX_SIZE_LINE] = "";
    char strLat [MAX_SIZE_LINE] = "";
    char strLon [MAX_SIZE_LINE] = "";
-   snprintf (str, MAX_SIZE_LINE, "Lat         Lon         Name\n");
+   snprintf (str, MAX_SIZE_LINE, "Lat         Lon           Type  Level Name\n");
+   
    for (int i = 0; i < nPoi; i++) {
-      if (tPoi [i].type > UNVISIBLE) {
-         snprintf (line, MAX_SIZE_LINE, "%-12s %-12s %d %d %s\n", latToStr (tPoi[i].lat, par.dispDms, strLat), \
+      if ((tPoi [i].type > UNVISIBLE) && ((tPoi [i].type != PORT) || portCheck)) {
+         snprintf (line, MAX_SIZE_LINE, "%-12s %-12s %6d %6d %s\n", latToStr (tPoi[i].lat, par.dispDms, strLat), \
             lonToStr (tPoi[i].lon, par.dispDms, strLon), tPoi [i].type, tPoi [i].level, tPoi[i].name);
 	      g_strlcat (str, line, maxLength);
       }
    }
-   snprintf (line, MAX_SIZE_LINE, "\nNumber of Points Of Interest: %d\n", nPoi);
-   g_strlcat (str, line, maxLength);
    return str;
 }
 
@@ -1611,7 +1603,7 @@ static void analyseCoord (char *str, double *lat, double *lon) {
    if (isNumber (str)) {
       pt = strchr (str, ',');
       *lon = getCoord (strchr (str, ',') +1);
-      *pt = '\0'; // pas joli
+      if (pt != NULL) *pt = '\0'; // pas joli
       *lat = getCoord (str);
    }
 }
@@ -2056,7 +2048,7 @@ bool addTraceGPS (const char *fileName) {
       fprintf (stderr, "Error in addTracePoint: cannot write: %s\n", fileName);
       return false;
    }
-   fprintf (f, "%.2lf; %.2lf; %ld; %s; %4.0lf; %6.2lf\n", my_gps_data.lat, my_gps_data.lon, \
+   fprintf (f, "%7.2lf; %7.2lf; %10ld; %15s; %4.0lf; %6.2lf\n", my_gps_data.lat, my_gps_data.lon, \
       my_gps_data.time, epochToStr (my_gps_data.time, true, str, sizeof (str)),\
       my_gps_data.cog, my_gps_data.sog);
    fclose (f);
@@ -2072,7 +2064,7 @@ bool addTracePt (const char *fileName, double lat, double lon) {
       fprintf (stderr, "Error in addTrace: cannot write: %s\n", fileName);
       return false;
    }
-   fprintf (f, "%.2lf; %.2lf; %ld; %s\n", lat, lon, t, epochToStr (t, true, str, sizeof (str)));
+   fprintf (f, "%7.2lf; %7.2lf; %10ld; %15s;\n", lat, lon, t, epochToStr (t, true, str, sizeof (str)));
    fclose (f);
    return true;
 }
@@ -2099,11 +2091,16 @@ bool distanceTraceDone (const char *fileName, double *od, double *ld, double *rd
    FILE *f = NULL;
    bool first = true;
    char line [MAX_SIZE_LINE];
-   double lat0 = 0.0, lon0 = 0.0, time0 = 0, latLast, lonLast, lat, lon, time, delta;
-   *rd = 0.0;
+   double lat0 = 0.0, lon0 = 0.0, time0 = 0.0, time = 0.0, lat = 0.0, lon = 0.0;
+   double latLast, lonLast, delta;
+   *od = 0.0, *ld = 0.0, *rd = 0.0;
    
    if ((f = fopen (fileName, "r")) == NULL) {
       fprintf (stderr, "Error in distanceTraceDone: cannot read: %s\n", fileName);
+      return false;
+   }
+   if (fgets (line, MAX_SIZE_LINE, f) == NULL) { // head line contain libelles and is ignored
+      fprintf (stderr, "Error in distanceTraceDone: no header: %s\n", fileName);
       return false;
    }
    while (fgets (line, MAX_SIZE_LINE, f) != NULL ) {
