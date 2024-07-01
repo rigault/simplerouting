@@ -1,4 +1,4 @@
-/*! compilation gcc -Wall -Wextra -pedantic -Werror -std=c11 -O2 -c gpsutil.c */
+/*! compilation gcc -c gpsutil.c */
 
 #ifdef _WIN32 
 #include <windows.h>
@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rtypes.h"  
+#include <math.h>
 #define MAX_SIZE_NMEA 1024
 #define SIZE_DATE_TIME 10
 #define SLEEP_TIME 1                   // seconds

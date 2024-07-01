@@ -1,4 +1,3 @@
-extern SailRoute route;
 extern Pp        isocArray [MAX_N_ISOC][MAX_SIZE_ISOC];
 extern IsoDesc   isoDesc  [MAX_N_ISOC];
 extern int       nIsoc;

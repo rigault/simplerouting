@@ -20,7 +20,6 @@
 #include "rtypes.h"
 #include "inline.h"
 #include "rutil.h"
-#include "engine.h"
 
 /*! global variables */
 Pp        isocArray [MAX_N_ISOC][MAX_SIZE_ISOC];  // list of isochrones
@@ -756,7 +755,7 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
 }
 
 /*! global variable initialization for routing */
-static void initRouting () {
+static void initRouting (void) {
    lastClosest = par.pOr;
    tDeltaCurrent = zoneTimeDiff (&currentZone, &zone); // global variable
    par.pOr.id = -1;

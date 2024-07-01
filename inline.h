@@ -1,6 +1,8 @@
 /*! this file contains small inlines functions
  to be included in s source files */
 
+#include <math.h>
+
 /*! true if P (lat, lon) is within the zone */
 static inline bool isInZone (double lat, double lon, Zone *zone) {
    return (lat >= zone->latMin) && (lat <= zone->latMax) && (lon >= zone->lonLeft) && (lon <= zone->lonRight);

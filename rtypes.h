@@ -3,9 +3,6 @@
 . Type definitions with typedef
 */
 
-#include <stdbool.h>
-#include <time.h>
-#include <math.h>
 #define CSV_SEP ";,\t"
 #define GPS_TIME_OUT          2000000           // 2 seconds
 #define N_WIND_URL            6

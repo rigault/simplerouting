@@ -1,4 +1,5 @@
 /*! compilation: gcc -c rutil.c `pkg-config --cflags glib-2.0` */
+#define _POSIX_C_SOURCE 200809L // to avoid warnong with -std=c11 when using popen function (Posix)
 #include <glib.h>
 #include <curl/curl.h>
 #include <float.h>   
@@ -93,6 +94,19 @@ const char *CURRENT_URL [N_CURRENT_URL * 2] = {
    "Manche",            "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Manche.grb",
    "Gascogne",          "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Gascogne.grb"
 };
+
+/*! launch system command in a thread */
+void *commandRun (void *data) {
+   FILE *fs;
+   char line [MAX_SIZE_LINE] = "";
+   strncpy (line, (char *) data, MAX_SIZE_LINE - 1);
+   printf ("commandRun: %s\n", line);
+   if ((fs = popen (line, "r")) == NULL)
+      fprintf (stderr, "Error in commandRun: popen call: %s\n", line);
+   else
+      pclose (fs);
+   return NULL;
+}
 
 /*! concat all files prefixed by prefix and suffixed 0..max (with step) in fileRes */
 bool concat (const char *prefix, int step, int max, const char *fileRes) {
@@ -584,10 +598,10 @@ bool writePoi (const char *fileName) {
 
 /*! give the point refered by its name. return index found, -1 if not found */
 int findPoiByName (const char *name, double *lat, double *lon) {
-   const int MIN_NAME_LENGTH = 3;
+   const size_t MIN_NAME_LENGTH = 3;
    int i;
-   gchar *upperPoi = NULL;;
-   gchar *upperName = g_utf8_strup (name, MAX_SIZE_NAME);
+   char *upperPoi = NULL;;
+   char *upperName = g_utf8_strup (name, MAX_SIZE_NAME);
    g_strstrip (upperName);
    if (strlen (upperName) <= MIN_NAME_LENGTH) {
       free (upperPoi);
@@ -2101,6 +2115,7 @@ bool distanceTraceDone (const char *fileName, double *od, double *ld, double *rd
    }
    if (fgets (line, MAX_SIZE_LINE, f) == NULL) { // head line contain libelles and is ignored
       fprintf (stderr, "Error in distanceTraceDone: no header: %s\n", fileName);
+      fclose (f);
       return false;
    }
    while (fgets (line, MAX_SIZE_LINE, f) != NULL ) {

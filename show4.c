@@ -1,12 +1,10 @@
 /*! \mainpage Routing for sail software
- * \brief small routing software written in c language
+ * \brief Small routing software written in c language with GTK4
  * \author Rene Rigault
  * \version 0.1
  * \date 2024 
- * \file
  * \section Compilation
- * gcc -c show4.c `pkg-config --cflags gtk4` -Wdeprecated-declarations
- * see "ccall4 file
+ * \li see "ccall4" file
  * \section Documentation
  * \li Doc produced by doxygen
  * \li see also html help file
@@ -33,7 +31,7 @@
 #include <gtk/gtk.h>
 #include <eccodes.h>
 #include <curl/curl.h>
-///#include <webkit2/webkit2.h>
+//#include <webkit2/webkit2.h>
 #include "shapefil.h"
 #include "rtypes.h"
 #include "rutil.h"
@@ -208,20 +206,6 @@ static gboolean routingCheck (gpointer data);
 static void destroySurface ();
 static void onCheckBoxToggled (GtkWidget *checkbox, gpointer user_data);
 
-/*! launch system command in a thread */
-void *commandRun (void *data) {
-   FILE *fs;
-   char line [MAX_SIZE_LINE] = "";
-   strncpy (line, (char *) data, MAX_SIZE_LINE);
-   printf ("commandRun: %s\n", line);
-   if ((fs = popen (line, "r")) == NULL)
-      fprintf (stderr, "Error in commandRun: popen call: %s\n", line);
-   else
-      pclose (fs);
-   printf ("end commandRun\n");
-   return NULL;
-}
-
 /*! destroy the child window before exiting application */
 static void onParentDestroy (GtkWidget *widget, gpointer child_window) {
    if (GTK_IS_WIDGET(child_window)) {
@@ -351,8 +335,8 @@ static void confirmBox (const char *line, void (*callBack)()) {
 
 /*! callback for entryBox change */
 static void entryBoxChange (GtkEditable *editable, gpointer user_data) {
-   gchar *name = (gchar *) user_data;
-   const gchar *text = gtk_editable_get_text (editable);
+   char *name = (char *) user_data;
+   const char *text = gtk_editable_get_text (editable);
    g_strlcpy (name, text, MAX_SIZE_BUFFER);
    // printf ("%s\n", name);
 }
@@ -402,10 +386,9 @@ static void entryBox (const char *title, const char *message, char *strValue, vo
 
    gtk_window_present (GTK_WINDOW (entryWindow));
 }
-
 /* Dialog box for file selection */
-GtkFileDialog* selectFile (const char *title, const char *dirName, char *nameFilter, char *strFilter0, char*strFilter1) {
-   char directory [MAX_SIZE_DIR_NAME];
+static GtkFileDialog* selectFile (const char *title, const char *dirName, const char *nameFilter, const char *strFilter0, const char *strFilter1, const char *initialFile) {
+   char directory[MAX_SIZE_DIR_NAME];
 
    GtkFileDialog* fileDialog = gtk_file_dialog_new ();
    gtk_file_dialog_set_title (fileDialog, title);
@@ -416,6 +399,13 @@ GtkFileDialog* selectFile (const char *title, const char *dirName, char *nameFil
    gtk_file_dialog_set_initial_folder (fileDialog, gDirectory);
    g_object_unref (gDirectory);
 
+   // initial file
+   if (initialFile != NULL && initialFile[0] != '\0') {
+      GFile *gInitialFile = g_file_new_for_path(initialFile);
+      gtk_file_dialog_set_initial_file(fileDialog, gInitialFile);
+      g_object_unref(gInitialFile);
+   }
+   
    // filter
    GtkFileFilter *filter = gtk_file_filter_new();
    gtk_file_filter_set_name (filter, nameFilter);
@@ -487,16 +477,10 @@ static void openMap (GSimpleAction *action, GVariant *parameter, gpointer *data)
    g_thread_new ("openMap", commandRun, command);
 }
 
-/*! Fonction that applies bold style  */
-static void applyBoldStyle (GtkTextBuffer *buffer, GtkTextIter *start, GtkTextIter *end) {
-   GtkTextTag *tag = gtk_text_buffer_create_tag(buffer, "bold", "weight", PANGO_WEIGHT_BOLD, NULL);
-   gtk_text_buffer_apply_tag(buffer, tag, start, end);
-}
-
 /*! Filter function for displayText */
 static void filterText (GtkTextBuffer *buffer, const char *filter) {
     GtkTextIter start, end;
-    gchar **lines;
+    char **lines;
     GRegex *regex = NULL;
     GError *error = NULL;
 
@@ -535,7 +519,7 @@ static void onFilterEntryChanged (GtkEditable *editable, gpointer user_data) {
    if (editable == NULL)
       filterText (buffer, NULL);
    else {
-      const gchar *filter = gtk_editable_get_text (editable);
+      const char *filter = gtk_editable_get_text (editable);
       filterText (buffer, filter);
    }
 }
@@ -557,17 +541,14 @@ static GtkWidget *createDecoratedLabel (const char *text) {
 /* first line of text and return pos of second ine */
 static char *extractFirstLine (const char *text, char* strFirstLine) {
    char *firstLineEnd = strchr (text, '\n');
-   size_t length;
 
-   if (firstLineEnd != NULL)
-      length = firstLineEnd - text;    // length of fiest line
-   else
-      length = strlen (text);          // no new line found
-
-   if (firstLineEnd != NULL) {          // copy first line
-      strncpy (strFirstLine, text, length);
-      strFirstLine [length] = '\0';     // Null-terminate the string
+   if (firstLineEnd == NULL) {             // no newline. First line is empty
+      strFirstLine [0] = '\0';             // Null-terminate the string
+      return NULL;
    }
+   size_t length = firstLineEnd - text;    // length of first line
+   strncpy (strFirstLine, text, length);
+   strFirstLine [length] = '\0';           // Null-terminate the string
    return firstLineEnd + 1;
 }
 
@@ -578,7 +559,11 @@ static void displayText (guint width, guint height, const char *text, const char
    char *ptSecondLine; 
 
    ptSecondLine = extractFirstLine (text, strFirstLine);
-   strncpy (gloBuffer, ptSecondLine, MAX_SIZE_BUFFER);
+   if (ptSecondLine == NULL) {
+      fprintf (stderr, "Error in displayText: no first line\n");
+      return;
+   }
+   strncpy (gloBuffer, ptSecondLine, MAX_SIZE_BUFFER - 1);
    
    GtkWidget *textWindow = gtk_application_window_new (app);
    gtk_window_set_title(GTK_WINDOW (textWindow), title);
@@ -625,7 +610,6 @@ static void displayText (guint width, guint height, const char *text, const char
 
 /*! display file using dispLay text */
 static void displayFile (const char *fileName, const char *title) {
-   char str [MAX_SIZE_FILE_NAME];
    GError *error = NULL;
    char *content = NULL;
    gsize length;
@@ -1456,7 +1440,7 @@ static void drawPoi (cairo_t *cr) {
             if (dispZone.zoom > MIN_ZOOM_POI_VISIBLE) {
                CAIRO_SET_SOURCE_RGB_BLACK (cr); // points
                cairo_move_to (cr, x+10, y);
-               gchar *utf8String = g_locale_to_utf8(tPoi [i].name, -1, NULL, NULL, NULL);
+               char *utf8String = g_locale_to_utf8(tPoi [i].name, -1, NULL, NULL, NULL);
                cairo_show_text (cr, utf8String);
                g_free (utf8String);
                cairo_rectangle (cr, x, y, 1, 1);
@@ -1761,7 +1745,7 @@ static void drawScale (cairo_t *cr, DispZone *dispZone) {
 }
 
 /* Provide resume of information */
-static void drawInfo (cairo_t *cr, int width, int height) {
+static void drawInfo (cairo_t *cr) {
    double lat, lon, distToDest;
    char str [MAX_SIZE_BUFFER];
    char strDate [MAX_SIZE_LINE];
@@ -1946,7 +1930,7 @@ static void drawGribCallback (GtkDrawingArea *area, cairo_t *cr, \
    }
    drawTrace (cr);
    if (par.infoDisp)
-      drawInfo (cr, width, height);
+      drawInfo (cr);
    
    //printf ("Time drawGribCallback: %.4f ms\n", (1000 * (double) (clock () - debut)) / CLOCKS_PER_SEC);
 }
@@ -2509,7 +2493,7 @@ static void lineReport (GtkWidget *grid, int l, const char* iconName, const char
 }
 
 /*! draw legend */
-static void drawLegend (cairo_t *cr, guint leftX, guint topY, double colors [][3], char *libelle [], size_t maxColors) {
+static void drawLegend (cairo_t *cr, guint leftX, guint topY, double colors [][3], const char *libelle [], size_t maxColors) {
    const int DELTA = 12;
    const int RECTANGLE_WIDTH = 55;
    CAIRO_SET_SOURCE_RGB_ULTRA_LIGHT_GRAY(cr);
@@ -2517,7 +2501,7 @@ static void drawLegend (cairo_t *cr, guint leftX, guint topY, double colors [][3
    cairo_stroke (cr);
    
    cairo_set_font_size (cr, 12);
-   for (int i = 0; i < maxColors; i++) {
+   for (size_t i = 0; i < maxColors; i++) {
       cairo_set_source_rgb (cr, colors[i][0], colors[i][1], colors[i][2]);
       cairo_move_to (cr, leftX + DELTA /2, topY + (i + 1) * DELTA);
       cairo_show_text (cr, libelle [i]);
@@ -2544,7 +2528,7 @@ static void onStatEvent (GtkDrawingArea *drawing_area, cairo_t *cr, int width, i
       return;
 
    // Legend
-   char *libelle [MAX_VAL] = {"Motor", "Tribord", "Babord"}; 
+   const char *libelle [MAX_VAL] = {"Motor", "Tribord", "Babord"}; 
    double colors[MAX_VAL][3] = {{1, 0, 0}, {0.5, 0.5, 0.5}, {0, 0, 0}}; // Red Gray Black
    drawLegend (cr, LEGEND_X_LEFT, LEGEND_Y_TOP, colors, libelle, MAX_VAL);
 
@@ -2618,7 +2602,7 @@ static void onAllureEvent (GtkDrawingArea *drawing_area, cairo_t *cr, \
 
    // legend
    double colors[MAX_VAL][3] = {{1, 0, 1}, {1, 165.0/255.0, 0}, {0, 1, 1}}; // Orange in the middle
-   char *libelle [MAX_ALLURES] = {"Près", "Travers", "Portant"};
+   const char *libelle [MAX_ALLURES] = {"Près", "Travers", "Portant"};
    drawLegend (cr, LEGEND_X_LEFT, LEGEND_Y_TOP, colors, libelle, MAX_ALLURES);
 
    double start_angle = 0;
@@ -3141,9 +3125,9 @@ static void traceDump () {
 void cbOpenTrace (GObject* source_object, GAsyncResult* res, gpointer data) {
    GFile* file = gtk_file_dialog_open_finish ((GtkFileDialog *) source_object, res, NULL);
    if (file != NULL) {
-      gchar *fileName = g_file_get_path(file);
+      char *fileName = g_file_get_path(file);
       if (fileName != NULL) {
-         strncpy (par.traceFileName, fileName, MAX_SIZE_FILE_NAME); 
+         strncpy (par.traceFileName, fileName, MAX_SIZE_FILE_NAME - 1); 
          g_free(fileName);
          traceReport ();
          gtk_widget_queue_draw (drawing_area);
@@ -3153,79 +3137,8 @@ void cbOpenTrace (GObject* source_object, GAsyncResult* res, gpointer data) {
 
 /*! Select trace file and read trace file */
 static void openTrace () {
-   GtkFileDialog* fileDialog = selectFile ("Open Trace", "trace", "Trace Files", "*.csv", "*.csv");
+   GtkFileDialog* fileDialog = selectFile ("Open Trace", "trace", "Trace Files", "*.csv", "*.csv", NULL);
    gtk_file_dialog_open (fileDialog, GTK_WINDOW (window), NULL, cbOpenTrace, NULL);
-}
-
-/*! Find information related to pOi */
-static void poiFinder (GtkWidget *widget, gpointer entryWindow) {
-   const int MAX_COUNT = 20;
-   int count = 0 ;
-   char line [MAX_SIZE_LINE];
-   char strLat [MAX_SIZE_LINE];
-   char strLon [MAX_SIZE_LINE];
-   int i;
-   GtkWidget *label = NULL;
-   gchar *upperPoi = NULL;
-   gchar *upperName = g_utf8_strup (poiName, MAX_SIZE_NAME);
-   GtkWidget *poiWindow = gtk_application_window_new (app);
-   gtk_window_set_title (GTK_WINDOW (poiWindow), "poi Found");
-   g_signal_connect (window, "destroy", G_CALLBACK (onParentDestroy), poiWindow);
-   // gtk_widget_set_size_request (poiWindow, 800, 400);
-
-   GtkWidget *grid = gtk_grid_new();   
-   gtk_window_set_child (GTK_WINDOW (poiWindow), (GtkWidget *) grid);
-   gtk_grid_set_column_spacing(GTK_GRID(grid), 10);
-   gtk_grid_set_row_spacing(GTK_GRID(grid), 5);
-   gtk_grid_set_row_homogeneous(GTK_GRID(grid), FALSE);
-   gtk_grid_set_column_homogeneous(GTK_GRID(grid), FALSE);
-
-   gtk_grid_attach (GTK_GRID (grid), strToLabelBold("Name"),  0, 0, 1, 1);
-   gtk_grid_attach (GTK_GRID (grid), strToLabelBold("Lat."),  1, 0, 1, 1);
-   gtk_grid_attach (GTK_GRID (grid), strToLabelBold("Lon."),  2, 0, 1, 1);
-   gtk_grid_attach (GTK_GRID (grid), strToLabelBold("Type"),  3, 0, 1, 1);
-   gtk_grid_attach (GTK_GRID (grid), strToLabelBold("Level"), 4, 0, 1, 1);
-
-   GtkWidget *separator = gtk_separator_new (GTK_ORIENTATION_HORIZONTAL);
-   gtk_grid_attach (GTK_GRID (grid), separator,                 0, 1, 5, 1);
-
-   for (i = 0; i < nPoi; i++) {
-      upperPoi = g_utf8_strup (tPoi [i].name, MAX_SIZE_NAME);
-      if ((strstr (upperPoi, upperName) != NULL) && 
-         (tPoi [i].type != UNVISIBLE) && 
-         ((tPoi [i].type != PORT) || portCheck)) {
-
-         count += 1;
-         if (count > MAX_COUNT) continue;
-         label = strToLabel (tPoi [i].name, -1);
-         gtk_grid_attach (GTK_GRID (grid), label, 0, i + 2, 1, 1);
-
-         label = gtk_label_new (latToStr (tPoi[i].lat, par.dispDms, strLat));
-         gtk_grid_attach (GTK_GRID (grid), label, 1, i + 2, 1, 1);
-         
-         label = gtk_label_new (lonToStr (tPoi[i].lon, par.dispDms, strLon));
-         gtk_grid_attach (GTK_GRID (grid), label, 2, i + 2, 1, 1);
-          
-         snprintf (line, sizeof (line), "%d", tPoi [i].type);
-         label = gtk_label_new (line);
-         gtk_grid_attach (GTK_GRID (grid), label, 3, i + 2, 1, 1);
-
-         snprintf (line, sizeof (line), "%d", tPoi [i].level);
-         label = gtk_label_new (line);
-         gtk_grid_attach (GTK_GRID (grid), label, 4, i + 2, 1, 1);
-      }
-   }
-   free (upperPoi);
-   free (upperName);
-   if (count >= MAX_COUNT) {
-      label = strToLabel ("Other points exist: Total number:", count);
-      gtk_grid_attach (GTK_GRID (grid), label, 0, i + 2, 5, 1);
-   }
-   if (count == 0) { 
-      gtk_window_destroy (GTK_WINDOW (entryWindow));
-      infoMessage ("Not found", GTK_MESSAGE_INFO);
-   }
-   gtk_window_present (GTK_WINDOW (poiWindow));
 }
 
 /*! find Points of Interest information */
@@ -3427,7 +3340,7 @@ static void onRoutegramEvent (GtkDrawingArea *area, cairo_t *cr, \
    cairo_set_line_width (cr, 1);
    cairo_set_font_size (cr, 12);
 
-   char *libelle [MAX_VAL_ROUTE] = {"Wind", "Gust", "Waves"}; 
+   const char *libelle [MAX_VAL_ROUTE] = {"Wind", "Gust", "Waves"}; 
    double colors[MAX_VAL_ROUTE][3] = {{0, 0, 1}, {1, 0, 0}, {0, 1, 0}}; // blue red blue
    drawLegend (cr, LEGEND_X_LEFT, LEGEND_Y_TOP, colors, libelle, MAX_VAL_ROUTE);
 
@@ -4118,14 +4031,14 @@ static void loadGribFile (int type, char *fileName) {
       strncpy (par.gribFileName, fileName, MAX_SIZE_FILE_NAME - 1);
       readGribRet = -1; // Global variable
       //readGribAll (par.gribFileName, &zone, WIND);
-      g_thread_new("readGribThread", readGrib, &iFlow);
+      g_thread_new ("readGribThread", readGrib, &iFlow);
       spinner ("Grib File decoding", " ");
       gribReadTimeout = g_timeout_add (READ_GRIB_TIME_OUT, readGribCheck, NULL);
    }
    else {                 
       strncpy (par.currentGribFileName, fileName, MAX_SIZE_FILE_NAME - 1);
       readCurrentGribRet = -1; // Global variable
-      g_thread_new("readCurrentGribThread", readGrib, &iFlow);
+      g_thread_new ("readCurrentGribThread", readGrib, &iFlow);
       spinner ("Current Grib File decoding", " ");
       currentGribReadTimeout = g_timeout_add (READ_GRIB_TIME_OUT, readCurrentGribCheck, NULL);
    }
@@ -4151,7 +4064,7 @@ static void urlResponse (GtkWidget *widget, gpointer entryWindow) {
    g_strlcat (urlRequest.outputFileName, strrchr (urlRequest.url, '/'), MAX_SIZE_LINE);
    printf ("urlRequest.outputFileName: %s\n", urlRequest.outputFileName);
    readGribRet = -1; // Global variable
-   g_thread_new("readGribThread", getMeteoConsult, NULL);
+   g_thread_new ("readGribThread", getMeteoConsult, NULL);
    spinner ("Grib meteoConsultDownload and decoding", " ");
    gribReadTimeout = g_timeout_add (READ_GRIB_TIME_OUT, readGribCheck, NULL);
    gtk_window_destroy (GTK_WINDOW (entryWindow));
@@ -4221,7 +4134,7 @@ static void *getGribNoaaAll (void *user_data) {
 /*! Manage response to NOAA dialog box */
 static void onOkButtonNoaaClicked (GtkWidget *widget, gpointer theWindow) {
    readGribRet = -1; // Global variable
-   g_thread_new("readGribThread", getGribNoaaAll, &noaaData);
+   g_thread_new ("readGribThread", getGribNoaaAll, &noaaData);
    spinner ("Grib NOAA Download and decoding", " ");
    gribReadTimeout = g_timeout_add (READ_GRIB_TIME_OUT, readGribCheck, NULL);
    gtk_window_destroy (GTK_WINDOW (theWindow));
@@ -4328,7 +4241,7 @@ static void gribNoaa (GSimpleAction *action, GVariant *parameter, gpointer *user
 void cbOpenGrib (GObject* source_object, GAsyncResult* res, gpointer data) {
    GFile* file = gtk_file_dialog_open_finish ((GtkFileDialog *) source_object, res, NULL);
    if (file != NULL) {
-      gchar *fileName = g_file_get_path(file);
+      char *fileName = g_file_get_path(file);
       if (fileName != NULL) {
          loadGribFile (typeFlow, fileName);
          g_free(fileName);
@@ -4341,9 +4254,9 @@ static void openGrib (GSimpleAction *action, GVariant *parameter, gpointer *data
    typeFlow = GPOINTER_TO_INT (data);
    GtkFileDialog* fileDialog;
    if (typeFlow == WIND)
-      fileDialog = selectFile ("Open Grib", "grib", "Grib Files", "*.gr*", ".*gr*");
+      fileDialog = selectFile ("Open Grib", "grib", "Grib Files", "*.gr*", ".*gr*", NULL);
    else
-      fileDialog = selectFile ("Open Current Grib", "currentgrib", "Current GribFiles", "*.gr*", "*.gr");
+      fileDialog = selectFile ("Open Current Grib", "currentgrib", "Current GribFiles", "*.gr*", "*.gr", NULL);
    gtk_file_dialog_open (fileDialog, GTK_WINDOW (window), NULL, cbOpenGrib, NULL);
 }
 
@@ -4351,7 +4264,7 @@ static void openGrib (GSimpleAction *action, GVariant *parameter, gpointer *data
 void cbOpenPolar (GObject* source_object, GAsyncResult* res, gpointer data) {
    GFile* file = gtk_file_dialog_open_finish ((GtkFileDialog *) source_object, res, NULL);
    if (file != NULL) {
-      gchar *fileName = g_file_get_path(file);
+      char *fileName = g_file_get_path(file);
       if (fileName != NULL) {
          if (strstr (fileName, "polwave.csv") == NULL) {
             readPolar (fileName, &polMat);
@@ -4372,7 +4285,7 @@ void cbOpenPolar (GObject* source_object, GAsyncResult* res, gpointer data) {
 
 /*! Select polar file and read polar file, fill polMat */
 static void openPolar () {
-   GtkFileDialog* fileDialog = selectFile ("Open Polar", "pol", "Polar Files", "*.csv", "*.pol");
+   GtkFileDialog* fileDialog = selectFile ("Open Polar", "pol", "Polar Files", "*.csv", "*.pol", NULL);
    gtk_file_dialog_open (fileDialog, GTK_WINDOW (window), NULL, cbOpenPolar, NULL);
 }
 
@@ -4380,7 +4293,7 @@ static void openPolar () {
 void cbSaveScenario (GObject* source_object, GAsyncResult* res, gpointer data) {
    GFile* file = gtk_file_dialog_save_finish ((GtkFileDialog *) source_object, res, NULL);
    if (file != NULL) {
-      gchar *fileName = g_file_get_path(file);
+      char *fileName = g_file_get_path(file);
       if (fileName != NULL) {
          printf ("File: %s\n", fileName);
          printf ("Mail Pw Exist: %d\n", par.storeMailPw);
@@ -4392,7 +4305,7 @@ void cbSaveScenario (GObject* source_object, GAsyncResult* res, gpointer data) {
 
 /*! Select polar file and read polar file, fill polMat */
 static void saveScenario () {
-   GtkFileDialog *fileDialog = selectFile ("Save as", "par", "Parameter Files", "*.par", "*.par");
+   GtkFileDialog *fileDialog = selectFile ("Save as", "par", "Parameter Files", "*.par", "*.par", parameterFileName);
    gtk_file_dialog_save (fileDialog, GTK_WINDOW (window), NULL, cbSaveScenario, NULL);
 }
 
@@ -4481,9 +4394,9 @@ static void editScenario () {
 void cbOpenScenario (GObject* source_object, GAsyncResult* res, gpointer data) {
    GFile* file = gtk_file_dialog_open_finish ((GtkFileDialog *) source_object, res, NULL);
    if (file != NULL) {
-      gchar *fileName = g_file_get_path(file);
+      char *fileName = g_file_get_path(file);
       if (fileName != NULL) {
-         strncpy (parameterFileName, fileName, MAX_SIZE_FILE_NAME);
+         strncpy (parameterFileName, fileName, MAX_SIZE_FILE_NAME - 1);
          readParam (fileName);
          initScenario ();
          if (readGribRet == 0)
@@ -4496,7 +4409,7 @@ void cbOpenScenario (GObject* source_object, GAsyncResult* res, gpointer data) {
 
 /*! Read parameter file and initialize context */
 static void openScenario () {
-   GtkFileDialog* fileDialog =selectFile ("Open Parameters", "par", "Parameter Files", "*.par", "*.par");
+   GtkFileDialog* fileDialog =selectFile ("Open Parameters", "par", "Parameter Files", "*.par", "*.par", NULL);
    gtk_file_dialog_open (fileDialog, GTK_WINDOW (window), NULL, cbOpenScenario, NULL);
 }
 
@@ -4710,8 +4623,8 @@ static int maxTimeRange () {
 /*! return number of values x n message wich give an evaluation
    of grib file size in bytes */
 static int evalSize (int nShortName) {
-   int nValue = ((abs (mailRequestPar.lat2-mailRequestPar.lat1) / par.gribResolution) + 1) * \
-      ((abs (mailRequestPar.lon2-mailRequestPar.lon1) / par.gribResolution) + 1);
+   int nValue = ((fabs (mailRequestPar.lat2-mailRequestPar.lat1) / par.gribResolution) + 1) * \
+      ((fabs (mailRequestPar.lon2-mailRequestPar.lon1) / par.gribResolution) + 1);
    int nMessage = nShortName * (1 + (par.gribTimeMax / par.gribTimeStep));
    return nMessage * nValue;
 }
@@ -4750,14 +4663,13 @@ static void resolutionChanged (GtkSpinButton *spin_button, gpointer user_data) {
 /*! Callback change mail provider */
 static void cbMailDropDown (GObject *dropDown, GParamSpec *pspec, gpointer user_data) {
    provider = gtk_drop_down_get_selected (GTK_DROP_DOWN(dropDown));
-   g_print ("Selected provider: %d\n", provider);
    par.gribTimeMax = maxTimeRange ();
    updateMailRequestBox ();
 }
 
 /*! Callback to set up mail password  */
 static void passwordEntryChanged (GtkEditable *editable, gpointer user_data) {
-   const gchar *text = gtk_editable_get_text (editable);
+   const char *text = gtk_editable_get_text (editable);
    g_strlcpy (par.mailPw, text, MAX_SIZE_NAME);
 }
 
@@ -4927,7 +4839,7 @@ static void testFunction () {
 
 
 /*! Display label in col c and ligne l of tab */
-static void labelCreate (GtkWidget *tab, char *name, int c, int l) {
+static void labelCreate (GtkWidget *tab, const char *name, int c, int l) {
    GtkWidget *label = gtk_label_new (name);
    gtk_grid_attach(GTK_GRID(tab), label, c, l, 1, 1);
    gtk_widget_set_margin_start(label, 10);
@@ -4957,7 +4869,7 @@ static void radioButtonColors (GtkToggleButton *button, gpointer user_data) {
 }
 
 /*! Radio button for Wind Colar */
-static GtkWidget *createRadioButtonColors (char *name, GtkWidget *tabDisplay, GtkWidget *from, int i) {
+static GtkWidget *createRadioButtonColors (const char *name, GtkWidget *tabDisplay, GtkWidget *from, int i) {
    GtkWidget *choice = gtk_check_button_new_with_label (name);
    g_object_set_data (G_OBJECT(choice), "index", GINT_TO_POINTER(i));
    g_signal_connect (choice, "toggled", G_CALLBACK (radioButtonColors), NULL);
@@ -4976,7 +4888,7 @@ static void radioButtonWindDisp (GtkToggleButton *button, gpointer user_data) {
 }
 
 /*! Radio button for Wind disp */
-static GtkWidget *createRadioButtonWindDisp (char *name, GtkWidget *tabDisplay, GtkWidget *from, int i) {
+static GtkWidget *createRadioButtonWindDisp (const char *name, GtkWidget *tabDisplay, GtkWidget *from, int i) {
    GtkWidget *choice = gtk_check_button_new_with_label (name);
    g_object_set_data (G_OBJECT(choice), "index", GINT_TO_POINTER(i));
    g_signal_connect (choice, "toggled", G_CALLBACK (radioButtonWindDisp), NULL);
@@ -5017,7 +4929,7 @@ static void onCheckBoxToggled (GtkWidget *checkbox, gpointer user_data) {
 /*! Callback for poi visibility change level */
 static void onLevelPoiVisibleChanged (GtkScale *scale, gpointer label) {
    par.maxPoiVisible = gtk_range_get_value(GTK_RANGE(scale));
-   gchar *value_str = g_strdup_printf("POI: %d", par.maxPoiVisible);
+   char *value_str = g_strdup_printf("POI: %d", par.maxPoiVisible);
    gtk_label_set_text(GTK_LABEL(label), value_str);
    g_free(value_str);
    gtk_widget_queue_draw (drawing_area);
@@ -5026,7 +4938,7 @@ static void onLevelPoiVisibleChanged (GtkScale *scale, gpointer label) {
 /*! Callback for speed display change  */
 static void onTempoDisplayChanged (GtkScale *scale, gpointer label) {
    par.speedDisp = gtk_range_get_value(GTK_RANGE(scale)) ;
-   gchar *value_str = g_strdup_printf("Display Speed: %d", par.speedDisp);
+   char *value_str = g_strdup_printf("Display Speed: %d", par.speedDisp);
    gtk_label_set_text(GTK_LABEL(label), value_str);
    g_free(value_str);
    changeAnimation ();
@@ -5737,7 +5649,7 @@ static void onMeteogramEvent (GtkDrawingArea *area, cairo_t *cr, int width, \
    const int DELTA = 5;
    const int DAY_LG = 10;
 
-   char *libelle [MAX_VAL_MET] = {"Wind", "Gust", "Waves", "Current"}; 
+   const char *libelle [MAX_VAL_MET] = {"Wind", "Gust", "Waves", "Current"}; 
    double colors[MAX_VAL_MET][3] = {{0, 0, 1}, {1, 0, 0}, {0, 1, 0}, {1, 165.0/255.0, 0}}; // blue red blue orange
    drawLegend (cr, LEGEND_X_LEFT, LEGEND_Y_TOP, colors, libelle, MAX_VAL_MET);
 
@@ -5924,7 +5836,7 @@ static void meteogram () {
 }
 
 /*! submenu with label and icon
-static void trySubMenu(GMenu *vMenu, const char *str, const char *app, const gchar *iconName) {
+static void trySubMenu(GMenu *vMenu, const char *str, const char *app, const char *iconName) {
    GMenuItem *menu_item = g_menu_item_new (str, app);
    g_menu_item_set_label(menu_item, str);
    if (iconName != NULL) {
@@ -5938,7 +5850,7 @@ static void trySubMenu(GMenu *vMenu, const char *str, const char *app, const gch
 */
 
 /*! submenu with label but no icon */
-static void subMenu (GMenu *vMenu, const char *str, const char *app, const gchar *iconName) {
+static void subMenu (GMenu *vMenu, const char *str, const char *app, const char *iconName) {
    GMenuItem *menu_item = g_menu_item_new (str, app);
    g_menu_append_item (vMenu, menu_item);
    g_object_unref (menu_item);
@@ -5990,7 +5902,7 @@ static void cliActivated (GSimpleAction *action, GVariant *parameter, GApplicati
 }
 
 /*! create a button within toolBow, with an icon and a callback function */
-static void createButton (GtkWidget *toolBox, char *iconName, void *callBack) { 
+static void createButton (GtkWidget *toolBox, const char *iconName, void *callBack) { 
    GtkWidget *button = gtk_button_new_from_icon_name (iconName);
    g_signal_connect (button, "clicked", G_CALLBACK (callBack), NULL);
    gtk_box_append (GTK_BOX (toolBox), button);
@@ -6113,16 +6025,14 @@ static void appActivate (GApplication *application) {
 }
 
 /*! for app_startup */
-static void createAction (char *actionName, void *callBack) {
+static void createAction (const char *actionName, void *callBack) {
    GSimpleAction *act_item = g_simple_action_new (actionName, NULL);
    g_action_map_add_action (G_ACTION_MAP (app), G_ACTION (act_item));
    g_signal_connect (act_item, "activate", G_CALLBACK (callBack), NULL);
 }
 
 /*! for app_startup */
-static void createActionWithParam (char *actionName, void *callBack, int param) {
-   //static int zero = 0;
-   //static int one = 1;
+static void createActionWithParam (const char *actionName, void *callBack, int param) {
    GSimpleAction *act_item = g_simple_action_new (actionName, NULL);
    g_action_map_add_action (G_ACTION_MAP (app), G_ACTION (act_item));
    g_signal_connect_data (act_item, "activate", G_CALLBACK(callBack), GINT_TO_POINTER (param), NULL, 0);
