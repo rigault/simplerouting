@@ -3,7 +3,7 @@
 . Type definitions with typedef
 */
 
-#define CSV_SEP ";,\t"
+#define CSV_SEP               ";,\t"
 #define GPS_TIME_OUT          2000000           // 2 seconds
 #define N_WIND_URL            6
 #define N_CURRENT_URL         6
@@ -18,7 +18,7 @@
 #define MISSING               (0.001)           // for grib file missing values
 #define MS_TO_KN              (3600.0/1852.0)
 #define KN_TO_MS              (1852.0/3600.0)
-#define EARTH_RADIUS          (6371.0/1.852)    // Radius of the Earth in Nautical miles
+#define EARTH_RADIUS          3440.065          // Earth's radius in nautical miles
 #define RAD_TO_DEG            (180.0/G_PI)
 #define DEG_TO_RAD            (G_PI/180.0)
 #define SIZE_T_IS_SEA         (3601 * 1801)
@@ -335,6 +335,7 @@ typedef struct {
    char portFileName [MAX_SIZE_FILE_NAME];   // list of ports
    char parInfoFileName [MAX_SIZE_FILE_NAME];// parameter info
    char traceFileName [MAX_SIZE_FILE_NAME];  // trace is a list of point/time
+   char midFileName [MAX_SIZE_FILE_NAME];    // list of mid country related to mmsi and AIS
    int nShpFiles;                            // number of Shp files
    double startTimeInHours;                  // time of beginning of routing after time0Grib
    Pp pOr;                                   // point of origine
@@ -356,6 +357,7 @@ typedef struct {
    int focalDisp;                            // display focal point 
    int infoDisp;                             // display digest information
    int speedDisp;                            // Speed of Display 
+   int aisDisp;                              // AIS display
    int penalty0;                             // penalty in minutes when amure change front
    int penalty1;                             // penalty in minutes when amure change back
    double motorSpeed;                        // motor speed if used

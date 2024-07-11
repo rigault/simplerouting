@@ -41,6 +41,7 @@ extern const char *WIND_URL [];
 extern const char *CURRENT_URL [];
 
 /*! functions defined in rutil.c */
+extern double offsetLocalUTC (void);
 extern void   *commandRun (void *data);
 extern bool   concat (const char *prefix, int step, int max, const char *fileRes);
 extern bool   isSea (double lat, double lon);

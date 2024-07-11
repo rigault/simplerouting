@@ -19,8 +19,8 @@
 #include "eccodes.h"
 #include "rtypes.h"
 #include "shapefil.h"
+#include "aisgps.h"
 #include "inline.h"
-#include "gpsutil.h"
 
 /*! store sail route calculated in engine.c by routing */  
 SailRoute route;
@@ -29,9 +29,9 @@ SailRoute route;
 MyPolygon forbidZones [MAX_N_FORBID_ZONE];
 
 /*! dictionnary of meteo services */
-struct DictElmt dicTab [4] = {{7, "Weather service US"}, {78, "DWD Germany"}, {85, "Meteo France"}, {98,"ECMWF European"}};
+const struct DictElmt dicTab [4] = {{7, "Weather service US"}, {78, "DWD Germany"}, {85, "Meteo France"}, {98,"ECMWF European"}};
 
-struct DictProvider providerTab [N_PROVIDERS] = {
+const struct DictProvider providerTab [N_PROVIDERS] = {
    {"query@saildocs.com",          "Saildocs Wind GFS",      "gfs"},
    {"query@saildocs.com",          "Saildocs Wind ECWMF",    "ECMWF"},
    {"query@saildocs.com",          "Saildocs Wind ICON",     "ICON"},
@@ -98,13 +98,13 @@ const char *CURRENT_URL [N_CURRENT_URL * 2] = {
 /*! launch system command in a thread */
 void *commandRun (void *data) {
    FILE *fs;
-   char line [MAX_SIZE_LINE] = "";
-   strncpy (line, (char *) data, MAX_SIZE_LINE - 1);
-   printf ("commandRun: %s\n", line);
+   char *line = (char *) data;
+   printf ("commandRun Line: %s\n", line);
    if ((fs = popen (line, "r")) == NULL)
       fprintf (stderr, "Error in commandRun: popen call: %s\n", line);
    else
       pclose (fs);
+   free (line); 
    return NULL;
 }
 
@@ -257,7 +257,8 @@ bool mostRecentFile (const char *directory, const char *pattern, char *name) {
          if (strlen (entry->d_name) < MAX_SIZE_FILE_NAME)
             strncpy (name, entry->d_name, MAX_SIZE_FILE_NAME);
          else {
-            fprintf (stderr, "Error in mostRecentFile: File name size is: %zu and exceed MAX_SIZE_FILE_NAME: %d\n", strlen (entry->d_name), MAX_SIZE_FILE_NAME);
+            fprintf (stderr, "Error in mostRecentFile: File name size is: %zu and exceed MAX_SIZE_FILE_NAME: %d\n", \
+               strlen (entry->d_name), MAX_SIZE_FILE_NAME);
             break;
          }
       }
@@ -688,6 +689,20 @@ void initZone (Zone *zone) {
    zone->lonStep = 5;
    zone->nbLat = 0;
    zone->nbLon = 0;
+}
+
+/*! return offset Local UTC in seconds */
+double offsetLocalUTC (void) {
+   time_t now;
+   time (&now);                           
+   struct tm local_tm = *localtime(&now);
+   struct tm utc_tm = *gmtime(&now);
+   time_t local_time = mktime(&local_tm);
+   time_t utc_time = mktime(&utc_tm);
+   double offsetSeconds = difftime(local_time, utc_time);
+   if (local_tm.tm_isdst > 0)
+        offsetSeconds += 3600;  // add one hour if summer time
+   return offsetSeconds;
 }
 
 /*! convert epoch time to string with or without seconds */
@@ -1345,7 +1360,7 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
       timeInterval = zone->timeStamp [1] - zone->timeStamp [0]; 
 
    if (tGribData [iFlow] != NULL) free (tGribData [iFlow]); 
-   if ((tGribData [iFlow] = calloc (sizeof(FlowP),  (zone->nTimeStamp + 1) * zone->nbLat * zone->nbLon)) == NULL) { // nTimeStamp + 1
+   if ((tGribData [iFlow] = calloc ((zone->nTimeStamp + 1) * zone->nbLat * zone->nbLon, sizeof (FlowP))) == NULL) { // nTimeStamp + 1
       fprintf (stderr, "Error in readGribAll: calloc tGribData [iFlow]\n");
       return false;
    }
@@ -1433,7 +1448,6 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
  
    fclose (f);
    zone->wellDefined = true;
-   printf ("end of readGribAll\n");
    return true;
 }
 
@@ -1764,6 +1778,8 @@ bool readParam (const char *fileName) {
          buildRootName (str, par.polarFileName);
       else if (sscanf (pLine, "ISSEA:%255s", str) > 0)
          buildRootName (str, par.isSeaFileName);
+      else if (sscanf (pLine, "MID_COUNTRY:%255s", str) > 0)
+         buildRootName (str, par.midFileName);
       else if (sscanf (pLine, "CLI_HELP:%255s", str) > 0)
          buildRootName (str, par.cliHelpFileName);
       else if (sscanf (pLine, "HELP:%255s", par.helpFileName) > 0); // full link required
@@ -1831,6 +1847,7 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "GRID_DISP:%d", &par.gridDisp) > 0);
       else if (sscanf (pLine, "LEVEL_POI_DISP:%d", &par.maxPoiVisible) > 0);
       else if (sscanf (pLine, "SPEED_DISP:%d", &par.speedDisp) > 0);
+      else if (sscanf (pLine, "AIS_DISP:%d", &par.aisDisp) > 0);
       else if (sscanf (pLine, "TECHNO_DISP:%d", &par.techno) > 0);
       else if (sscanf (pLine, "GPS_TYPE:%d", &par.gpsType) > 0);
       else if (sscanf (pLine, "WEBKIT:%255s", str) > 0)
@@ -1902,6 +1919,7 @@ bool writeParam (const char *fileName, bool header, bool password) {
    fprintf (f, "POLAR:           %s\n", par.polarFileName);
    fprintf (f, "WAVE_POL:        %s\n", par.wavePolFileName);
    fprintf (f, "ISSEA:           %s\n", par.isSeaFileName);
+   fprintf (f, "MID_COUNTRY:     %s\n", par.midFileName);
    fprintf (f, "HELP:            %s\n", par.helpFileName);
    fprintf (f, "CLI_HELP:        %s\n", par.cliHelpFileName);
    for (int i = 0; i < par.nShpFiles; i++)
@@ -1948,6 +1966,7 @@ bool writeParam (const char *fileName, bool header, bool password) {
    fprintf (f, "WAVE_DISP:       %d\n", par.waveDisp);
    fprintf (f, "GRID_DISP:       %d\n", par.gridDisp);
    fprintf (f, "SPEED_DISP:      %d\n", par.speedDisp);
+   fprintf (f, "AIS_DISP:        %d\n", par.aisDisp);
    fprintf (f, "TECHNO_DISP:     %d\n", par.techno);
    fprintf (f, "MAX_THETA:       %.2lf\n", par.maxTheta);
    fprintf (f, "J_FACTOR:        %d\n", par.jFactor);

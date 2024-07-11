@@ -3,7 +3,7 @@ CFLAGS="-Wall -Wextra -Wpedantic -Wformat=2 -Wwrite-strings -Wredundant-decls -W
 
 gcc $CFLAGS -c engine.c `pkg-config --cflags glib-2.0`
 gcc $CFLAGS -c option.c `pkg-config --cflags glib-2.0`
-gcc $CFLAGS -c gpsutil.c 
+gcc $CFLAGS -c aisgps.c `pkg-config --cflags glib-2.0`
 gcc $CFLAGS -Wno-format-nonliteral -c rutil.c `pkg-config --cflags glib-2.0` 
 
 #gcc -c show4.c `pkg-config --cflags gtk4`
@@ -12,7 +12,7 @@ gcc $CFLAGS -Wno-pedantic -Wno-unused-parameter -Wno-stringop-truncation -c show
 #gcc -c show4.c `pkg-config --cflags gtk4` $(pkg-config --cflags webkit2gtk-4.1)
 
 #gcc show4.o option.o rutil.o engine.o -o routing -lcurl -lgps -lshp -leccodes -lm $(pkg-config --cflags --libs webkit2gtk-4.1) `pkg-config --cflags --libs gtk4`
-gcc show4.o option.o rutil.o engine.o gpsutil.o -o routing -std=c11 -lcurl -lgps -lshp -leccodes -lm `pkg-config --cflags --libs gtk4`
+gcc show4.o option.o rutil.o engine.o aisgps.o -o routing -std=c11 -lcurl -lgps -lshp -leccodes -lm `pkg-config --cflags --libs gtk4`
 # -lnova required if libnova used
 rm -f *.o
 mv routing ../.

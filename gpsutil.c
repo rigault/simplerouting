@@ -1,4 +1,4 @@
-/*! compilation gcc -c gpsutil.c */
+/*! compilation: gcc -c gpsutil.c */
 
 #ifdef _WIN32 
 #include <windows.h>
@@ -6,22 +6,25 @@
 #include <gps.h>
 #endif
 
+#include <glib.h>
 #include <stdio.h>
 #include <float.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include "rtypes.h"  
 #include <math.h>
-#define MAX_SIZE_NMEA 1024
-#define SIZE_DATE_TIME 10
-#define SLEEP_TIME 1                   // seconds
-#define FLOW_INPUT_UNIX "/dev/ttyACM0" // NMEA USB converter
-#define FLOW_INPUT_WINDOWS "com3"      // NMEA USB converter
+#include "rtypes.h"  
+#include "rutil.h"
+#include "gpsutil.h"
+
+#define MAX_SIZE_NMEA         1024
+#define SIZE_DATE_TIME        10
+#define GPS_INPUT_UNIX       "/dev/ttyACM0" // NMEA USB converter
+#define GPS_INPUT_WINDOWS    "com3"         // NMEA USB converter
 
 MyGpsData my_gps_data; 
 
-/*! valeurs trouvée dans les trames NMEA */
+/*! value in NMEA GPS frame*/
 struct {
    char time [SIZE_DATE_TIME];
    char date [SIZE_DATE_TIME];
@@ -39,48 +42,38 @@ struct {
    char uAlt;
 } gpsRecord;
 
-/*! return offset Local UTC in seconds */
-double offsetLocalUTC (void) {
-   time_t now;
-   time (&now);                           
-   struct tm local_tm = *localtime(&now);
-   struct tm utc_tm = *gmtime(&now);
-   time_t local_time = mktime(&local_tm);
-   time_t utc_time = mktime(&utc_tm);
-   double offsetSeconds = difftime(local_time, utc_time);
-   if (local_tm.tm_isdst > 0)
-        offsetSeconds += 3600;  // add one hour if summer time
-   return offsetSeconds;
-}
-      
 /*! gps information for helpInfo */
 char *gpsInfo (int type, char *strGps, int len) {
 #ifdef _WIN32
-   snprintf (strGps, len, "NMEA input: %s", FLOW_INPUT_WINDOWS);
+   snprintf (strGps, len, "NMEA input: %s", GPS_INPUT_WINDOWS);
 #else
    if (type == API_GPSD)
       snprintf (strGps, len, "API GPSD version: %d.%d", GPSD_API_MAJOR_VERSION, GPSD_API_MINOR_VERSION);
    else
-      snprintf (strGps, len, "NMEA input: %s", FLOW_INPUT_UNIX);
+      snprintf (strGps, len, "NMEA input: %s", GPS_INPUT_UNIX);
 #endif
    return strGps;
 }
 
-/*! renvoie le checksum de la trame (ou exclusif de tout entre '$' et '*') */
+/*! return frame checksum de la trame (XOR of all between '$' or '!' and '*') */
 static unsigned int checksum (char *s) {
    unsigned int check = 0;
-   if (*s == '$') s++; // elimine $
+   if ((*s == '$') || (*s == '!')) s++; // elimine $
    while (*s && *s != '*')
       check ^= *s++;
    return check;
 }
 
-/*! Verifie que le checksum lu en fin de trame est égal au checksum calcule */
+/*! check read checksum at end of frame equals calculated checksumm  */
 static bool checksumOK (char *s) {
-   return (strtol (s + strlen (s) - 3, NULL, 16) == checksum (s));
+   char *ptCheck;
+   if ((ptCheck = strrchr (s, '*')) == NULL)
+      return false;
+   else 
+      return (strtol (ptCheck +1, NULL, 16) == checksum (s));
 }
 
-/*! recopie s dans d en replaçant les occurences de ,, par ,-1, */
+/*! copy s in d replacing ,, occcurences by ,-1, */
 static void strcpymod (char *d, const char *s) {
    char previous = '\0';
    while (*s) {
@@ -94,12 +87,11 @@ static void strcpymod (char *d, const char *s) {
    *d = '\0';
 }
 
-/*! renvoie le checksum de la trame (ou exclusif de tout entre '$' et '*') */
-/*! decode les trames */
-/* GPRMC : Recommended Minimum data */ 
-/* GPGGA : Global Positioning System Fix Data */
-/* GPGLL : Latitude Longitude */
-/* vraie si a reussit a decoder la trame */
+/*!frame decoding  
+ * GPRMC : Recommended Minimum data 
+ * GPGGA : Global Positioning System Fix Data
+ * GPGLL : Latitude Longitude 
+ * return true if frame is decoded */
 static bool decode (char *line) {
    char lig [MAX_SIZE_NMEA];
    strcpymod (lig, line);
@@ -116,7 +108,7 @@ static bool decode (char *line) {
    return false;
 }
 
-/*! Ecrit sur la sortie standart la trame decodee 
+/*! print decoded frame
 static void printResult (bool clear, bool verbose) {
    char d [SIZE_DATE_TIME];
    char t [SIZE_DATE_TIME];
@@ -196,7 +188,7 @@ static void getGpsNmea () {
    printf ("GPS with NMEA USB Port Windows\n");
 
    // Open the serial port
-   hSerial = CreateFile(FLOW_INPUT_WINDOWS, GENERIC_READ | GENERIC_WRITE, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+   hSerial = CreateFile (GPS_INPUT_WINDOWS, GENERIC_READ | GENERIC_WRITE, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
    if (hSerial == INVALID_HANDLE_VALUE) {
       fprintf(stderr, "Error opening serial port\n");
       return;
@@ -249,9 +241,9 @@ static void getGpsNmea () {
    FILE *flowInput = NULL;
    char row [MAX_SIZE_NMEA];
    char *line = &row [0];
-   if ((flowInput = fopen (FLOW_INPUT_UNIX, "r")) == NULL) {
+   if ((flowInput = fopen (GPS_INPUT_UNIX, "r")) == NULL) {
       fprintf (stderr, "In GetGpsNmeaUnix: cannot open input flow\n");
-      exit (EXIT_FAILURE);
+      return;
    }
    while (true) {
       line = fgets (row, MAX_SIZE_NMEA, flowInput); 
@@ -273,6 +265,7 @@ static void getGpsApi () {
    return;
 #else
    struct gps_data_t gps_data;
+   // double latC, lonC; // possible  collision point
    my_gps_data.OK = false;
    if (gps_open("localhost", GPSD_TCP_PORT, &gps_data) == -1) {
       fprintf(stderr, "Error: Unable to connect to GPSD.\n");
@@ -284,40 +277,63 @@ static void getGpsApi () {
       if (gps_waiting(&gps_data, GPS_TIME_OUT)) {
          if (gps_read(&gps_data, NULL, 0) == -1) {
             fprintf (stderr, "Error in getGPS: gps_read\n");
-         } else {
-            if (gps_data.set & PACKET_SET) {
+            continue;
+         } 
+         if (gps_data.set & PACKET_SET) {
    /*            
-               printf("Latitude   : %lf, Longitude: %lf\n", gps_data.fix.latitude, gps_data.fix.longitude);
-               printf("Altitude   : %lf meters\n", gps_data.fix.altitude);
-               printf("Fix Quality: %d\n", gps_data.fix.status);
-               printf("Satellites : %d\n", gps_data.satellites_visible);
-               printf("SOG        : %.2lfKn\n", MS_TO_KN * gps_data.fix.speed);
-               printf("COG        : %.0lf°\n", gps_data.fix.track);
-               printf("Time       : %ld\n\n", gps_data.fix.time.tv_sec);
+            printf("Latitude   : %lf, Longitude: %lf\n", gps_data.fix.latitude, gps_data.fix.longitude);
+            printf("Altitude   : %lf meters\n", gps_data.fix.altitude);
+            printf("Fix Quality: %d\n", gps_data.fix.status);
+            printf("Satellites : %d\n", gps_data.satellites_visible);
+            printf("SOG        : %.2lfKn\n", MS_TO_KN * gps_data.fix.speed);
+            printf("COG        : %.0lf°\n", gps_data.fix.track);
+            printf("Time       : %ld\n\n", gps_data.fix.time.tv_sec);
    */            
-               if (isfinite(gps_data.fix.latitude) && isfinite(gps_data.fix.longitude) &&
-                  ((gps_data.fix.latitude != 0 || gps_data.fix.longitude != 0))) {
-                  // printf("Lat: %.2f, Lon: %.2f\n", gps_data.fix.latitude, gps_data.fix.longitude);
-                  // update GPS data
-                  my_gps_data.lat = gps_data.fix.latitude;
-                  my_gps_data.lon = gps_data.fix.longitude;
-                  my_gps_data.alt = gps_data.fix.altitude;
-                  my_gps_data.cog = gps_data.fix.track;
-                  my_gps_data.sog = MS_TO_KN * gps_data.fix.speed;
-                  my_gps_data.status = gps_data.fix.status;
-                  my_gps_data.nSat = gps_data.satellites_visible;
-                  my_gps_data.time = gps_data.fix.time.tv_sec;
-                  my_gps_data.OK = true;
-               }
-               else 
-                  my_gps_data.OK = false;
-            } else 
-               fprintf(stderr, "Error in getGPS: No fix available.\n");
+            if (isfinite(gps_data.fix.latitude) && isfinite(gps_data.fix.longitude) &&
+               ((gps_data.fix.latitude != 0 || gps_data.fix.longitude != 0))) {
+               // update GPS data
+               my_gps_data.lat = gps_data.fix.latitude;
+               my_gps_data.lon = gps_data.fix.longitude;
+               my_gps_data.alt = gps_data.fix.altitude;
+               my_gps_data.cog = gps_data.fix.track;
+               my_gps_data.sog = MS_TO_KN * gps_data.fix.speed;
+               my_gps_data.status = gps_data.fix.status;
+               my_gps_data.nSat = gps_data.satellites_visible;
+               my_gps_data.time = gps_data.fix.time.tv_sec;
+               my_gps_data.OK = true;
+            }
+            else 
+               my_gps_data.OK = false;
+         }
+         if (gps_data.set & AIS_SET) {
+            struct ais_t *ais = &gps_data.ais;
+            printf ("MMSI: %u\n", ais->mmsi);
+            printf ("AIS message type: %u\n", ais->type);
+            switch (ais->type) {
+            case 1: case 2: case 3:
+               printf ("Sog: %.1lf\n", (double) ais->type1.speed / 10.0);
+               printf ("Cog: %d\n", ais->type1.course);
+               printf ("Lat: %d\n", ais->type1.lat);
+               printf ("Lon: %d\n", ais->type1.lon);
+               break;
+            case 18:
+               printf ("Sog: %.1lf\n", (double) ais->type18.speed / 10.0);
+               printf ("Cog: %d\n", ais->type18.course);
+               printf ("Lat: %d\n", ais->type18.lat);
+               printf ("Lon: %d\n", ais->type18.lon);
+               break;
+            case 5:
+               printf ("Ship Name: %s\n", ais->type5.shipname);
+               break;
+            case 24:
+               printf ("Ship Name: %s\n", ais->type5.shipname);
+               break;
+            }
          }
       }
    }
-   gps_stream(&gps_data, WATCH_DISABLE, NULL);
-   gps_close(&gps_data);
+   gps_stream (&gps_data, WATCH_DISABLE, NULL);
+   gps_close (&gps_data);
 #endif
 }
 
