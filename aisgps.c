@@ -1,9 +1,10 @@
 /*! compilation: gcc -c aisgps.c `pkg-config --cflags glib-2.0` */
+
 #ifdef _WIN32
 #include <windows.h>
 #else
-#include <termios.h>
 #include <gps.h>
+#include <termios.h>
 #endif
 
 #include <glib.h>
@@ -19,15 +20,13 @@
 #include "rutil.h"
 #include "aisgps.h"
 
-#define AIS_INPUT_UNIX       "/dev/ttyUSB0" // NMEA USB converter AIS Unix
-#define AIS_INPUT_WINDOWS     "COM1"        // NMEA USB converter AIS Windows
-#define GPS_INPUT_UNIX       "/dev/ttyACM0" // NMEA USB converter GPS Unix
-#define GPS_INPUT_WINDOWS    "com3"         // NMEA USB converter GPS Windows
+#define AIS_INPUT_WINDOWS    "COM6"         // NMEA USB converter AIS Windows
+#define GPS_INPUT_WINDOWS    "COM3"         // NMEA USB converter GPS Windows
 
 #define AIS_BAUD_RATE_UNIX     B38400       // for AIS NMEA USB configuration Unix
-#define GPS_BAUD_RATE_UNIX     B4800        // for GPS NMEA USB configuration Unix
+#define GPS_BAUD_RATE_UNIX     B9600        // for GPS NMEA USB configuration Unix
 #define AIS_BAUD_RATE_WINDOWS  CBR_38400    // for AIS NMEA USB configuration Windows
-#define GPS_BAUD_RATE_WINDOWS  CBR_115200   // for GPS NMEA USB configuration Windows
+#define GPS_BAUD_RATE_WINDOWS  CBR_9600     // for GPS NMEA USB configuration Windows
 
 #define AIS_CHAR_OFFSET       48            // for AIS decoding character
 #define T_SHIP_MAX            (30 * 60)     // 30 minutes
@@ -57,15 +56,13 @@ struct {
 } gpsRecord;
 
 /*! gps information for helpInfo */
-char *aisGpsInfo (int type, char *strGps, int len) {
-#ifdef _WIN32
-   snprintf (strGps, len, "GPS NMEA input: %s\nAIS NMEA input: %s", GPS_INPUT_WINDOWS, AIS_INPUT_WINDOWS);
-#else
-   if (type == API_GPSD)
-      snprintf (strGps, len, "API GPSD version: %d.%d", GPSD_API_MAJOR_VERSION, GPSD_API_MINOR_VERSION);
-   else
-      snprintf (strGps, len, "GPS NMEA input: %s\nAIS NMEA input: %s", GPS_INPUT_UNIX, AIS_INPUT_UNIX);
-#endif
+char *nmeaInfo (char *strGps, int len) {
+   char str [MAX_SIZE_LINE];
+   strGps [0] = '\0';
+   for (int i = 0; i < par.nNmea; i++) {
+      snprintf (str, MAX_SIZE_LINE, "NMEA input: %s, Index Speed: %d\n", par.nmea [i].portName, par.nmea [i].speed);
+      g_strlcat (strGps, str, len);
+   }
    return strGps;
 }
 
@@ -395,6 +392,7 @@ static void decodeAisPayload (const char *payload) {
    int speed = NIL;
    int course = NIL;
    double latC, lonC;          // possible  collision point
+   AisRecord *ship;
 
    switch (messageId) {
    case 1: case 2: case 3:    // Class A report position
@@ -429,7 +427,9 @@ static void decodeAisPayload (const char *payload) {
       printf ("Unsupported message type: %d\n\n", messageId); 
       return;
    }
-   AisRecord *ship = getRecord (mmsi);
+
+   ship = getRecord (mmsi);   
+   if (ship == NULL) return;
 
    if ((speed >= 0) && (speed < MAX_SOG)) ship->sog = ((double) speed) / 10.0;
    if (latitude != NIL) ship->lat = ((double) latitude) / 600000.0;
@@ -483,7 +483,8 @@ static bool decodeNMEA (char *line) {
       int pad;             // not used
    } aisFrame;
 
-   if (line [0] == '\0') printf ("decode: %s\n", line);
+   if (line [0] == '!')
+      printf ("%s\n", line);
 
    strcpymod (lig, line);
    if ((sscanf (lig, "!AIVD%c, %d, %d, %d, %c, %128s, %d,", &aisFrame.charType, &aisFrame.nb, &aisFrame.i, &aisFrame.x,\
@@ -511,137 +512,37 @@ static bool decodeNMEA (char *line) {
 }
 
 /*! return frame checksum de la trame (XOR of all between '$' or '!' and '*') */
-static unsigned int checksum (const char *s) {
-   unsigned int check = 0;
-   if ((*s == '$') || (*s == '!')) s++; // avoid $ or !
+static unsigned int checksum (char *str) {
+   unsigned char check = 0;
+   char *s = str;
+   if ((*s == '$') || (*s == '!')) s++; // elimine $
    while (*s && *s != '*')
       check ^= *s++;
    return check;
 }
 
 /*! check read checksum at end of frame equals calculated checksumm  */
-static bool checksumOK (const char *s) {
-   char *ptCheck;
+static bool checksumOK (char *s) {
+   char *ptCheck ;
    if ((ptCheck = strrchr (s, '*')) == NULL)
       return false;
-   else 
+   else {
       return (strtoul (ptCheck +1, NULL, 16) == checksum (s));
-}
-
-/*! provide GPS and AIS information using gpsd gps.h. Works only in Unix environment */
-void *getAisGps () {
-#ifdef _WIN32
-   return NULL;
-#else
-   const int MAX_SOG = 1023; 
-   struct gps_data_t gps_data;
-   double latC, lonC;
-   // double latC, lonC; // possible  collision point
-   memset (&my_gps_data, 0, sizeof (my_gps_data));
-   my_gps_data.OK = false;
-   if (gps_open ("localhost", GPSD_TCP_PORT, &gps_data) == -1) {
-      fprintf(stderr, "In getAisGps    : Error, unable to connect to GPSD.\n");
-      return NULL;
    }
-   printf ("In GetAisGps   : GPSD open\n");
-   gps_stream (&gps_data, WATCH_ENABLE | WATCH_JSON, NULL);
-
-   while (true) {
-      removeOldShips (T_SHIP_MAX);
-      if (gps_waiting(&gps_data, GPS_TIME_OUT)) {
-         if (gps_read(&gps_data, NULL, 0) == -1) {
-            fprintf (stderr, "In getAisGps   : Error, gps_read\n");
-            continue;
-         } 
-         if (gps_data.set & PACKET_SET) {
-            if (isfinite(gps_data.fix.latitude) && isfinite(gps_data.fix.longitude) &&
-               ((gps_data.fix.latitude != 0 || gps_data.fix.longitude != 0))) {
-               // update GPS data
-               my_gps_data.lat = gps_data.fix.latitude;
-               my_gps_data.lon = gps_data.fix.longitude;
-               my_gps_data.alt = gps_data.fix.altitude;
-               my_gps_data.cog = gps_data.fix.track;
-               my_gps_data.sog = MS_TO_KN * gps_data.fix.speed;
-               my_gps_data.status = gps_data.fix.status;
-               my_gps_data.nSat = gps_data.satellites_visible;
-               my_gps_data.time = gps_data.fix.time.tv_sec;
-               my_gps_data.OK = true;
-            }
-            else 
-               my_gps_data.OK = false;
-         }
-         if (gps_data.set & AIS_SET) {
-            struct ais_t *ais = &gps_data.ais;
-            AisRecord *ship = getRecord (ais-> mmsi);
-            
-            printf ("\nMMSI: %u\n", ais->mmsi);
-            printf ("AIS message : %u\n", ais->type);
-            switch (ais->type) {
-            case 1: case 2: case 3:
-               if (ais->type1.speed < MAX_SOG) ship->sog = ((double) ais->type1.speed) / 10.0;
-               if (ais->type1.course <= 3600) ship->cog = ais->type1.course / 10.0;
-               ship->lat = ((double) ais->type1.lat) / 600000.0;
-               ship->lon = ((double) ais->type1.lon) / 600000.0;
-               printf ("Sog: %.1lf\n", ((double) ais->type1.speed) / 10.0);
-               printf ("Cog: %d\n", ais->type1.course / 10);
-               printf ("Lat: %.2lf\n", ((double) ais->type1.lat) / 600000.0);
-               printf ("Lon: %.2lf\n", ((double) ais->type1.lon) / 600000.0);
-               break;
-            case 18:
-               if (ais->type18.speed < MAX_SOG) ship->sog = ((double) ais->type18.speed) / 10.0;
-               if (ais->type18.course <= 3600) ship->cog = ais->type18.course / 10.0;
-               ship->lat = ((double) ais->type18.lat) / 600000.0;
-               ship->lon = ((double) ais->type18.lon) / 600000.0;
-               printf ("Sog: %.1lf\n", ((double) ais->type18.speed) / 10.0);
-               printf ("Cog: %d\n", ais->type18.course / 10);
-               printf ("Lat: %.2f\n", ((double) ais->type18.lat) / 600000.0);
-               printf ("Lon: %.2lf\n", ((double) ais->type18.lon) / 600000.0);
-               break;
-            case 5:
-               if (ais->type5.shipname [0] != '\0')
-                  strncpy (ship->name, ais->type5.shipname, MAX_SIZE_SHIP_NAME);
-               printf ("Ship Name: %s\n", ais->type5.shipname);
-               break;
-            case 24:
-               if (ais->type24.shipname [0] != '\0')
-                  strncpy (ship->name, ais->type24.shipname, MAX_SIZE_SHIP_NAME);
-               printf ("Ship Name: %s\n", ais->type24.shipname);
-               break;
-            default:;
-            }
-
-            if (my_gps_data.OK) {
-               int x = collisionDetection (my_gps_data.lat, my_gps_data.lon, my_gps_data.sog, my_gps_data.cog,
-                                           ship->lat, ship->lon, ship->sog, ship->cog, &latC, &lonC);
-               if (x < 0) 
-                  ship->minDist = x;
-               else if (ship->minDist >= MILLION)
-                  ship->minDist = -2;
-               else ship -> minDist = 1852 * x;
-            }
-            else
-               ship->minDist = -3;
-         }
-      }
-   }
-   gps_stream (&gps_data, WATCH_DISABLE, NULL);
-   gps_close (&gps_data);
-   return NULL;
-#endif
 }
 
 #ifdef _WIN32
 static HANDLE configureSerialPort (const char *portName, int baudRate) {
    HANDLE hSerial = CreateFile (portName, GENERIC_READ | GENERIC_WRITE, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
    if (hSerial == INVALID_HANDLE_VALUE) {
-      fprintf (stderr, "In configureSerialPort: cannot open input flow: %ld\n", GetLastError());
+      fprintf (stderr, "In configureSerialPort: cannot open input flow:\n");
       return INVALID_HANDLE_VALUE;
    }
 
    DCB dcbSerialParams = {0};
    dcbSerialParams.DCBlength = sizeof(dcbSerialParams);
    if (!GetCommState (hSerial, &dcbSerialParams)) {
-      fprintf (stderr, "In configureSerialPort: Error getting state: %ld\n", GetLastError());
+      fprintf (stderr, "In configureSerialPort: Error getting state: \n");
       CloseHandle(hSerial);
       return INVALID_HANDLE_VALUE;
    }
@@ -651,7 +552,7 @@ static HANDLE configureSerialPort (const char *portName, int baudRate) {
    dcbSerialParams.StopBits = ONESTOPBIT;
    dcbSerialParams.Parity = NOPARITY;
    if (!SetCommState(hSerial, &dcbSerialParams)) {
-      fprintf (stderr, "In configureSerialPort: Error setting state: %ld\n", GetLastError());
+      fprintf (stderr, "In configureSerialPort: Error setting state: \n");
       CloseHandle(hSerial);
       return INVALID_HANDLE_VALUE;
    }
@@ -664,7 +565,7 @@ static HANDLE configureSerialPort (const char *portName, int baudRate) {
    timeouts.WriteTotalTimeoutMultiplier = 10;
 
    if (!SetCommTimeouts(hSerial, &timeouts)) {
-      fprintf (stderr, "In configureSerialPort: Error setting timeouts: %ld\n", GetLastError());
+      fprintf (stderr, "In configureSerialPort: Error setting timeouts: \n");
       CloseHandle(hSerial);
       return INVALID_HANDLE_VALUE;
    }
@@ -672,54 +573,53 @@ static HANDLE configureSerialPort (const char *portName, int baudRate) {
    return hSerial;
 }
 
-/*! read serial USB port and feed hash table of AIS Records, Windows environment */
-void *getAisNmea () {
-   char buffer [MAX_SIZE_NMEA];
+/*! read serial USB port to get NMEA GPS AIS info, Window environment */
+void *getNmea (gpointer x) {
+   int index = GPOINTER_TO_INT (x);
+   char buffer[MAX_SIZE_NMEA];
+   char tempBuffer[MAX_SIZE_NMEA * 2] = {0};
    DWORD bytesRead;
-   BOOL status;
-   HANDLE hSerial = configureSerialPort (AIS_INPUT_WINDOWS, AIS_BAUD_RATE_WINDOWS);
-   if (hSerial == INVALID_HANDLE_VALUE) {
-      fprintf (stderr, "In getAisNmea  : Error, configuration serial port: %s\n", AIS_INPUT_WINDOWS);
-      return NULL;
-   }
-   printf("In getAisNmea  : %s\n", AIS_INPUT_WINDOWS);
-   
-   // read serial port
-   while (true) {
-      removeOldShips (T_SHIP_MAX);
-      status = ReadFile (hSerial, buffer, sizeof(buffer) - 1, &bytesRead, NULL);
-      if (status && bytesRead > 0) {
-         buffer[bytesRead] = '\0'; // terminate the buffer
-         if ((buffer[0] == '!') && (checksumOK(buffer)))
-            decodeNMEA (buffer);
-      }
-   }
-   CloseHandle(hSerial);
-   return NULL;
-}
+   size_t tempBufferPos = 0;
 
-/*! get GPS information with NMEA decoding, Windows environment */
-void *getGpsNmea () {
-   char buffer[1024];
-   DWORD bytesRead;
-   memset (&my_gps_data, 0, sizeof (my_gps_data));
-   printf ("GPS with NMEA USB Port Windows\n");
-   HANDLE hSerial = configureSerialPort (GPS_INPUT_WINDOWS, GPS_BAUD_RATE_WINDOWS);
+   HANDLE hSerial = configureSerialPort (par.nmea [index].portName, par.nmea [index].speed);
+
    if (hSerial == INVALID_HANDLE_VALUE) {
-      fprintf (stderr, "In getGpsNmea  : Error, configuration serial port: %s\n", GPS_INPUT_WINDOWS);
+      fprintf (stderr, "In getNmea : Error, configuration serial port: %s\n", (index == GPS_INDEX) ? GPS_INPUT_WINDOWS : AIS_INPUT_WINDOWS);
       return NULL;
    }
-   printf("In getGpsNmea  : %s\n", GPS_INPUT_WINDOWS);
-   // Read data
+
+   printf ("In getNmea     : %s open with speed: %d\n", par.nmea [index].portName, par.nmea [index].speed);
+
    while (true) {
-      if ((ReadFile(hSerial, buffer, sizeof(buffer), &bytesRead, NULL)) && (bytesRead > 0)) {
+      if (index == AIS_INDEX) removeOldShips (T_SHIP_MAX);
+      if (ReadFile(hSerial, buffer, sizeof(buffer) - 1, &bytesRead, NULL) && (bytesRead > 0)) {
          buffer[bytesRead] = '\0';
-         if ((buffer[0] == '$') && (checksumOK(buffer)))
-            // printf("%s", buffer);
-            decodeNMEA (buffer);
+	      // printf ("buffer: %s\n", buffer);
+
+         // Ajoutez les nouvelles données dans le tampon temporaire
+         strncat(tempBuffer, buffer, bytesRead);
+         tempBufferPos += bytesRead;
+
+         // Recherchez des trames complètes dans le tampon temporaire
+         char *start = tempBuffer;
+         char *end = NULL;
+
+         while ((end = strchr(start, '\n')) != NULL) {
+            *end = '\0'; // Terminez la trame à la fin de ligne
+            if (((start[0] == '!') || (start[0] == '$')) && checksumOK(start)) {
+               decodeNMEA(start);
+            }
+            start = end + 1;
+         }
+
+         // Déplacez les données non traitées au début du tampon temporaire
+         tempBufferPos = strlen(start);
+         memmove(tempBuffer, start, tempBufferPos);
+         tempBuffer[tempBufferPos] = '\0';
       }
    }
-   CloseHandle(hSerial);  
+
+   CloseHandle(hSerial);
    return NULL;
 }
 
@@ -731,8 +631,12 @@ static int configureSerialPort (int fd, int baudRate) {
    // get options of serial port
    tcgetattr(fd, &options);
 
+   speed_t iSpeed = cfgetispeed(&options);
+   printf ("old speed if   : %d\n", iSpeed);
    cfsetispeed(&options, baudRate);
    cfsetospeed(&options, baudRate);
+   iSpeed = cfgetispeed(&options);
+   printf ("new speed if   : %d\n", iSpeed);
 
    options.c_cflag |= (CLOCAL | CREAD);    
    options.c_cflag &= ~PARENB;             // No parity
@@ -745,18 +649,20 @@ static int configureSerialPort (int fd, int baudRate) {
    return 0;
 }
 
-/*! read serial USB port and feed hash table of AIS Records, Unix environment */
-void *getAisNmea () {
+/*! read serial USB port to get NMEA GPS AIS info, Unix environment */
+void *getNmea (gpointer x) {
+   int index = GPOINTER_TO_INT (x);
    char buffer[MAX_SIZE_NMEA];
    int bytes_read;
-   int fd = open (AIS_INPUT_UNIX, O_RDONLY | O_NOCTTY | O_NDELAY); // serial port
+
+   int fd = open (par.nmea [index].portName, O_RDONLY | O_NOCTTY | O_NDELAY); // serial port
 
    if (fd == -1) {
-      fprintf (stderr, "In getAisNmea  : cannot open input flow %s\n", AIS_INPUT_UNIX);
+      fprintf (stderr, "In getNmea     : cannot open input flow %s\n", par.nmea [index].portName);
       return NULL;
    }
-   printf ("In getAisNmea  : %s\n", AIS_INPUT_UNIX);
-   configureSerialPort (fd, AIS_BAUD_RATE_UNIX);
+   configureSerialPort (fd, par.nmea [index].speed);
+   printf ("In getNmea     : %s open with speed index: %d\n", par.nmea [index].portName, par.nmea [index].speed);
 
    // read serial port
    while (true) {
@@ -772,57 +678,5 @@ void *getAisNmea () {
    close (fd);
    return NULL;
 }
-
-/* get GPS information with NMEA decoding, Unix environment */
-void *OgetGpsNmea () {
-   char buffer[MAX_SIZE_NMEA];
-   int bytes_read;
-   int fd = open (GPS_INPUT_UNIX, O_RDONLY | O_NOCTTY | O_NDELAY); // serial port
-   memset (&my_gps_data, 0, sizeof (my_gps_data));
-
-   if (fd == -1) {
-      fprintf (stderr, "In getGpsNmea  : cannot open input flow %s\n", GPS_INPUT_UNIX);
-      return NULL;
-   }
-   printf ("In getGpsNmea  : %s\n", GPS_INPUT_UNIX);
-   configureSerialPort (fd, GPS_BAUD_RATE_UNIX);
-
-   // read serial port
-   while (true) {
-      // removeOldShips (T_SHIP_MAX);
-      bytes_read = read (fd, buffer, sizeof(buffer) - 1);
-      if (bytes_read > 0) {
-         buffer[bytes_read] = '\0';       // terminate the buffer
-         if (((buffer [0] == '!') || (buffer [0] == '$')) && (checksumOK (buffer))) {
-            decodeNMEA (buffer);
-         }
-      }
-   }
-   close (fd);
-   return NULL;
-}
 #endif
-
-/*! get GPS information with NMEA decoding, Unix or Windows but default speed  */
-void *getGpsNmea () {
-   FILE *flowInput = NULL;
-   const char *GPS_INPUT = "/dev/ttyACM0";
-   char row [MAX_SIZE_NMEA];
-   memset (&my_gps_data, 0, sizeof (my_gps_data));
-   char *line = &row [0];
-   if ((flowInput = fopen (GPS_INPUT, "r")) == NULL) {
-      fprintf (stderr, "In getGpsNmea  : cannot open input flow %s\n", GPS_INPUT);
-      return NULL;
-   }
-   printf ("In getGpsNmea  : %s\n", GPS_INPUT);
-   while (true) {
-      line = fgets (row, MAX_SIZE_NMEA, flowInput); 
-      if ((line != NULL) && (*line == '$') && (checksumOK (row))) {
-         // printf ("%s\n", line);
-         decodeNMEA (line);
-      }
-   }
-   fclose (flowInput);
-   return NULL;
-}
 

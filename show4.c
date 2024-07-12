@@ -4014,8 +4014,8 @@ static void help () {
 static void helpInfo () {
    const char *authors[2] = {PROG_AUTHOR, NULL};
    char str [MAX_SIZE_LINE];
-   char strVersion [MAX_SIZE_LINE];
-   char strGps [MAX_SIZE_LINE];
+   char strVersion [MAX_SIZE_LINE * 2];
+   char strNmea [MAX_SIZE_LINE];
   
    snprintf (strVersion, sizeof (strVersion), "%s\nGTK version: %d.%d.%d\nGlib version: %d.%d.%d\nCairo Version:%s\n \
       %s\nECCODES version from ECMWF: %s\n Curl version: %s\n Shapefil version: %s\n Compilation date: %s\n", 
@@ -4024,9 +4024,10 @@ static void helpInfo () {
       // webkit_get_major_version (), webkit_get_minor_version (),webkit_get_micro_version (), // ATT GTK4 CHANGE
       GLIB_MAJOR_VERSION, GLIB_MINOR_VERSION, GLIB_MICRO_VERSION,
       CAIRO_VERSION_STRING, 
-      aisGpsInfo (par.gpsType, strGps, MAX_SIZE_LINE),
+      nmeaInfo (strNmea, MAX_SIZE_LINE),
       ECCODES_VERSION_STR, LIBCURL_VERSION, "1.56", 
       __DATE__);
+
    GtkWidget *p_about_dialog = gtk_about_dialog_new ();
    gtk_about_dialog_set_version (GTK_ABOUT_DIALOG (p_about_dialog), strVersion);
    gtk_about_dialog_set_program_name  (GTK_ABOUT_DIALOG (p_about_dialog), PROG_NAME);
@@ -6476,13 +6477,9 @@ int main (int argc, char *argv[]) {
    }
    if (!ret) exit (EXIT_FAILURE);
 
-   if (par.gpsType == 0) {
-      g_thread_new ("AISGPS", getAisGps, NULL);       // launch common GPS AIS thread with gps.h lib
-   }
-   else {
-      g_thread_new ("GPS", getGpsNmea, NULL);         // launch GPS 
-      g_thread_new ("AIS", getAisNmea, NULL);         // launch AIS
-   }
+   // one thread per port
+   for (int i = 0; i < par.nNmea; i++) 
+      g_thread_new ("GPS", getNmea, GINT_TO_POINTER (i));      // launch GPS 
 
    initZone (&zone);
    initDispZone ();

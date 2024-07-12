@@ -3,6 +3,7 @@
 . Type definitions with typedef
 */
 
+#define N_MAX_NMEA_PORTS      3
 #define CSV_SEP               ";,\t"
 #define GPS_TIME_OUT          2000000           // 2 seconds
 #define N_WIND_URL            6
@@ -61,6 +62,7 @@
 #define MAX_INDEX_ENTITY      512               // for shp. Index.
 
 enum {API_GPSD, NMEA_USB};                      // GPS way of finding information
+enum {GPS_INDEX, AIS_INDEX};                    // for NMEA USB serial port reading
 enum {WIND, CURRENT};                           // for grib information, either WIND or CURRENT
 enum {POLAR, WAVE_POLAR};                       // for polar information, either POLAR or WAVE
 enum {POI_SEL, PORT_SEL};                       // for editor or spreadsheet, call either POI or PORT
@@ -375,6 +377,11 @@ typedef struct {
    char forbidZone [MAX_N_FORBID_ZONE][MAX_SIZE_LINE]; // array of forbid zones
    int techno;                               // additionnal info display for tech experts
    int gpsType;                              // 0 if gpsd API, 1 if NMEA port read
+   struct {                                  // list of NEMEA ports with for each item, portName and speed 
+      char portName [MAX_SIZE_NAME];
+      int speed;
+   } nmea [N_MAX_NMEA_PORTS];
+   int nNmea;                                // number of ports activated
 } Par;
 
 /*! Isochrone */

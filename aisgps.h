@@ -16,10 +16,7 @@ typedef struct {
 
 extern bool aisTableInit (void);
 extern void aisToStr (char *res, size_t maxLength);
-extern char *aisGpsInfo (int type, char *strGps, int len);
-extern void *getAisGps ();
-extern void *getGpsNmea ();
-extern void *getAisNmea ();
-
+extern char *nmeaInfo (char *strGps, int len);
+extern void *getNmea (gpointer x);
 
 

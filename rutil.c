@@ -1849,7 +1849,6 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "SPEED_DISP:%d", &par.speedDisp) > 0);
       else if (sscanf (pLine, "AIS_DISP:%d", &par.aisDisp) > 0);
       else if (sscanf (pLine, "TECHNO_DISP:%d", &par.techno) > 0);
-      else if (sscanf (pLine, "GPS_TYPE:%d", &par.gpsType) > 0);
       else if (sscanf (pLine, "WEBKIT:%255s", str) > 0)
          buildRootName (str, par.webkit);
       /*else if (strstr (pLine, "WEBKIT:") != NULL) {
@@ -1875,6 +1874,10 @@ bool readParam (const char *fileName) {
          par.nForbidZone += 1;
       }
       else if (sscanf (pLine, "MAIL_PW:%255s", par.mailPw) > 0);
+      else if ((par.nNmea < N_MAX_NMEA_PORTS) && 
+              (sscanf (pLine, "NMEA:%255s %d", par.nmea [par.nNmea].portName, &par.nmea [par.nNmea].speed) > 0)) {
+         par.nNmea += 1;
+      }
       else fprintf (stderr, "Error in readParam: Cannot interpret: %s\n", pLine);
    }
    if (par.mailPw [0] != '\0') {
@@ -1979,7 +1982,9 @@ bool writeParam (const char *fileName, bool header, bool password) {
    fprintf (f, "WEBKIT:          %s\n", par.webkit);
    fprintf (f, "EDITOR:          %s\n", par.editor);
    fprintf (f, "SPREADSHEET:     %s\n", par.spreadsheet);
-   fprintf (f, "GPS_TYPE:        %d\n", par.gpsType);
+
+   for (int i = 0; i < par.nNmea; i++)
+      fprintf (f, "NMEA:            %s %d\n", par.nmea [i].portName, par.nmea [i].speed); 
 
    if (password)
       fprintf (f, "MAIL_PW:         %s\n", par.mailPw);
