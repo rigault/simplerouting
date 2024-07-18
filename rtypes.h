@@ -42,6 +42,8 @@
 #define MAX_SIZE_DATE         32                // max size of a string with date inside
 #define MAX_SIZE_BUFFER       1000000
 #define MAX_N_TIME_STAMPS     512
+#define MAX_N_DATA_DATE       4                // 1 in practise
+#define MAX_N_DATA_TIME       4                // 1 in practise
 #define MAX_N_SHORT_NAME      64
 #define MAX_N_GRIB_LAT        1024
 #define MAX_N_GRIB_LON        2048
@@ -188,10 +190,11 @@ typedef struct {
    size_t nDataTime;
    double time0Grib;                      // time of the first forecast in grib in hours
    size_t nShortName;
-   char** shortName;
+   char   shortName [MAX_N_SHORT_NAME][MAX_SIZE_SHORT_NAME];
+   //char** shortName;
    long   timeStamp [MAX_N_TIME_STAMPS];
-   long   dataDate [16];
-   long   dataTime [16];
+   long   dataDate [MAX_N_DATA_DATE];
+   long   dataTime [MAX_N_DATA_TIME];
 } Zone;
 
 /*! Point in isochrone */
@@ -376,10 +379,10 @@ typedef struct {
    int  nForbidZone;                         // number of forbidden zones
    char forbidZone [MAX_N_FORBID_ZONE][MAX_SIZE_LINE]; // array of forbid zones
    int techno;                               // additionnal info display for tech experts
-   int gpsType;                              // 0 if gpsd API, 1 if NMEA port read
    struct {                                  // list of NEMEA ports with for each item, portName and speed 
       char portName [MAX_SIZE_NAME];
       int speed;
+      bool open;
    } nmea [N_MAX_NMEA_PORTS];
    int nNmea;                                // number of ports activated
 } Par;

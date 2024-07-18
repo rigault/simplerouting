@@ -1,5 +1,5 @@
 /*! compilation: gcc -c rutil.c `pkg-config --cflags glib-2.0` */
-#define _POSIX_C_SOURCE 200809L // to avoid warnong with -std=c11 when using popen function (Posix)
+#define _POSIX_C_SOURCE 200809L // to avoid warning with -std=c11 when using popen function (Posix)
 #include <glib.h>
 #include <curl/curl.h>
 #include <float.h>   
@@ -99,7 +99,7 @@ const char *CURRENT_URL [N_CURRENT_URL * 2] = {
 void *commandRun (void *data) {
    FILE *fs;
    char *line = (char *) data;
-   printf ("commandRun Line: %s\n", line);
+   // printf ("commandRun Line: %s\n", line);
    if ((fs = popen (line, "r")) == NULL)
       fprintf (stderr, "Error in commandRun: popen call: %s\n", line);
    else
@@ -300,6 +300,10 @@ bool isNumber (const char *name) {
 
 /*! replace $ by sequence */
 char *dollarSubstitute (const char* str, char *res, size_t maxSize) {
+#ifdef _WIN32
+   strncpy (res, str, maxSize); // no issue with $ with Windows 
+   return res;
+#else  
    res [0] = '\0';
    if (str == NULL) return NULL;
    int len = 0;
@@ -313,6 +317,7 @@ char *dollarSubstitute (const char* str, char *res, size_t maxSize) {
    }
    res[len] = '\0';
    return res;
+#endif
 }
 
 /*! translate str in double for latitude longitudes */
@@ -1213,13 +1218,82 @@ void findCurrentGrib (double lat, double lon, double t, double *uCurr,\
    }
 }
 
+static long updateLong (long value, size_t n, size_t maxSize, long array []) {
+   bool found = false;
+   for (size_t i = 0; i < n; i++) {
+      if (value == array [i]) {
+         found = true;
+         break;
+      }
+   } 
+   if ((! found) && (n < maxSize)) { // new time stamp
+      array [n] = value;
+	   n += 1;
+   }
+   return n;
+}
+
 /*! Read lists zone.timeStamp, shortName, zone.dataDate, dataTime before full grib reading */
 static bool readGribLists (const char *fileName, Zone *zone) {
+   FILE* f = NULL;
+   int err = 0;
+   long timeStep, dataDate, dataTime;
+   char shortName [MAX_SIZE_SHORT_NAME];
+   size_t lenName;
+   bool found = false;
+   memset (zone, 0,  sizeof (Zone));
+   // Message handle. Required in all the ecCodes calls acting on a message.
+   codes_handle* h = NULL;
+
+   if ((f = fopen (fileName, "rb")) == NULL) {
+       fprintf (stderr, "Error in readGribAll: Unable to open file %s\n", fileName);
+       return false;
+   }
+
+   // Loop on all the messages in a file
+   while ((h = codes_handle_new_from_file(0, f, PRODUCT_GRIB, &err)) != NULL) {
+      if (err != CODES_SUCCESS) CODES_CHECK (err, 0);
+      lenName = MAX_SIZE_SHORT_NAME;
+
+      CODES_CHECK(codes_get_string(h, "shortName", shortName, &lenName), 0);
+      CODES_CHECK(codes_get_long(h, "step", &timeStep), 0);
+      CODES_CHECK(codes_get_long(h, "dataDate", &dataDate), 0);
+      CODES_CHECK(codes_get_long(h, "dataTime", &dataTime), 0);
+      codes_handle_delete (h);
+
+      found = false;
+      for (size_t i = 0; i < zone->nShortName; i++) {
+         if (strcmp (shortName, zone->shortName [i]) == 0) {
+            found = true;
+            break;
+         }
+      } 
+      if ((! found) && (zone->nShortName < MAX_N_SHORT_NAME)) { // new shortName
+         strncpy (zone->shortName [zone->nShortName], shortName, MAX_SIZE_SHORT_NAME); 
+         zone->nShortName += 1;
+      }
+      zone->nTimeStamp = updateLong (timeStep, zone->nTimeStamp, MAX_N_TIME_STAMPS, zone->timeStamp); 
+      zone->nDataDate = updateLong (dataDate, zone->nDataDate, MAX_N_DATA_DATE, zone->dataDate); 
+      zone->nDataTime = updateLong (dataTime, zone->nDataTime, MAX_N_DATA_TIME, zone->dataTime); 
+      
+   }
+ 
+   fclose (f);
+   // Replace unknown by gust ? (GFS case where gust identified by specific indicatorOfParameter)
+   for (size_t i = 0; i < zone->nShortName; i++) {
+      if (strcmp(zone->shortName[i], "unknown") == 0)
+         strcpy(zone->shortName[i], "gust?");
+   }
+   return true;
+}
+
+/*! Read lists zone.timeStamp, shortName, zone.dataDate, dataTime before full grib reading */
+static bool OreadGribLists (const char *fileName, Zone *zone) {
    codes_index* index = NULL;
    int ret = 0;
     
    // Create an index given set of keys
-   index = codes_index_new (0,"dataDate,dataTime,shortName,level,number,step",&ret);
+   index = codes_index_new (0,"dataDate,dataTime,shortName,step",&ret);
    if (ret) {
       fprintf (stderr, "Error in readGribLists: index: %s\n",codes_get_error_message(ret)); 
       return false;
@@ -1239,12 +1313,12 @@ static bool readGribLists (const char *fileName, Zone *zone) {
    
    CODES_CHECK(codes_index_get_size(index,"shortName",&zone->nShortName),0);
    
-   if (zone->shortName != NULL) free (zone->shortName); 
+   /*if (zone->shortName != NULL) free (zone->shortName); 
    if ((zone->shortName = (char**) malloc (sizeof(char*)*zone->nShortName)) == NULL) {
       fprintf (stderr, "Error in readGribLists: Malloc zone.shortName\n");
       return (false);
-   }
-   CODES_CHECK(codes_index_get_string(index,"shortName", zone->shortName, &zone->nShortName),0);
+   }*/
+   CODES_CHECK(codes_index_get_string(index,"shortName", (char **) zone->shortName, &zone->nShortName),0);
    CODES_CHECK(codes_index_get_size (index, "dataDate", &zone->nDataDate),0);
    CODES_CHECK (codes_index_get_long (index,"dataDate", zone->dataDate, &zone->nDataDate),0);
    CODES_CHECK(codes_index_get_size (index, "dataTime", &zone->nDataTime),0);
@@ -1265,7 +1339,7 @@ static bool readGribParameters (const char *fileName, Zone *zone) {
    double lat1, lat2;
    codes_handle *h = NULL;
  
-   if ((f = fopen (fileName, "r")) == NULL) {
+   if ((f = fopen (fileName, "rb")) == NULL) {
        fprintf (stderr, "Error in readGribParameters: unable to open file %s\n",fileName);
        return false;
    }
@@ -1783,21 +1857,10 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "CLI_HELP:%255s", str) > 0)
          buildRootName (str, par.cliHelpFileName);
       else if (sscanf (pLine, "HELP:%255s", par.helpFileName) > 0); // full link required
-      else if (strstr (pLine, "SMTP_SCRIPT:") != NULL) {
-         pLine = strchr (pLine, ':') + 1;
-         g_strstrip (pLine);
-         strncpy (par.smtpScript, pLine, sizeof (par.smtpScript) - 1);
-      }
-      else if (strstr (pLine, "IMAP_TO_SEEN:") != NULL) {
-         pLine = strchr (pLine, ':') + 1;
-         g_strstrip (pLine);
-         strncpy (par.imapToSeen, pLine, sizeof (par.imapToSeen) - 1);
-      }
-      else if (strstr (pLine, "IMAP_SCRIPT:") != NULL) {
-         pLine = strchr (pLine, ':') + 1;
-         g_strstrip (pLine);
-         strncpy (par.imapScript, pLine, sizeof (par.imapScript) - 1);
-      }
+      else if (sscanf (pLine, "SMTP_SCRIPT:%255[^\n]s", par.smtpScript) > 0);
+      else if (sscanf (pLine, "SMTP_SCRIPT:%255[^\n]s", par.smtpScript) > 0);
+      else if (sscanf (pLine, "IMAP_TO_SEEN:%255[^\n]s", par.imapToSeen) > 0);
+      else if (sscanf (pLine, "IMAP_SCRIPT:%255[^\n]s", par.imapScript) > 0);
       else if (sscanf (pLine, "SHP:%255s", str) > 0) {
          buildRootName (str, par.shpFileName [par.nShpFiles]);
          par.nShpFiles += 1;
@@ -1849,23 +1912,9 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "SPEED_DISP:%d", &par.speedDisp) > 0);
       else if (sscanf (pLine, "AIS_DISP:%d", &par.aisDisp) > 0);
       else if (sscanf (pLine, "TECHNO_DISP:%d", &par.techno) > 0);
-      else if (sscanf (pLine, "WEBKIT:%255s", str) > 0)
-         buildRootName (str, par.webkit);
-      /*else if (strstr (pLine, "WEBKIT:") != NULL) {
-         pLine = strchr (pLine, ':') + 1;
-         g_strstrip (pLine);
-         strncpy (par.webkit, pLine, sizeof (par.webkit) - 1);
-      }*/
-      else if (strstr (pLine, "EDITOR:") != NULL) {
-         pLine = strchr (pLine, ':') + 1;
-         g_strstrip (pLine);
-         strncpy (par.editor, pLine, sizeof (par.editor) - 1);
-      }
-      else if (strstr (pLine, "SPREADSHEET:") != NULL) {
-         pLine = strchr (pLine, ':') + 1;
-         g_strstrip (pLine);
-         strncpy (par.spreadsheet, pLine, sizeof (par.spreadsheet) - 1);
-      }
+      else if (sscanf (pLine, "WEBKIT:%255[^\n]s", par.webkit) > 0);
+      else if (sscanf (pLine, "EDITOR:%255[^\n]s", par.editor) > 0);
+      else if (sscanf (pLine, "SPREADSHEET:%255[^\n]s", par.spreadsheet) > 0);
       else if ((strstr (pLine, "FORBID_ZONE:") != NULL) && (par.nForbidZone < MAX_N_FORBID_ZONE)) {
          pLine = strchr (pLine, ':') + 1;
          g_strstrip (pLine);

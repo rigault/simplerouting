@@ -40,6 +40,18 @@
 #include "option.h"
 #include "aisgps.h"
 
+#ifdef _WIN32
+const bool windowsOS = true;
+#else
+const bool windowsOS = false;
+#endif
+
+#define WARNING_NMEA          "If you want to reinit port:\n\
+1. Ununplug and replug ports,\n\
+2. Enter sysadmin password,\n\
+3. Click OK, \n\
+4. Exit and Relaunch application."
+
 #define MAX_N_SURFACE         (24*MAX_N_DAYS_WEATHER)            // 16 days with timeStep 1 hour
 #define MAIN_WINDOW_DEFAULT_WIDTH  1200
 #define MAIN_WINDOW_DEFAULT_HEIGHT 600
@@ -122,6 +134,7 @@ guint8 colorPalette [N_WIND_COLORS][3] = {{0,0,255}, {0, 255, 0}, {255, 255, 0},
 guint8 bwPalette [N_WIND_COLORS][3] = {{250,250,250}, {200, 200, 200}, {170, 170, 170}, {130, 130, 130}, {70, 70, 70}, {10, 10, 10}};
 const double tTws [] = {0.0, 15.0, 20.0, 25.0, 30.0, 40.0};
 
+char   sysAdminPw [MAX_SIZE_NAME];        // sysadmin password for reseting NMEA ports (Unix)
 char   *gloBuffer;                        // for filtering in displayText ()
 char   parameterFileName [MAX_SIZE_FILE_NAME];
 int    selectedPol = 0;                   // select polar to draw. 0 = all
@@ -3015,7 +3028,7 @@ static void isocDump () {
    char *buffer = NULL;
    const int N_POINT_FACTOR = 1000;
    if (nIsoc == 0)
-      infoMessage ("No isochrone", GTK_MESSAGE_INFO); 
+      infoMessage ("No isochrone", GTK_MESSAGE_WARNING); 
    else {
       if ((buffer = (char *) malloc (nIsoc * MAX_SIZE_LINE * N_POINT_FACTOR)) == NULL)
          infoMessage ("Not enough memory", GTK_MESSAGE_ERROR); 
@@ -3031,7 +3044,7 @@ static void isocDump () {
 static void isocDescDump () {
    char *buffer = NULL;
    if (route.n <= 0)
-      infoMessage ("No route calculated", GTK_MESSAGE_INFO);
+      infoMessage ("No route calculated", GTK_MESSAGE_WARNING);
    else {
       if ((buffer = (char *) malloc (nIsoc * MAX_SIZE_LINE)) == NULL)
          infoMessage ("Not enough memory", GTK_MESSAGE_ERROR); 
@@ -3193,7 +3206,7 @@ static void historyRteDump (gpointer user_data) {
    char title [MAX_SIZE_LINE];
    char *buffer = NULL;
    if (historyRoute.r[k].n <= 0)
-      infoMessage ("No route calteculated", GTK_MESSAGE_INFO);
+      infoMessage ("No route calteculated", GTK_MESSAGE_WARNING);
    else {
       if ((buffer = (char *) malloc (MAX_SIZE_BUFFER)) != NULL) {
          routeToStr (&historyRoute.r[k], buffer, MAX_SIZE_BUFFER); 
@@ -3214,7 +3227,7 @@ static void rteHistory () {
    GtkWidget *itemHist; 
    GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 5);
    if (historyRoute.n <= 1) {
-      infoMessage ("No History", GTK_MESSAGE_INFO);
+      infoMessage ("No History", GTK_MESSAGE_WARNING);
       return;
    }
    else if (historyRoute.n == 2) {
@@ -3240,7 +3253,7 @@ static void rteHistory () {
 /*! display the report of route calculation */
 static void rteReport () {
    if (route.n <= 0)
-      infoMessage ("No route calculated", GTK_MESSAGE_INFO);
+      infoMessage ("No route calculated", GTK_MESSAGE_WARNING);
    else {
       niceReport (&route, 0);
    }
@@ -3331,7 +3344,7 @@ static void simulationReport () {
    char line [MAX_SIZE_LINE];
    if (! simulationReportExist) {
       printf ("no simulation available\n");
-      infoMessage ("No simulation available", GTK_MESSAGE_INFO);
+      infoMessage ("No simulation available", GTK_MESSAGE_WARNING);
       return;
    }
    snprintf (line, sizeof (line), \
@@ -3552,7 +3565,7 @@ static void onRoutegramEvent (GtkDrawingArea *area, cairo_t *cr, \
 static void routeGram () {
    char line [MAX_SIZE_LINE];
    if (route.n <= 0) {
-      infoMessage ("No route calculated", GTK_MESSAGE_INFO);
+      infoMessage ("No route calculated", GTK_MESSAGE_WARNING);
       return;
    }
    snprintf (line, MAX_SIZE_LINE, "Routegram max TWS: %.2lf, max Gust: %.2lf, max Waves: %.2lf, miles: %.2lf",\
@@ -3573,7 +3586,7 @@ static void routeGram () {
 static void routeDump () {
    char *buffer = NULL;
    if (route.n <= 0)
-      infoMessage ("No route calculated", GTK_MESSAGE_INFO);
+      infoMessage ("No route calculated", GTK_MESSAGE_WARNING);
    else {
       if ((buffer = (char *) malloc (MAX_SIZE_BUFFER)) != NULL) {
          routeToStr (&route, buffer, MAX_SIZE_BUFFER); 
@@ -3933,6 +3946,75 @@ static void dashboard () {
    gtk_window_present (GTK_WINDOW (dashboardWindow));   
 }
 
+
+/*! reinit NMEA ports */
+static void nmeaInit (GtkWidget *widget, gpointer window) {
+   char *command = NULL;
+   char str [MAX_SIZE_LINE];
+   if ((command = malloc (MAX_SIZE_LINE * par.nNmea)) == NULL) {
+      fprintf (stderr, "Error in help Malloc: %d\n", MAX_SIZE_LINE);
+      return;
+   }
+   command [0] = '\0';
+   for (int i = 0; i < par.nNmea; i++) {
+      snprintf (str, MAX_SIZE_LINE, "echo %s | sudo -S chmod 666 %s;", sysAdminPw, par.nmea [i].portName);
+      g_strlcat (command, str, MAX_SIZE_LINE * par.nNmea);
+   }
+   memset (sysAdminPw, 0, MAX_SIZE_NAME); // reset to 0 for security purpose
+   gtk_window_destroy (GTK_WINDOW(window));
+   g_thread_new ("iniNmea", commandRun, command);
+}
+
+/*! Callback to set up sysadmin password  */
+static void sysAdminPasswordEntryChanged (GtkEditable *editable, gpointer user_data) {
+   const char *text = gtk_editable_get_text (editable);
+   g_strlcpy (sysAdminPw, text, MAX_SIZE_NAME);
+}
+
+/*! show NMEA information and possibility to change */
+static void nmeaConf () {
+   char strNmea [MAX_SIZE_LINE];
+   if (par.nNmea <= 0) {
+      infoMessage ("No NMEA Port available", GTK_MESSAGE_WARNING);
+      return;
+   }
+   nmeaInfo (strNmea, MAX_SIZE_LINE);
+   if (windowsOS)
+      infoMessage (strNmea, GTK_MESSAGE_INFO);
+   else {
+      // possibility to renit ports under Unix
+      GtkWidget *nmeaWindow = gtk_application_window_new (app);
+      gtk_widget_set_size_request (nmeaWindow, 100, -1);
+      gtk_window_set_title (GTK_WINDOW (nmeaWindow), "NMEA ports status");
+      GtkWidget *vBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+      gtk_window_set_child (GTK_WINDOW (nmeaWindow), vBox);
+   
+      GtkWidget *labelInfo = gtk_label_new (strNmea);
+      GtkWidget *labelWarning = gtk_label_new (WARNING_NMEA);
+
+      GtkWidget *hBox0 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+      
+      GtkWidget *passwordLabel = gtk_label_new ("SysAdmin Password:");
+      gtk_label_set_xalign(GTK_LABEL (passwordLabel), 0);
+      GtkWidget *passwordEntry = gtk_entry_new ();
+      gtk_entry_set_visibility (GTK_ENTRY (passwordEntry), FALSE);  
+      gtk_entry_set_invisible_char (GTK_ENTRY (passwordEntry), '*');
+      g_signal_connect (passwordEntry, "changed", G_CALLBACK (sysAdminPasswordEntryChanged), sysAdminPw);
+      
+      gtk_box_append (GTK_BOX(hBox0), passwordLabel);
+      gtk_box_append (GTK_BOX(hBox0), passwordEntry);
+
+      GtkWidget *hBox1 = OKCancelLine (nmeaInit, nmeaWindow); // lauch nmeaInit if OK
+
+      gtk_box_append (GTK_BOX(vBox), labelInfo);
+      gtk_box_append (GTK_BOX(vBox), labelWarning);
+      gtk_box_append (GTK_BOX(vBox), hBox0);
+      gtk_box_append (GTK_BOX(vBox), hBox1);
+
+      gtk_window_present (GTK_WINDOW (nmeaWindow));
+   }
+}
+
 /* show AIS information */
 static void aisDump () {
    if (false) {
@@ -4015,16 +4097,14 @@ static void helpInfo () {
    const char *authors[2] = {PROG_AUTHOR, NULL};
    char str [MAX_SIZE_LINE];
    char strVersion [MAX_SIZE_LINE * 2];
-   char strNmea [MAX_SIZE_LINE];
   
    snprintf (strVersion, sizeof (strVersion), "%s\nGTK version: %d.%d.%d\nGlib version: %d.%d.%d\nCairo Version:%s\n \
-      %s\nECCODES version from ECMWF: %s\n Curl version: %s\n Shapefil version: %s\n Compilation date: %s\n", 
+      ECCODES version from ECMWF: %s\n Curl version: %s\n Shapefil version: %s\n Compilation date: %s\n", 
       PROG_VERSION,
       gtk_get_major_version(), gtk_get_minor_version(), gtk_get_micro_version(),
       // webkit_get_major_version (), webkit_get_minor_version (),webkit_get_micro_version (), // ATT GTK4 CHANGE
       GLIB_MAJOR_VERSION, GLIB_MINOR_VERSION, GLIB_MICRO_VERSION,
       CAIRO_VERSION_STRING, 
-      nmeaInfo (strNmea, MAX_SIZE_LINE),
       ECCODES_VERSION_STR, LIBCURL_VERSION, "1.56", 
       __DATE__);
 
@@ -4180,7 +4260,7 @@ static void *getGribNoaaAll (void *user_data) {
    struct tm *pTime = gmtime (&now);
    char fileName [MAX_SIZE_URL], bigFile [MAX_SIZE_LINE], prefix [MAX_SIZE_LINE];
    char strDate [MAX_SIZE_DATE];
-   strftime (strDate, MAX_SIZE_DATE, "%F", pTime); 
+   strftime (strDate, MAX_SIZE_DATE, "%Y-%m-%d", pTime); 
    snprintf (prefix, sizeof (prefix), "%sgrib/interNoaa-", par.workingDir);
    printf ("Step: %d\n", data->timeStep);
 
@@ -4397,14 +4477,15 @@ static void initScenario () {
       readGrib (&iFlow);
       if (readGribRet == 0) {
          fprintf (stderr, "Error in initScenario: Unable to read grib file: %s\n ", par.gribFileName);
-         return;
       }
-      printf ("Grib loaded    : %s\n", par.gribFileName);
-      printf ("Grib DateTime0 : %s\n",\
-         gribDateTimeToStr (zone.dataDate [0], zone.dataTime [0], str, sizeof (str)));
-      theTime = zone.timeStamp [0];
-      updatedColors = false; 
-      initDispZone ();
+      else {
+         printf ("Grib loaded    : %s\n", par.gribFileName);
+         printf ("Grib DateTime0 : %s\n",\
+            gribDateTimeToStr (zone.dataDate [0], zone.dataTime [0], str, sizeof (str)));
+         theTime = zone.timeStamp [0];
+         updatedColors = false; 
+         initDispZone ();
+      }
    }
 
    if (par.currentGribFileName [0] != '\0') {
@@ -4539,7 +4620,8 @@ static void gribInfoDisplay (const char *fileName, Zone *zone) {
    snprintf (line, sizeof (line), "%ld", zone->numberOfValues);
    lineReport (grid, l+=2, "document-page-setup-symbolic", "Nb. of Values", line);
 
-   snprintf (line, sizeof (line), "From: %s, %s To: %s %s", latToStr (zone->latMax, par.dispDms, strLat0), lonToStr (zone->lonLeft, par.dispDms, strLon0),
+   snprintf (line, sizeof (line), "From: %s, %s To: %s %s", 
+      latToStr (zone->latMax, par.dispDms, strLat0), lonToStr (zone->lonLeft, par.dispDms, strLon0),
       latToStr (zone->latMin, par.dispDms, strLat1), lonToStr (zone->lonRight, par.dispDms, strLon1));
    lineReport (grid, l+=2, "network-workgroup-symbolic", "Zone ", line);
 
@@ -4549,13 +4631,19 @@ static void gribInfoDisplay (const char *fileName, Zone *zone) {
    snprintf (line, sizeof (line), "%ld - %ld\n", zone->nbLat, zone->nbLon);
    lineReport (grid, l+=2 , "preferences-desktop-locale-symbolic", "Nb. Lat - Nb. Lon", line);
 
-   timeStep = zone->timeStamp [1] - zone->timeStamp [0];
-   // check if regular
-   for (size_t i = 1; i < zone->nTimeStamp - 1; i++)
-      if ((zone->timeStamp [i] - zone->timeStamp [i-1]) != timeStep) {
-         isTimeStepOK = false;
+   if (zone->nTimeStamp == 0) {
+      isTimeStepOK = false;
+   }
+   else {
+      timeStep = zone->timeStamp [1] - zone->timeStamp [0];
+      // check if regular
+      for (size_t i = 1; i < zone->nTimeStamp - 1; i++) {
+         if ((zone->timeStamp [i] - zone->timeStamp [i-1]) != timeStep) {
+            isTimeStepOK = false;
          // printf ("timeStep: %ld other timeStep: %ld\n", timeStep, zone->timeStamp [i] - zone->timeStamp [i-1]);
+         }
       }
+   }
 
    snprintf (strTmp, sizeof (strTmp), "TimeStamp List of %s %zu", (isTimeStepOK)? "regular" : "UNREGULAR", zone->nTimeStamp);
    if (zone->nTimeStamp < 8 || ! isTimeStepOK) {
@@ -4657,7 +4745,7 @@ static gboolean mailGribRead (gpointer data) {
    pclose(fp);
    if (n > 0) {
       g_source_remove (gribMailTimeout); // timer stopped
-      if (((fileName = strstr (buffer, "File: /") + 6) != NULL) && (n > 2)) {
+      if (((fileName = strstr (buffer, "File: ") + 6) != NULL) && (n > 2)) {
          printf ("Mail Response: %s\n", buffer);
          while (isspace (*fileName)) fileName += 1;
          if ((end = strstr (fileName, " ")) != NULL)
@@ -4745,7 +4833,7 @@ static void cbMailDropDown (GObject *dropDown, GParamSpec *pspec, gpointer user_
 }
 
 /*! Callback to set up mail password  */
-static void passwordEntryChanged (GtkEditable *editable, gpointer user_data) {
+static void mailPasswordEntryChanged (GtkEditable *editable, gpointer user_data) {
    const char *text = gtk_editable_get_text (editable);
    g_strlcpy (par.mailPw, text, MAX_SIZE_NAME);
 }
@@ -4884,7 +4972,7 @@ static void mailRequestBox (double lat1, double lon1, double lat2, double lon2) 
       GtkWidget *password_entry = gtk_entry_new ();
       gtk_entry_set_visibility (GTK_ENTRY (password_entry), FALSE);  
       gtk_entry_set_invisible_char (GTK_ENTRY (password_entry), '*');
-      g_signal_connect (password_entry, "changed", G_CALLBACK (passwordEntryChanged), par.mailPw);
+      g_signal_connect (password_entry, "changed", G_CALLBACK (mailPasswordEntryChanged), par.mailPw);
       gtk_grid_attach (GTK_GRID (grid), password_label, 0, 7, 1, 1);
       gtk_grid_attach (GTK_GRID (grid), password_entry, 1, 7, 1, 1);
    }
@@ -5526,7 +5614,7 @@ static void closePolygonSelected () {
 GtkWidget *popover = NULL;
 const double proximity_threshold = 10.0; // La distance maximale pour détecter un survol
 
-static double tabPoint[10][2] = {
+/*static double tabPoint[10][2] = {
     {50.0, 50.0},
     {100.0, 100.0},
     {150.0, 150.0},
@@ -5582,6 +5670,7 @@ static gboolean NonMotionEvent (GtkEventControllerMotion *controller, double x, 
 
    return TRUE;
 }
+*/
 
 /*! callback when mouse move */
 static gboolean onMotionEvent (GtkEventControllerMotion *controller, double x, double y, gpointer user_data) {
@@ -6000,7 +6089,7 @@ static void meteogram () {
    char strLat [MAX_SIZE_NAME], strLon [MAX_SIZE_NAME];
    char line [MAX_SIZE_LINE]; 
    if (par.constWindTws > 0) {
-      infoMessage ("Wind is constant !", GTK_MESSAGE_INFO);
+      infoMessage ("Wind is constant !", GTK_MESSAGE_WARNING);
       return;
    }
    popoverFinish (menuWindow);
@@ -6127,7 +6216,7 @@ static void appActivate (GApplication *application) {
 
    createButton (toolBox, "system-run", onRunButtonClicked);
    createButton (toolBox, "starred", onChooseDepartureButtonClicked);
-   createButton (toolBox, "preferences-desktop", change);
+   createButton (toolBox, "application-x-executable", change);
    createButton (toolBox, "media-playback-pause", onStopButtonClicked);
    createButton (toolBox, "media-playback-start", onPlayButtonClicked);
    createButton (toolBox, "media-playlist-repeat", onLoopButtonClicked);
@@ -6280,6 +6369,7 @@ static void appStartup (GApplication *application) {
    createAction ("newTrace", newTrace);
    createAction ("editTrace", editTrace);
 
+   createAction ("nmea", nmeaConf);
    createAction ("ais", aisDump);
    createAction ("gps", gpsDump);
 
@@ -6366,6 +6456,7 @@ static void appStartup (GApplication *application) {
 
    // Add elements for "ais gps" menu
    GMenu *ais_gps_menu_v = g_menu_new ();
+   subMenu (ais_gps_menu_v, "NMEA Ports", "app.nmea", "");
    subMenu (ais_gps_menu_v, "GPS", "app.gps", "");
    subMenu (ais_gps_menu_v, "AIS", "app.ais", "");
 

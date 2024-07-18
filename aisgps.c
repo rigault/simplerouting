@@ -3,7 +3,6 @@
 #ifdef _WIN32
 #include <windows.h>
 #else
-#include <gps.h>
 #include <termios.h>
 #endif
 
@@ -19,9 +18,6 @@
 #include "rtypes.h"  
 #include "rutil.h"
 #include "aisgps.h"
-
-#define AIS_INPUT_WINDOWS    "COM6"         // NMEA USB converter AIS Windows
-#define GPS_INPUT_WINDOWS    "COM3"         // NMEA USB converter GPS Windows
 
 #define AIS_BAUD_RATE_UNIX     B38400       // for AIS NMEA USB configuration Unix
 #define GPS_BAUD_RATE_UNIX     B9600        // for GPS NMEA USB configuration Unix
@@ -60,7 +56,10 @@ char *nmeaInfo (char *strGps, int len) {
    char str [MAX_SIZE_LINE];
    strGps [0] = '\0';
    for (int i = 0; i < par.nNmea; i++) {
-      snprintf (str, MAX_SIZE_LINE, "NMEA input: %s, Index Speed: %d\n", par.nmea [i].portName, par.nmea [i].speed);
+      snprintf (str, MAX_SIZE_LINE, "NMEA input: %s, Index Speed: %d %s", 
+         par.nmea [i].portName, 
+         par.nmea [i].speed,
+         (par.nmea [i].open) ? "Open\n" : "Closed\n");
       g_strlcat (strGps, str, len);
    }
    return strGps;
@@ -584,12 +583,12 @@ void *getNmea (gpointer x) {
    HANDLE hSerial = configureSerialPort (par.nmea [index].portName, par.nmea [index].speed);
 
    if (hSerial == INVALID_HANDLE_VALUE) {
-      fprintf (stderr, "In getNmea : Error, configuration serial port: %s\n", (index == GPS_INDEX) ? GPS_INPUT_WINDOWS : AIS_INPUT_WINDOWS);
+      fprintf (stderr, "In getNmea : Error, configuration serial port: %s\n", par.nmea [index].portName);
       return NULL;
    }
 
    printf ("In getNmea     : %s open with speed: %d\n", par.nmea [index].portName, par.nmea [index].speed);
-
+   par.nmea [index].open = true;
    while (true) {
       if (index == AIS_INDEX) removeOldShips (T_SHIP_MAX);
       if (ReadFile(hSerial, buffer, sizeof(buffer) - 1, &bytesRead, NULL) && (bytesRead > 0)) {
@@ -663,6 +662,7 @@ void *getNmea (gpointer x) {
    }
    configureSerialPort (fd, par.nmea [index].speed);
    printf ("In getNmea     : %s open with speed index: %d\n", par.nmea [index].portName, par.nmea [index].speed);
+   par.nmea [index].open = true;
 
    // read serial port
    while (true) {
