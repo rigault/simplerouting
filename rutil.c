@@ -118,7 +118,7 @@ bool concat (const char *prefix, int step, int max, const char *fileRes) {
    for (int i = 0; i <= max; i += step) {
       char fileName [MAX_SIZE_FILE_NAME];
       snprintf (fileName, sizeof(fileName), "%s%03d", prefix, i);
-      FILE *f = fopen(fileName, "r");
+      FILE *f = fopen(fileName, "rb");
       if (f == NULL) {
          fprintf (stderr, "Error in concat: opening impossible %s\n", fileName);
          return false;
@@ -132,14 +132,6 @@ bool concat (const char *prefix, int step, int max, const char *fileRes) {
    }
    fclose(fRes);
    return true;
-}
-
-/*! say if point is in sea */
-bool isSea (double lat, double lon) {
-   if (tIsSea == NULL) return true;
-   int iLon = round (lon * 10  + 1800);
-   int iLat = round (-lat * 10  + 900);
-   return tIsSea [(iLat * 3601) + iLon];
 }
 
 /*! build entities based on .shp file */

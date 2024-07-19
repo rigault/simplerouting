@@ -1711,7 +1711,7 @@ static void statusBarUpdate () {
    lon = xToLon (whereIsMouse.x);
    lon = lonCanonize (lon);
 	findWindGrib (lat, lon, theTime, &u, &v, &g, &w, &twd, &tws);
-   strcpy (seaEarth, (isSea (lat, lon)) ? "Authorized" : "Forbidden");
+   strcpy (seaEarth, (isSea (tIsSea, lat, lon)) ? "Authorized" : "Forbidden");
 	findCurrentGrib (lat, lon, theTime - tDeltaCurrent, &uCurr, &vCurr, &currTwd, &currTws);
    
    snprintf (sStatus, sizeof (sStatus), "%s         %3ld/%3ld      %s %s, %s\
@@ -3076,7 +3076,7 @@ static void newTraceResponse (GtkWidget *widget, gpointer entryWindow) {
       if ((f = fopen (traceName, "w")) == NULL) 
          infoMessage ("In NewTraceResponse: Impossible to Write", GTK_MESSAGE_ERROR );
       else {
-         fprintf (f, "    lat;     lon;      epoch;         Date & Time; Cog; Sog\n");
+         fprintf (f, "    lat;     lon;      epoch;         Date & Time; Cog;     Sog\n");
          fclose (f);
       }
    }
@@ -4028,7 +4028,7 @@ static void aisDump () {
       free (buffer);
    }
    else {
-      fprintf (stderr, "Error in aisDump ; Malloc %d\n", MAX_SIZE_BUFFER); 
+      fprintf (stderr, "Error in aisDump: Malloc %d\n", MAX_SIZE_BUFFER); 
       infoMessage ("Memory allocation issue", GTK_MESSAGE_ERROR);
    }
 }

@@ -207,7 +207,7 @@ static int buildNextIsochrone (const Pp *pOr, const Pp *pDest, const Isoc isoLis
          newPt.father = isoList [k].id;
          newPt.vmc = 0;
          newPt.sector = 0;
-         if (isSea (newPt.lat, newPt.lon)) {
+         if (isSea (tIsSea, newPt.lat, newPt.lon)) {
             newPt.dd = orthoDist (newPt.lat, newPt.lon, pDest->lat, pDest->lon);
             double alpha = orthoCap (pOr->lat, pOr->lon, newPt.lat, newPt.lon) - pOrToPDestCog;
          
@@ -616,7 +616,7 @@ static inline bool goal (Pp *pDest, int nIsoc, const Isoc isoList, int len, doub
    bool destinationReached = false;
    isoDesc [nIsoc].distance = 9999.99;
    for (int k = 0; k < len; k++) {
-      if (isSea (isoList [k].lat, isoList [k].lon)) { 
+      if (isSea (tIsSea, isoList [k].lat, isoList [k].lon)) { 
          if (goalP (&isoList [k], pDest, t, dt, &time, &distance, motor, amure))
             destinationReached = true;
 

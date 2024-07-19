@@ -139,7 +139,7 @@ void optionManage (char option) {
          if (scanf ("%lf", &lat) < 1) break;
          printf ("Lon = ");
          if (scanf ("%lf", &lon) < 1) break;
-         if (isSea (lat, lon))
+         if (isSea (tIsSea, lat, lon))
             printf ("Sea\n");
          else printf ("Earth\n");
       }

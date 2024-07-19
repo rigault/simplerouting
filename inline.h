@@ -1,7 +1,15 @@
 /*! this file contains small inlines functions
- to be included in s source files */
+ to be included in source files */
 
 #include <math.h>
+
+/*! say if point is in sea */
+static inline bool isSea (char * isSeaArray, double lat, double lon) {
+   if (isSeaArray == NULL) return true;
+   int iLon = round (lon * 10  + 1800);
+   int iLat = round (-lat * 10  + 900);
+   return isSeaArray [(iLat * 3601) + iLon];
+}
 
 /*! true if P (lat, lon) is within the zone */
 static inline bool isInZone (double lat, double lon, Zone *zone) {
