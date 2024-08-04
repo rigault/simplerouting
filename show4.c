@@ -468,23 +468,42 @@ static void windy (GSimpleAction *action, GVariant *parameter, gpointer *data) {
    }   
    snprintf (command, MAX_SIZE_LINE, "%s %s?%.2lf%%2C%.2lf%%2C%d%%2Cd:picker", \
       par.webkit, WINDY_URL, par.pOr.lat, par.pOr.lon, zoom);
-   printf ("windy command: %s\n", command);
+   printf ("windy command  : %s\n", command);
    g_thread_new ("windy", commandRun, command);
 }
 
-/*! open shom
-   Example: https://www.windytv.com/?36.908,-93.049,8,d:picker */
-static void shom (GSimpleAction *action, GVariant *parameter, gpointer *data) {
-   const char *SHOM_URL = "https://maree.shom.fr/harbor/LE_POULIGUEN/";
+char selectedPort [MAX_SIZE_NAME];
+
+/*! Response for shom OK */
+static void shomResponse (GtkWidget *widget, gpointer entryWindow) {
+   const char *SHOM_URL = "https://maree.shom.fr/harbor/";
    char *command = NULL;
    if ((command = malloc (MAX_SIZE_LINE)) == NULL) {
       fprintf(stderr, "Error in Shom Malloc: %d\n", MAX_SIZE_LINE);
       return;
-   }   
-   snprintf (command, MAX_SIZE_LINE, "%s %s", \
-      par.webkit, SHOM_URL);
-   printf ("shom command: %s\n", command);
+   }
+
+   snprintf (command, MAX_SIZE_LINE, "%s %s%s/", par.webkit, SHOM_URL, selectedPort);
+   printf ("shom command   : %s\n", command);
    g_thread_new ("shom", commandRun, command);
+   gtk_window_destroy (GTK_WINDOW (entryWindow));
+   gtk_widget_queue_draw (drawing_area);
+}
+
+/*! open shom with nearest port */
+static void shom (GSimpleAction *action, GVariant *parameter, gpointer *data) {
+   const double latC = (dispZone.latMin + dispZone.latMax) / 2.0;
+   const double lonC = (dispZone.lonLeft + dispZone.lonRight) / 2.0;
+
+   if (my_gps_data.OK) {
+      nearestPort (my_gps_data.lat, my_gps_data.lon, "FR", selectedPort);
+      entryBox ("SHOM", "Nearest Port from GPS position: ", selectedPort, shomResponse);
+   }
+   else {
+      if ((nearestPort (latC, lonC, par.tidesFileName, selectedPort) != NULL) && (selectedPort [0] != '\0'))
+         entryBox ("SHOM", "Nearest Port from center map: ", selectedPort, shomResponse);
+      else infoMessage ("No nearest port found", GTK_MESSAGE_ERROR);
+   }
 }
 
 /*! open map using open street map or open sea map */
@@ -510,68 +529,77 @@ static void openMap (GSimpleAction *action, GVariant *parameter, gpointer *data)
    g_thread_new ("openMap", commandRun, command);
 }
 
-/*! Filter function for displayText */
-static void filterText (GtkTextBuffer *buffer, const char *filter) {
-    GtkTextIter start, end;
-    char **lines;
-    GRegex *regex = NULL;
-    GError *error = NULL;
+/*! Filter function for displayText. Return buffer with filterd text anf number of lines (-1 if problem) */
+static int filterText (GtkTextBuffer *buffer, const char *filter) {
+   GtkTextIter start, end;
+   char **lines;
+   GRegex *regex = NULL;
+   GError *error = NULL;
+   int count = 0;
+   
+   // Compile the regular expression if a filter is provided
+   if (filter != NULL) {
+      regex = g_regex_new (filter, G_REGEX_CASELESS, 0, &error);
+      if (error != NULL) {
+         fprintf (stderr, "Error compiling regex: %s\n", error->message);
+         g_clear_error (&error);
+         return -1;
+      }
+   }
 
-    // Compile the regular expression if a filter is provided
-    if (filter != NULL) {
-        regex = g_regex_new (filter, G_REGEX_CASELESS, 0, &error);
-        if (error != NULL) {
-            fprintf (stderr, "Error compiling regex: %s\n", error->message);
-            g_clear_error (&error);
-            return;
-        }
-    }
+   gtk_text_buffer_get_start_iter (buffer, &start);
+   gtk_text_buffer_get_end_iter (buffer, &end);
+   gtk_text_buffer_set_text (buffer, "", -1); // Clear the buffer
 
-    gtk_text_buffer_get_start_iter (buffer, &start);
-    gtk_text_buffer_get_end_iter (buffer, &end);
-    gtk_text_buffer_set_text (buffer, "", -1); // Clear the buffer
-
-    lines = g_strsplit (gloBuffer, "\n", -1);
-    for (int i = 0; lines[i] != NULL; i++) {
-        if (filter == NULL || g_regex_match(regex, lines[i], 0, NULL)) {
-            gtk_text_buffer_insert_at_cursor(buffer, lines[i], -1);
-            gtk_text_buffer_insert_at_cursor(buffer, "\n", -1);
-        }
-    }
+   lines = g_strsplit (gloBuffer, "\n", -1);
+   for (int i = 0; lines[i] != NULL; i++) {
+      if ((! isEmpty (lines [i])) && ((filter == NULL) || g_regex_match(regex, lines[i], 0, NULL))) {
+         gtk_text_buffer_insert_at_cursor(buffer, lines[i], -1);
+         gtk_text_buffer_insert_at_cursor(buffer, "\n", -1);
+         count += 1;
+      }
+   }
 
     // Free resources
-    if (regex != NULL) {
-        g_regex_unref (regex);
-    }
-    g_strfreev (lines);
+   if (regex != NULL) {
+      g_regex_unref (regex);
+   }
+   g_strfreev (lines);
+   return count;
 }
 
 /*! for displayText filtering */
 static void onFilterEntryChanged (GtkEditable *editable, gpointer user_data) {
+   int count;
+   char header [MAX_SIZE_LINE]; 
    GtkTextBuffer *buffer = (GtkTextBuffer *) user_data;
    if (editable == NULL)
-      filterText (buffer, NULL);
+      count = filterText (buffer, NULL);
    else {
       const char *filter = gtk_editable_get_text (editable);
-      filterText (buffer, filter);
+      count = filterText (buffer, filter);
    }
+   snprintf (header, MAX_SIZE_LINE, "\nNumber of lines: %d", count);
+   GtkTextIter iter;
+   gtk_text_buffer_get_end_iter (buffer, &iter);
+   gtk_text_buffer_insert (buffer, &iter, header, -1);
 }
 
 /*! for first line decorated */
 static GtkWidget *createDecoratedLabel (const char *text) {
    GtkWidget *label = gtk_label_new (NULL);
-   char *markup = g_markup_printf_escaped \
-      ("<span foreground='red' font_family='monospace'><b>%s</b></span>", text);
+   char *markup = g_markup_printf_escaped (\
+      "<span foreground='red' font_family='monospace'><b>%s</b></span>", text);
+
    gtk_label_set_markup (GTK_LABEL(label), markup);
    gtk_label_set_xalign (GTK_LABEL(label), 0.0);     // Align to the left
-   // gtk_widget_set_halign (label, GTK_ALIGN_START);   // Align the widget to the start (left)
    gtk_widget_set_halign (label, GTK_ALIGN_FILL);    // Ensure the label fills the available horizontal space
    gtk_widget_set_hexpand (label, TRUE);             // Allow the label to expand horizontally
    g_free (markup);
    return label;
 }
 
-/* first line of text and return pos of second ine */
+/* first line of text and return pos of second line */
 static char *extractFirstLine (const char *text, char* strFirstLine) {
    char *firstLineEnd = strchr (text, '\n');
 
@@ -586,7 +614,7 @@ static char *extractFirstLine (const char *text, char* strFirstLine) {
 }
 
 /*! display text with monospace police and filtering function using regular expression 
-   first line is docorated */
+   first line is decorated */
 static void displayText (guint width, guint height, const char *text, const char *title) {
    char strFirstLine [MAX_SIZE_LINE];
    char *ptSecondLine; 
@@ -639,8 +667,8 @@ static void displayText (guint width, guint height, const char *text, const char
    gtk_box_append (GTK_BOX (vBox), hBox);
    gtk_box_append (GTK_BOX (vBox), firstLine);
    gtk_box_append (GTK_BOX (vBox), scrolled_window);
-   
-   g_signal_connect (filterEntry, "changed", G_CALLBACK(onFilterEntryChanged), buffer);
+   onFilterEntryChanged (NULL, buffer);   
+   g_signal_connect (filterEntry, "changed", G_CALLBACK (onFilterEntryChanged), buffer);
 
    gtk_window_present (GTK_WINDOW (textWindow));
 }
@@ -650,13 +678,12 @@ static void displayFile (const char *fileName, const char *title) {
    GError *error = NULL;
    char *content = NULL;
    gsize length;
-   // g_file_get_contents to read file
    if (g_file_get_contents (fileName, &content, &length, &error)) {
       displayText (1400, 400, content, title);
       g_free (content);
    }
    else {
-      fprintf (stderr, "Error in displayFile reading %s\n", fileName); 
+      fprintf (stderr, "Error in displayFile reading: %s, %s\n", fileName, error->message); 
       g_clear_error(&error);
    }
 }
@@ -986,7 +1013,8 @@ static void calculateOrthoRoute () {
    
    for (int i = 0; i <  wayPoints.n; i++) {
       wayPoints.t [i+1].lCap = directCap (wayPoints.t [i].lat, wayPoints.t [i].lon, wayPoints.t [i+1].lat, wayPoints.t [i+1].lon); 
-      wayPoints.t [i+1].oCap = wayPoints.t [i+1].lCap + givry (wayPoints.t [i].lat,  wayPoints.t [i].lon, wayPoints.t [i+1].lat, wayPoints.t [i+1].lon);
+      wayPoints.t [i+1].oCap = wayPoints.t [i+1].lCap +\
+          givry (wayPoints.t [i].lat,  wayPoints.t [i].lon, wayPoints.t [i+1].lat, wayPoints.t [i+1].lon);
       wayPoints.t [i+1].ld = loxoDist (wayPoints.t [i].lat, wayPoints.t [i].lon, wayPoints.t [i+1].lat, wayPoints.t [i+1].lon);
       wayPoints.t [i+1].od = orthoDist (wayPoints.t [i].lat, wayPoints.t [i].lon, wayPoints.t [i+1].lat, wayPoints.t [i+1].lon);
       wayPoints.totLoxoDist += wayPoints.t [i+1].ld; 
@@ -3165,14 +3193,14 @@ static void traceDump () {
    displayFile (buildRootName (par.traceFileName, str), title);
 }
 
-/* call back for openSecnario */
+/* call back for openScenario */
 void cbOpenTrace (GObject* source_object, GAsyncResult* res, gpointer data) {
    GFile* file = gtk_file_dialog_open_finish ((GtkFileDialog *) source_object, res, NULL);
    if (file != NULL) {
-      char *fileName = g_file_get_path(file);
+      char *fileName = g_file_get_path (file);
       if (fileName != NULL) {
          strncpy (par.traceFileName, fileName, MAX_SIZE_FILE_NAME - 1); 
-         g_free(fileName);
+         g_free (fileName);
          traceReport ();
          gtk_widget_queue_draw (drawing_area);
       }
@@ -4505,7 +4533,7 @@ static void initScenario () {
    if (par.poiFileName [0] != '\0')
       nPoi += readPoi (par.poiFileName);
    if (par.portFileName [0] != '\0')
-   nPoi += readPoi (par.portFileName);
+      nPoi += readPoi (par.portFileName);
    
    if ((poiIndex = findPoiByName (par.pOrName, &par.pOr.lat, &par.pOr.lon)) != -1)
       strncpy (par.pOrName, tPoi [poiIndex].name, sizeof (par.pOrName) - 1);
@@ -4572,7 +4600,7 @@ static void openScenario () {
 }
 
 /*! provides meta information about grib file, called by gribInfo */
-static void gribInfoDisplay (const char *fileName, Zone *zone) {
+static void gribInfoDisplay (const char *fileName, Zone *zone, int type) {
    const size_t MAX_VISIBLE_SHORTNAME = 10;
    char buffer [MAX_SIZE_BUFFER];
    char line [MAX_SIZE_LINE] = "";
@@ -4617,9 +4645,6 @@ static void gribInfoDisplay (const char *fileName, Zone *zone) {
    snprintf (line, sizeof (line), "%ld", zone->stepUnits);
    lineReport (grid, l+=2, "document-page-setup", "Step Unit", line);
 
-   snprintf (line, sizeof (line), "%ld", zone->numberOfValues);
-   lineReport (grid, l+=2, "document-page-setup-symbolic", "Nb. of Values", line);
-
    snprintf (line, sizeof (line), "From: %s, %s To: %s %s", 
       latToStr (zone->latMax, par.dispDms, strLat0), lonToStr (zone->lonLeft, par.dispDms, strLon0),
       latToStr (zone->latMin, par.dispDms, strLat1), lonToStr (zone->lonRight, par.dispDms, strLon1));
@@ -4628,8 +4653,8 @@ static void gribInfoDisplay (const char *fileName, Zone *zone) {
    snprintf (line, sizeof (line), "%.3f° - %.3f°\n", zone->latStep, zone->lonStep);
    lineReport (grid, l+=2, "dialog-information-symbolic", "Lat Step - Lon Step", line);
 
-   snprintf (line, sizeof (line), "%ld - %ld\n", zone->nbLat, zone->nbLon);
-   lineReport (grid, l+=2 , "preferences-desktop-locale-symbolic", "Nb. Lat - Nb. Lon", line);
+   snprintf (line, sizeof (line), "%ld x %ld = %ld\n", zone->nbLat, zone->nbLon, zone->numberOfValues);
+   lineReport (grid, l+=2 , "preferences-desktop-locale-symbolic", "Nb. Lat x Nb. Lon = Nb Values", line);
 
    if (zone->nTimeStamp == 0) {
       isTimeStepOK = false;
@@ -4689,9 +4714,9 @@ static void gribInfoDisplay (const char *fileName, Zone *zone) {
     
    lineReport (grid, l+=2, "document-properties-symbolic", "Grib File size", str1);
 
-   if ((zone->nDataDate > 1) || (zone->nDataTime > 1)) {
-      snprintf (line, sizeof (line), "Date: %zu, Time: %zu\n", zone->nDataDate, zone->nDataTime);
-      lineReport (grid, l+=2, "software-update-urgent-symbolic", "Warning number of", line);
+   buffer [0] = '\0';
+   if (! checkGribInfoToStr (type, zone, buffer, MAX_SIZE_BUFFER)) {
+      lineReport (grid, l+=2, "software-update-urgent-symbolic", "Warning: \n", buffer);
    }
 
    gtk_window_present (GTK_WINDOW (gribWindow));
@@ -4704,14 +4729,14 @@ static void gribInfo (GSimpleAction *action, GVariant *parameter, gpointer *data
       if (zone.nbLat == 0)
          infoMessage ("No wind data grib available", GTK_MESSAGE_ERROR);
       else 
-         gribInfoDisplay (par.gribFileName, &zone);
+         gribInfoDisplay (par.gribFileName, &zone, WIND);
       
    }
    else { // current
       if (currentZone.nbLat == 0)
          infoMessage ("No current data grib available", GTK_MESSAGE_ERROR);
       else 
-         gribInfoDisplay (par.currentGribFileName, &currentZone);
+         gribInfoDisplay (par.currentGribFileName, &currentZone, CURRENT);
    }
 }
 
@@ -4881,7 +4906,8 @@ static void mailRequestBox (double lat1, double lon1, double lat2, double lon2) 
    mailRequestPar.lat2 = lat2;
    mailRequestPar.lon2 = lon2;
 
-   snprintf (str, sizeof (str), "%s, %s to  %s, %s", latToStr (lat1, par.dispDms, strLat1), \
+   snprintf (str, sizeof (str), "%s, %s to  %s, %s", \
+         latToStr (lat1, par.dispDms, strLat1), \
          lonToStr (lon1, par.dispDms, strLon1),\
          latToStr (lat2, par.dispDms, strLat2),\
          lonToStr (lon2, par.dispDms, strLon2));
@@ -4985,23 +5011,35 @@ static void mailRequestBox (double lat1, double lon1, double lat2, double lon2) 
    gtk_window_present (GTK_WINDOW (mailWindow));
 }
 
-/*! For testing */
-static void testFunction () {
-   printf ("test\n");
+/*! check Wind Grib, current Grib and consistency */
+static void checkGribsAreConsistent () {
    char *buffer = NULL;
    if ((buffer = (char *) malloc (MAX_SIZE_BUFFER)) != NULL) {
       checkGribToStr (buffer, MAX_SIZE_BUFFER);
-      displayText (750, 400, buffer, "Grib Wind Check");
-      free (buffer);
+      if (buffer [0] != '\0') {
+         displayText (750, 400, buffer, "Grib Wind and Current Consistency");
+         free (buffer);
+      }
+      else {
+         free (buffer);
+         infoMessage ("All is correct", GTK_MESSAGE_INFO);
+      }
    }
    else {
-      fprintf (stderr, "Error in testFunction: Malloc %d\n", MAX_SIZE_BUFFER); 
+      fprintf (stderr, "Error in checkGribsAreConsistent: Malloc %d\n", MAX_SIZE_BUFFER); 
       infoMessage ("Memory allocation issue", GTK_MESSAGE_ERROR);
    }
    // printGrib (&zone, tGribData [WIND]);
 }
 
-/*! Display label in col c and ligne l of tab */
+/*! For testing */
+static void testFunction () {
+   testAisTable ();
+   gtk_widget_queue_draw (drawing_area);
+   printf ("test\n");
+}
+
+/*! Display label in col c and line l of tab */
 static void labelCreate (GtkWidget *tab, const char *name, int c, int l) {
    GtkWidget *label = gtk_label_new (name);
    gtk_grid_attach(GTK_GRID(tab), label, c, l, 1, 1);
@@ -5889,6 +5927,10 @@ static gboolean onKeyEvent (GtkEventController *controller, guint keyval, \
    case GDK_KEY_Right:
 	   dispTranslate (0, 1.0);
       break;
+   case GDK_KEY_F2:
+      printf ("Techo Disp\n");
+      par.techno = !par.techno;
+      break;
    default:
       break;
    }
@@ -5906,7 +5948,7 @@ static void onMeteogramEvent (GtkDrawingArea *area, cairo_t *cr, int width, \
    char str [MAX_SIZE_LINE];
    int x, y;
    double u, v, g = 0, w, twd, tws, head_x, maxTws = 0, maxG = 0, maxMax = 0, maxWave = 0;
-   double uCurr, vCurr, currTwd, currTws, maxCurrTws = 0;// current
+   double uCurr, vCurr, currTwd, currTws, maxCurrTws = 0; // current
    long tMax = zone.timeStamp [zone.nTimeStamp -1];
    double tDeltaCurrent = zoneTimeDiff (&currentZone, &zone);
    double tDeltaNow = 0; // time between beginning of grib and now in hours
@@ -6135,6 +6177,15 @@ static void subMenu (GMenu *vMenu, const char *str, const char *app, const char 
    g_object_unref (menu_item);
 }
 
+/*! make separator in menu */
+static void separatorMenu (GMenu *vMenu, int n, const char *app) {
+   gchar *strSep = g_strnfill (n, '-');
+   GMenuItem *menu_item = g_menu_item_new (strSep, app);
+   g_menu_append_item (vMenu, menu_item);
+   g_object_unref (menu_item);
+   g_free (strSep); 
+}
+
 /*! Grib URL selection for Meteo Consult */
 static void gribUrl (GSimpleAction *action, GVariant *parameter, gpointer *data) {
    typeFlow = GPOINTER_TO_INT (data);
@@ -6216,7 +6267,7 @@ static void appActivate (GApplication *application) {
 
    createButton (toolBox, "system-run", onRunButtonClicked);
    createButton (toolBox, "starred", onChooseDepartureButtonClicked);
-   createButton (toolBox, "application-x-executable", change);
+   createButton (toolBox, "preferences-system", change);
    createButton (toolBox, "media-playback-pause", onStopButtonClicked);
    createButton (toolBox, "media-playback-start", onPlayButtonClicked);
    createButton (toolBox, "media-playlist-repeat", onLoopButtonClicked);
@@ -6332,6 +6383,7 @@ static void appStartup (GApplication *application) {
    createActionWithParam ("currentGribOpen", openGrib, CURRENT);
    createActionWithParam ("currentGribInfo", gribInfo, CURRENT);
    createActionWithParam ("currentURLselect", gribUrl, CURRENT);
+   createAction ("checkGribsAreConsistent", checkGribsAreConsistent);
    createAction ("quit", quitActivated);
 
    createAction ("scenarioOpen", openScenario);
@@ -6400,9 +6452,12 @@ static void appStartup (GApplication *application) {
    subMenu (file_menu_v, "Wind: Grib Info", "app.gribInfo", "applications-engineering-symbolic");
    subMenu (file_menu_v, "Wind: Meteoconsult", "app.windURLselect", "applications-engineering-symbolic");
    subMenu (file_menu_v, "Wind: NOAA", "app.windNOAAselect", "applications-engineering-symbolic");
+   separatorMenu (file_menu_v, 40, "app.separator");
    subMenu (file_menu_v, "Current: Open Grib", "app.currentGribOpen", "folder");
    subMenu (file_menu_v, "Current: Grib Info", "app.currentGribInfo", "applications-engineering-symbolic");
    subMenu (file_menu_v, "Current: Meteoconsult", "app.currentURLselect", "applications-engineering-symbolic");
+   separatorMenu (file_menu_v, 40, "app.separator");
+   subMenu (file_menu_v, "Wind and Current check", "app.checkGribsAreConsistent", "folder");
    subMenu (file_menu_v, "Quit", "app.quit", "application-exit-symbolic");
 
    // Add elements for "Polar" menu
@@ -6581,7 +6636,6 @@ int main (int argc, char *argv[]) {
 
    if (par.isSeaFileName [0] != '\0')
       readIsSea (par.isSeaFileName);
-   printf ("readIsSea done : %s\n", par.isSeaFileName);
    updateIsSeaWithForbiddenAreas ();
    printf ("update isSea   : with Forbid Areas done\n");
    
