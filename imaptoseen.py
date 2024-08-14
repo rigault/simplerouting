@@ -18,9 +18,9 @@ status, messages = mail.search (None, 'UNSEEN')
 if status == 'OK':
     # Marquer tous les messages comme lus (SEEN)
     for num in messages[0].split():
-        mail.store(num, '+FLAGS', '(\Seen)')
+        mail.store(num, '+FLAGS', r'(\Seen)')
     
-    print("In imaptoseen.py: Tous les messages ont été marqués comme lus.")
+    # print("In imaptoseen.py: Tous les messages sont avec marque lus.")
 
 # Fermer la connexion
 mail.logout()

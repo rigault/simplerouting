@@ -62,7 +62,7 @@ for msg_id in message_ids:
          print ("File:", os.path.abspath(filepath), " ") # space is required
          with open(filepath, 'wb') as f:
             f.write(part.get_payload(decode=True))
-   mail.store(msg_id, '+FLAGS', '(\Deleted)')
+   mail.store(msg_id, '+FLAGS', r'(\Deleted)')
 
 mail.expunge()
 mail.logout()
