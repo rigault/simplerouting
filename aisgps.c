@@ -170,6 +170,12 @@ bool aisTableInit (void) {
       fprintf (stderr, "Error: Init Hash table for AIS \n");
       return false;
    }
+   else
+      return true;
+}
+
+/*! just for testing */
+bool testAisTable () {
    AisRecord *ship = calloc (1, sizeof(AisRecord));
    if (!ship) {
       fprintf (stderr, "Erreur d'allocation mémoire pour ship1\n");

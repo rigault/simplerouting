@@ -108,6 +108,7 @@ typedef struct {
    GtkSpinButton *timeStepSpin;
    GtkSpinButton *timeMaxSpin;
    GtkTextBuffer *urlBuffer;
+   int typeWeb;
    int topLat;
    int bottomLat;
    int leftLon;
@@ -117,7 +118,7 @@ typedef struct {
    char url [MAX_SIZE_URL];
 } DialogData;
 
-DialogData noaaData;
+DialogData webGribData, ecmwfData;
 
 cairo_surface_t *surface [MAX_N_SURFACE];
 cairo_t *surface_cr [MAX_N_SURFACE];
@@ -404,7 +405,7 @@ static void entryBox (const char *title, const char *message, char *strValue, vo
 
 /* Dialog box for file selection */
 static GtkFileDialog* selectFile (const char *title, const char *dirName, const char *nameFilter, const char *strFilter0, const char *strFilter1, const char *initialFile) {
-   char directory[MAX_SIZE_DIR_NAME];
+   char directory [MAX_SIZE_DIR_NAME];
 
    GtkFileDialog* fileDialog = gtk_file_dialog_new ();
    gtk_file_dialog_set_title (fileDialog, title);
@@ -4266,8 +4267,8 @@ static void urlDownloadGrib (gpointer user_data) {
    entryBox ("MeteoConsult", "URL: ", urlRequest.url, urlResponse);
 }
 
-/*! update NOAA URL */
-static void updateNoaaUrl(GtkSpinButton *spin_button, gpointer user_data) {
+/*! update NOAA or ECMWF URL */
+static void updateWebGribUrl(GtkSpinButton *spin_button, gpointer user_data) {
    DialogData *data = (DialogData *)user_data;
    data->bottomLat = gtk_spin_button_get_value_as_int(data->bottomLatSpin);
    data->leftLon = gtk_spin_button_get_value_as_int(data->leftLonSpin);
@@ -4276,24 +4277,28 @@ static void updateNoaaUrl(GtkSpinButton *spin_button, gpointer user_data) {
    data->timeStep = gtk_spin_button_get_value_as_int(data->timeStepSpin);
    data->timeMax = gtk_spin_button_get_value_as_int(data->timeMaxSpin);
 
-   buildNoaaUrl (data->url, data->topLat, data->leftLon, data->bottomLat, data->rightLon, 0);
+   buildWebGribUrl (data->url, data->typeWeb, data->topLat, data->leftLon, data->bottomLat, data->rightLon, 0);
    
    gtk_text_buffer_set_text (data->urlBuffer, data->url, -1);
 }
       
-/*! Download all NOOA files,concat them in a bigFile and load it */
-static void *getGribNoaaAll (void *user_data) {
+/*! Download all NOOA or ECMWF files, concat them in a bigFile and load it */
+static void *getGribWebAll (void *user_data) {
+   const char *providerID [2] = {"NOAA", "ECMWF"};
+   char directory [MAX_SIZE_DIR_NAME];
    DialogData *data = (DialogData *)user_data;
    time_t now = time (NULL);
    struct tm *pTime = gmtime (&now);
    char fileName [MAX_SIZE_URL], bigFile [MAX_SIZE_LINE], prefix [MAX_SIZE_LINE];
    char strDate [MAX_SIZE_DATE];
+
    strftime (strDate, MAX_SIZE_DATE, "%Y-%m-%d", pTime); 
-   snprintf (prefix, sizeof (prefix), "%sgrib/interNoaa-", par.workingDir);
+   snprintf (directory, sizeof (directory), "%sgrib/", par.workingDir);
+   snprintf (prefix, sizeof (prefix), "%sgrib/inter-", par.workingDir);
    printf ("Step: %d\n", data->timeStep);
 
    for (int i = 0; i <= (data->timeMax) * 24; i += (data->timeStep)) {
-      buildNoaaUrl (data->url, data->topLat, data->leftLon, data->bottomLat, data->rightLon, i);
+      buildWebGribUrl (data->url, data->typeWeb, data->topLat, data->leftLon, data->bottomLat, data->rightLon, i);
       printf ("URL is: %s\n", data->url);
       snprintf (fileName, sizeof (fileName), "%s%03d", prefix, i);
       printf ("outputFileName: %s\n\n", fileName);
@@ -4301,9 +4306,11 @@ static void *getGribNoaaAll (void *user_data) {
          readGribRet = 0;
          return NULL;
       }
+      compact ((data->typeWeb == ECMWF_WIND), directory, fileName,\
+         "10u/10v", data->leftLon, data->rightLon, data->bottomLat, data->topLat, fileName);
    }
    snprintf (bigFile, sizeof (bigFile), \
-      "%sgrib/NOAA-%s-%02d-%03d.grb", par.workingDir, strDate, data->timeStep, data->timeMax * 24);
+      "%sgrib/%s-%s-%02d-%03d.grb", par.workingDir, providerID [data->typeWeb],strDate, data->timeStep, data->timeMax * 24);
    if (concat (prefix, data->timeStep, data->timeMax * 24, bigFile)) {
       printf ("bigFile: %s\n", bigFile);
       strncpy (par.gribFileName, bigFile, MAX_SIZE_FILE_NAME - 1);
@@ -4317,33 +4324,35 @@ static void *getGribNoaaAll (void *user_data) {
 }
 
 /*! Manage response to NOAA dialog box */
-static void onOkButtonNoaaClicked (GtkWidget *widget, gpointer theWindow) {
+static void onOkButtonWebGribClicked (GtkWidget *widget, gpointer theWindow) {
    readGribRet = -1; // Global variable
-   g_thread_new ("readGribThread", getGribNoaaAll, &noaaData);
-   spinner ("Grib NOAA Download and decoding", " ");
+   g_thread_new ("readGribThread", getGribWebAll, &webGribData);
+   spinner ("Grib Download and decoding", " ");
    gribReadTimeout = g_timeout_add (READ_GRIB_TIME_OUT, readGribCheck, NULL);
    gtk_window_destroy (GTK_WINDOW (theWindow));
 }
 
-/*! Dialog box to Manage NOAA URL and lauch downloadinf*/
-static void gribNoaa (GSimpleAction *action, GVariant *parameter, gpointer *userData) {
+/*! Dialog box to Manage NOAA URL and launch downloading */
+static void gribWeb (GSimpleAction *action, GVariant *parameter, gpointer *userData) {
+   DialogData *data = &webGribData;
+   data->typeWeb = GPOINTER_TO_INT (userData);
    GtkWidget *label;
-   DialogData *data = &noaaData;
    const int TIME_STEP = 3, TIME_MAX = 2;
 
    data->bottomLat = zone.latMin, data->topLat = zone.latMax, data->leftLon = zone.lonLeft, data->rightLon = zone.lonRight;
    data->timeStep = TIME_STEP, data->timeMax = TIME_MAX;
 
-   GtkWidget *noaaWindow = gtk_application_window_new (app);
-   gtk_window_set_title (GTK_WINDOW (noaaWindow), "NOAA");
-   g_signal_connect (window, "destroy", G_CALLBACK(onParentDestroy), noaaWindow);
+   GtkWidget *gribWebWindow = gtk_application_window_new (app);
+   gtk_window_set_title (GTK_WINDOW (gribWebWindow), (data->typeWeb == NOAA_WIND) ? "NOAA" : "ECMWF");
+   gtk_widget_set_size_request (gribWebWindow, 800, -1);
+   g_signal_connect (window, "destroy", G_CALLBACK(onParentDestroy), gribWebWindow);
 
    GtkWidget *vBox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 5);
-   gtk_window_set_child (GTK_WINDOW (noaaWindow), (GtkWidget *) vBox);
+   gtk_window_set_child (GTK_WINDOW (gribWebWindow), (GtkWidget *) vBox);
 
    GtkWidget *grid = gtk_grid_new();
 
-   buildNoaaUrl (data->url, data->topLat, data->leftLon, data->bottomLat, data->rightLon, 0);
+   buildWebGribUrl (data->url, data->typeWeb, data->topLat, data->leftLon, data->bottomLat, data->rightLon, 0);
 
    gtk_grid_set_column_spacing(GTK_GRID(grid), 10);
    gtk_grid_set_row_spacing(GTK_GRID(grid), 5);
@@ -4387,42 +4396,38 @@ static void gribNoaa (GSimpleAction *action, GVariant *parameter, gpointer *user
    gtk_grid_attach(GTK_GRID(grid), label, 0, 2, 1, 1);
    gtk_grid_attach(GTK_GRID(grid), GTK_WIDGET(data->timeStepSpin), 1, 2, 1, 1);
 
-   label = gtk_label_new("Forecat Time in Days");
+   label = gtk_label_new("Forecast Time in Days");
    gtk_label_set_xalign(GTK_LABEL(label), 0.0);
    data->timeMaxSpin = GTK_SPIN_BUTTON(gtk_spin_button_new_with_range(0, MAX_N_DAYS_WEATHER, 1));
    gtk_spin_button_set_value(GTK_SPIN_BUTTON(data->timeMaxSpin), TIME_MAX);
    gtk_grid_attach(GTK_GRID(grid), label, 2, 2, 1, 1);
-   gtk_grid_attach(GTK_GRID(grid), GTK_WIDGET(data->timeMaxSpin), 3, 2, 1, 1);
+   gtk_grid_attach(GTK_GRID(grid), GTK_WIDGET (data->timeMaxSpin), 3, 2, 1, 1);
 
    // Multi-line zone to display URL
-   label = gtk_label_new("NOAA URL");
-   gtk_label_set_xalign(GTK_LABEL(label), 0.0);
-   gtk_grid_attach(GTK_GRID(grid), label, 0, 3, 1, 1);
-
    GtkWidget *text_view = gtk_text_view_new();
    gtk_text_view_set_editable(GTK_TEXT_VIEW(text_view), FALSE);
    gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(text_view), GTK_WRAP_WORD_CHAR);
    data->urlBuffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(text_view));
    gtk_text_buffer_set_text(data->urlBuffer, data->url, -1);
-   gtk_grid_attach(GTK_GRID(grid), text_view, 1, 3, 3, 2);
 
    // spin button connection
-   g_signal_connect(data->bottomLatSpin, "value-changed", G_CALLBACK (updateNoaaUrl), data);
-   g_signal_connect(data->leftLonSpin, "value-changed", G_CALLBACK (updateNoaaUrl), data);
-   g_signal_connect(data->topLatSpin, "value-changed", G_CALLBACK (updateNoaaUrl), data);
-   g_signal_connect(data->rightLonSpin, "value-changed", G_CALLBACK (updateNoaaUrl), data);
-   g_signal_connect(data->timeStepSpin, "value-changed", G_CALLBACK (updateNoaaUrl), data);
-   g_signal_connect(data->timeMaxSpin, "value-changed", G_CALLBACK (updateNoaaUrl), data);
+   g_signal_connect(data->bottomLatSpin, "value-changed", G_CALLBACK (updateWebGribUrl), data);
+   g_signal_connect(data->leftLonSpin, "value-changed", G_CALLBACK (updateWebGribUrl), data);
+   g_signal_connect(data->topLatSpin, "value-changed", G_CALLBACK (updateWebGribUrl), data);
+   g_signal_connect(data->rightLonSpin, "value-changed", G_CALLBACK (updateWebGribUrl), data);
+   g_signal_connect(data->timeStepSpin, "value-changed", G_CALLBACK (updateWebGribUrl), data);
+   g_signal_connect(data->timeMaxSpin, "value-changed", G_CALLBACK (updateWebGribUrl), data);
 
-   GtkWidget *hBox = OKCancelLine (onOkButtonNoaaClicked, noaaWindow);
+   GtkWidget *hBox = OKCancelLine (onOkButtonWebGribClicked, gribWebWindow);
 
    gtk_box_append (GTK_BOX (vBox), grid);
+   gtk_box_append (GTK_BOX (vBox), text_view);
    gtk_box_append (GTK_BOX (vBox), hBox);
 
-   gtk_window_present (GTK_WINDOW (noaaWindow));
+   gtk_window_present (GTK_WINDOW (gribWebWindow));
 }
 
-/*! callback for openPolar */
+/*! callback for opGribb */
 void cbOpenGrib (GObject* source_object, GAsyncResult* res, gpointer data) {
    GFile* file = gtk_file_dialog_open_finish ((GtkFileDialog *) source_object, res, NULL);
    if (file != NULL) {
@@ -4789,11 +4794,7 @@ static gboolean mailGribRead (gpointer data) {
 static int maxTimeRange () {
    switch (provider) {
    case SAILDOCS_GFS: case MAILASAIL:
-      if (par.gribResolution <= 0.25)
-         return 120;
-      else if (par.gribResolution < 1.0)
-         return (par.gribTimeStep < 6) ? 192 : 240;
-      else return (par.gribTimeStep < 6) ? 192 : (par.gribTimeStep < 12) ? 240 : 384;
+      return (par.gribTimeStep < 6) ? 192 : (par.gribTimeStep < 12) ? 240: 384;
    case SAILDOCS_ECMWF:
       return (par.gribTimeStep < 6) ? 144 : 240;
    case SAILDOCS_ICON:
@@ -4829,9 +4830,12 @@ static void updateMailRequestBox () {
    }
 }
 
-/*! Callback Time Step value */
-static void timeStepChanged (GtkSpinButton *spin_button, gpointer user_data) {
-   par.gribTimeStep = gtk_spin_button_get_value_as_int(spin_button);
+/*! CallBack for timeStep change  */
+static void cbDropDownTimeStep (GObject *dropDown, GParamSpec *pspec, gpointer user_data) {
+   const int intArrayTimeSteps [] = {3, 6, 12, 24};
+   int index = gtk_drop_down_get_selected (GTK_DROP_DOWN (dropDown));
+   printf ("index = %d\n", index);
+   par.gribTimeStep = intArrayTimeSteps [MIN (index, 3)];
    par.gribTimeMax = maxTimeRange ();
    updateMailRequestBox ();
 }
@@ -4846,7 +4850,6 @@ static void timeMaxChanged (GtkSpinButton *spin_button, gpointer user_data) {
 /*! Callback resolution */
 static void resolutionChanged (GtkSpinButton *spin_button, gpointer user_data) {
    par.gribResolution = gtk_spin_button_get_value (spin_button);
-   par.gribTimeMax = maxTimeRange ();
    updateMailRequestBox ();
 }
 
@@ -4950,35 +4953,51 @@ static void mailRequestBox (double lat1, double lon1, double lat2, double lon2) 
    gtk_grid_attach(GTK_GRID(grid), label_model,   0, 1, 1, 1);
    gtk_grid_attach(GTK_GRID(grid), dropDown,      1, 1, 3, 1);
 
-   // Create Time Step and Time Max
+   // Create Resolution
    GtkWidget *label_resolution = gtk_label_new("Resolution");
-   // gtk_adjustment_new(gdouble value, gdouble lower, gdouble upper, gdouble step_increment, gdouble page_increment, gdouble page_size);
-   GtkAdjustment *adjustment = gtk_adjustment_new (0.5, 0.25, 1.0, 0.25, 1.0, 0.0);
-
-   // Crete GtkSpinButton with GtkAdjustment
-   GtkWidget *spin_button_resolution = gtk_spin_button_new(adjustment, 0.25, 2); // 0.25 resolution
-   gtk_spin_button_set_value(GTK_SPIN_BUTTON (spin_button_resolution), par.gribResolution);
+   GtkWidget *spin_button_resolution = gtk_spin_button_new_with_range (0.25, 0.5, 0.25);
+   gtk_spin_button_set_digits (GTK_SPIN_BUTTON(spin_button_resolution), 2); // 2 digits after . e.g.: 0.25
+   gtk_spin_button_set_value (GTK_SPIN_BUTTON (spin_button_resolution), par.gribResolution);
    g_signal_connect (spin_button_resolution, "value-changed", G_CALLBACK (resolutionChanged), NULL);
    gtk_label_set_xalign(GTK_LABEL (label_resolution), 0);
    gtk_grid_attach(GTK_GRID (grid), label_resolution,           0, 2, 1, 1);
    gtk_grid_attach(GTK_GRID (grid), spin_button_resolution,     1, 2, 1, 1);
-   
-   GtkWidget *label_time_step = gtk_label_new("Time Step");
-   GtkWidget *spin_button_time_step = gtk_spin_button_new_with_range(3, 24, 3);
+
+   // Create Time Step
+   /*GtkWidget *label_time_step = gtk_label_new("Time Step");
+   GtkWidget *spin_button_time_step = gtk_spin_button_new_with_range (3, 12, 3);
    gtk_spin_button_set_value(GTK_SPIN_BUTTON (spin_button_time_step), par.gribTimeStep);
    g_signal_connect (spin_button_time_step, "value-changed", G_CALLBACK (timeStepChanged), NULL);
    gtk_label_set_xalign(GTK_LABEL (label_time_step), 0);
    gtk_grid_attach(GTK_GRID (grid), label_time_step,            0, 3, 1, 1);
    gtk_grid_attach(GTK_GRID (grid), spin_button_time_step,      1, 3, 1, 1);
+   */
+   // Create combo box Time Step
+   GtkWidget *label_time_step = gtk_label_new("Time Step");
+   const char *arrayTimeSteps [] = {"3", "6", "12", "24", NULL};
+   GtkWidget *dropDownTimeSteps = gtk_drop_down_new_from_strings (arrayTimeSteps);
 
-   strcpy (str, "Forecast time in days");
-   GtkWidget *label_time_max = gtk_label_new (str);
+   int index;
+   char strGribTimeStep [3];
+   snprintf (strGribTimeStep, 3, "%d", par.gribTimeStep);
+   for (index = 0; arrayTimeSteps [index] != NULL; index++) { // find index of par.gribTimeStep
+      if (strcmp (strGribTimeStep, arrayTimeSteps [index]) == 0) break;
+   }
+
+   gtk_drop_down_set_selected ((GtkDropDown *) dropDownTimeSteps, MIN (index, 3));
+   gtk_label_set_xalign(GTK_LABEL (label_time_step), 0);
+   gtk_grid_attach(GTK_GRID (grid), label_time_step,        0, 3, 1, 1);
+   gtk_grid_attach(GTK_GRID (grid), dropDownTimeSteps,      1, 3, 1, 1);
+   g_signal_connect (dropDownTimeSteps, "notify::selected", G_CALLBACK (cbDropDownTimeStep), NULL);
+
+   // Create Time Max
+   GtkWidget *label_time_max = gtk_label_new ("Forecast time in days");
    spinButtonTimeMax = gtk_spin_button_new_with_range (1, MAX_N_DAYS_WEATHER, 1); // Global variable !
    gtk_spin_button_set_value(GTK_SPIN_BUTTON (spinButtonTimeMax), par.gribTimeMax / 24);
    g_signal_connect (spinButtonTimeMax, "value-changed", G_CALLBACK (timeMaxChanged), NULL);
    gtk_label_set_xalign(GTK_LABEL (label_time_max), 0);
    gtk_grid_attach(GTK_GRID (grid), label_time_max,             0, 4, 1, 1);
-   gtk_grid_attach(GTK_GRID (grid), spinButtonTimeMax,       1, 4, 1, 1);
+   gtk_grid_attach(GTK_GRID (grid), spinButtonTimeMax,          1, 4, 1, 1);
 
    GtkWidget *label_size_eval = gtk_label_new ("Number of values ");
    gtk_label_set_xalign(GTK_LABEL (label_size_eval), 0);
@@ -5036,6 +5055,12 @@ static void checkGribsAreConsistent () {
 static void testFunction () {
    testAisTable ();
    gtk_widget_queue_draw (drawing_area);
+   zone.latMin = MAX (zone.latMin, 10);
+   zone.latMax = MIN (zone.latMax, 70);
+   zone.lonRight = MAX (zone.lonRight, -1);
+   zone.lonLeft = MIN (zone.lonLeft, -50);
+   zone.nbLat = 1 + (zone.latMax - zone.latMin) / zone.latStep;
+   zone.nbLon = 1 + (zone.lonRight - zone.lonLeft) / zone.lonStep;
    printf ("test\n");
 }
 
@@ -5190,7 +5215,7 @@ static void windTwsUpdate (GtkWidget *widget, gpointer data) {
 static void change () {
    // Create dialog box
    GtkWidget *changeWindow = gtk_application_window_new (app);
-   gtk_window_set_title (GTK_WINDOW(changeWindow), "change");
+   gtk_window_set_title (GTK_WINDOW(changeWindow), "Settings");
    g_signal_connect (window, "destroy", G_CALLBACK(onParentDestroy), changeWindow);
 
    // Create notebook
@@ -6378,7 +6403,8 @@ static void appStartup (GApplication *application) {
 
    createActionWithParam ("gribOpen", openGrib, WIND);
    createActionWithParam ("gribInfo", gribInfo, WIND);
-   createActionWithParam ("windNOAAselect", gribNoaa, WIND);
+   createActionWithParam ("windNOAAselect", gribWeb, NOAA_WIND);
+   createActionWithParam ("windECMWFselect", gribWeb, ECMWF_WIND);
    createActionWithParam ("windURLselect", gribUrl, WIND);
    createActionWithParam ("currentGribOpen", openGrib, CURRENT);
    createActionWithParam ("currentGribInfo", gribInfo, CURRENT);
@@ -6452,6 +6478,7 @@ static void appStartup (GApplication *application) {
    subMenu (file_menu_v, "Wind: Grib Info", "app.gribInfo", "applications-engineering-symbolic");
    subMenu (file_menu_v, "Wind: Meteoconsult", "app.windURLselect", "applications-engineering-symbolic");
    subMenu (file_menu_v, "Wind: NOAA", "app.windNOAAselect", "applications-engineering-symbolic");
+   subMenu (file_menu_v, "Wind: ECMWF", "app.windECMWFselect", "applications-engineering-symbolic");
    separatorMenu (file_menu_v, 40, "app.separator");
    subMenu (file_menu_v, "Current: Open Grib", "app.currentGribOpen", "folder");
    subMenu (file_menu_v, "Current: Grib Info", "app.currentGribInfo", "applications-engineering-symbolic");

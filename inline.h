@@ -39,7 +39,6 @@ static inline double fTws (double u, double v) {
    note : tribord amure if twa < 0 */
 static inline double fTwa (double heading, double twd) {
    double val =  fmod ((twd - heading), 360.0);
-   //if (twa < 0) twa += 360; 
    return (val > 180) ? val - 360 : (val < -180) ? val + 360 : val;
 }
 
@@ -64,42 +63,35 @@ static inline double givry (double lat1, double lon1, double lat2, double lon2) 
    return (theta/2) * sin (latM * DEG_TO_RAD);
 }
 
-/*! direct loxodromic cap from origin to dest */
+/*! return loxodromic cap from origin to destination */
 static inline double directCap (double lat1, double lon1, double lat2, double lon2) {
    return RAD_TO_DEG * atan2 ((lon2 - lon1) * cos (DEG_TO_RAD * (lat1+lat2)/2), lat2 - lat1);
 }
 
-/*! direct loxodromic cap from origin to dest */
+/*! return initial orthodromic cap from origin to destination */
 static inline double orthoCap (double lat1, double lon1, double lat2, double lon2) {
    return directCap (lat1, lon1, lat2, lon2) + givry (lat1, lon1, lat2, lon2);
 }
 
-/*! direct loxodromic dist from origi to dest 
+/*! return loxodromic distance in nautical miles from origin to destination */
 static inline double loxoDist (double lat1, double lon1, double lat2, double lon2) {
-   double coeffLat = cos (DEG_TO_RAD * (lat1 + lat2)/2);
-   double dLat = lat2 - lat1;
-   double dLon = lon2 - lon1;
-   return 60 * sqrt (dLat * dLat + dLon *dLon) * coeffLat;
-}*/
-
-static inline double loxoDist (double lat0, double lon0, double lat1, double lon1) {
     // Convert degrees to radians
-    double lat0_rad = DEG_TO_RAD * lat0;
-    double lon0_rad = DEG_TO_RAD * lon0;
     double lat1_rad = DEG_TO_RAD * lat1;
     double lon1_rad = DEG_TO_RAD * lon1;
+    double lat2_rad = DEG_TO_RAD * lat2;
+    double lon2_rad = DEG_TO_RAD * lon2;
 
     // Difference in longitude
-    double delta_lon = lon1_rad - lon0_rad;
+    double delta_lon = lon2_rad - lon1_rad;
 
     // Calculate the change in latitude
-    double delta_lat = lat1_rad - lat0_rad;
+    double delta_lat = lat2_rad - lat1_rad;
 
     // Calculate the mean latitude
-    double mean_lat = (lat0_rad + lat1_rad) / 2.0;
+    double mean_lat = (lat1_rad + lat2_rad) / 2.0;
 
     // Calculate the rhumb line distance
-    double q = delta_lat / log(tan(G_PI / 4 + lat1_rad / 2) / tan(G_PI / 4 + lat0_rad / 2));
+    double q = delta_lat / log(tan(G_PI / 4 + lat2_rad / 2) / tan(G_PI / 4 + lat1_rad / 2));
     
     // Correct for delta_lat being very small
     if (isnan(q)) {
@@ -111,7 +103,7 @@ static inline double loxoDist (double lat0, double lon0, double lat1, double lon
 }
 
 
-/*! return orthodomic distance in nautical miles */
+/*! return orthodomic distance in nautical miles from origin to destination*/
 static inline double orthoDist (double lat1, double lon1, double lat2, double lon2) {
     double theta = lon1 - lon2;
     double distRad = acos(

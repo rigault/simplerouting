@@ -92,6 +92,15 @@ void optionManage (char option) {
          printf ("%s", str);
       fclose (f);
       break;
+   case 'i': // Interest points
+      nPoi = 0;
+      if (par.poiFileName [0] != '\0')
+         nPoi += readPoi (par.poiFileName);
+      if (par.portFileName [0] != '\0')
+         nPoi += readPoi (par.portFileName);
+   
+      poiPrint ();
+      break;
    case 'n': // network
       if (isServerAccessible ("http://www.google.com"))
          printf ("Network OK\n");

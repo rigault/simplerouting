@@ -43,7 +43,10 @@ extern const char *CURRENT_URL [];
 /*! functions defined in rutil.c */
 extern double offsetLocalUTC (void);
 extern void   *commandRun (void *data);
+extern bool   compact (bool full, const char *dir, const char *inFile,\
+   const char *shortNames, double lonLeft, double lonRight, double latMin, double latMax, char *outFile);
 extern bool   concat (const char *prefix, int step, int max, const char *fileRes);
+extern bool   isEmpty (const char *str);
 extern bool   mostRecentFile (const char *directory, const char *pattern, char *name);
 extern char   *formatThousandSep (char *buffer, int value);
 extern bool   initSHP (const char* nameFile);
@@ -82,12 +85,15 @@ extern bool   readIsSea (const char *fileName);
 extern int    readPoi (const char *fileName);
 extern bool   writePoi (const char *fileName);
 extern int    findPoiByName (const char *name, double *lat, double *lon);
+extern void   poiPrint ();
+extern char   *nearestPort (double lat, double lon, const char *fileName, char *str);
 extern char   *poiToStr (bool portCheck, char *str, size_t maxLength);
 extern bool   smtpGribRequestPython (int type, double lat1, double lon1, double lat2, double lon2, char *command, size_t maxLength);
+extern bool   checkGribInfoToStr (int type, Zone *zone, char *buffer, size_t maxLength);
 extern bool   checkGribToStr (char *buffer, size_t maxLength);
 extern char   *dollarSubstitute (const char* str, char *res, size_t len);
 extern char   *buildMeteoUrl (int type, int i, char *url);
-extern char   *buildNoaaUrl (char *url, int topLat, int leftLon, int bottomLat, int rightLon, int timeStep);
+extern char   *buildWebGribUrl (char *url, int typeWeb, int topLat, int leftLon, int bottomLat, int rightLon, int step);
 extern bool   curlGet (const char *url, char *outputFile); 
 extern void   updateIsSeaWithForbiddenAreas (void);
 extern bool   isServerAccessible (const char *url);

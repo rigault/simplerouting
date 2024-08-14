@@ -1,0 +1,62 @@
+#WD:              C:/mysys64/home/rener/routing/ 
+POI:		 geo/poi.csv
+PORT:            geo/port.csv
+POR:             35.86,-41.37
+PDEST:           52.23,-19.42
+TRACE:           trace/2024TransatAcoresLaTrinite.csv
+CGRIB:           grib/reference.grb2
+MOST_RECENT_GRIB:0
+GRIB_RESOLUTION: 0.2
+GRIB_TIME_STEP:  3
+GRIB_TIME_MAX:   144
+POLAR:           pol/DufourGVSpyAsym.pol
+WAVE_POL:        pol/polwave.csv
+ISSEA:           geo/issea.txt
+MID_COUNTRY:     geo/midcodes.txt
+HELP:            file:///C:/msys64/home/rener/routing/helpdir/index.html
+CLI_HELP:        helpdir/clihelp.txt
+SHP:             geo/land-polygons-complete-4326/land_polygons.shp
+START_TIME:      11.00
+T_STEP:          1
+RANGE_COG:       90
+COG_STEP:        5
+MAX_ISO:         385
+SPECIAL:         0
+PENALTY0:        5
+PENALTY1:        5
+MOTOR_S:         6.00
+THRESHOLD:       4.00
+DAY_EFFICIENCY:  0.85
+NIGHT_EFFICIENCY:0.75
+X_WIND:          1.10
+MAX_WIND:        45.00
+DUMPI:           isoc/routing.isoc
+DUMPR:           rte/routing.rte
+PAR_INFO:        helpdir/docpar.txt
+OPT:             1
+ISOC_DISP:       3
+COLOR_DISP:      2
+DMS_DISP:        2
+WIND_DISP:       1
+INFO_DISP:       0
+AVR_OR_GUST_DISP:1
+CURRENT_DISP:    1
+WAVE_DISP:       1
+GRID_DISP:       1
+SPEED_DISP:      1
+AIS_DISP:        1
+TECHNO_DISP:     1
+MAX_THETA:       90.00
+J_FACTOR:        300
+K_FACTOR:        1
+MIN_PT:          2
+N_SECTORS:       720
+SMTP_SCRIPT:     python3 py/smtp.py
+IMAP_TO_SEEN:    python3 py/imaptoseen.py
+IMAP_SCRIPT:     python3 py/imap.py
+WEBKIT:          start
+EDITOR:          notepad
+SPREADSHEET:     notepad
+NMEA:            COM3
+NMEA:            COM4
+MAIL_PW:         Mongouarou$001

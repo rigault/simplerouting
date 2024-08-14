@@ -56,6 +56,7 @@
 #define MAX_N_POI             4096              // max number of poi in poi file
 #define SMALL_SIZE            5                 // for short string
 #define MAX_SIZE_POI_NAME     64                // max size of city name
+#define MAX_SIZE_COUNTRY_CODE 3                 // max size of country code
 #define MAX_HISTORY_ROUTE     10                // max nimbedr of history route stored
 #define GPSD_TCP_PORT         "2947"            // TCP port for gps demon
 #define MAX_SIZE_FORBID_ZONE  100               // max size per forbidden zone
@@ -63,7 +64,7 @@
 #define N_PROVIDERS           8                 // for DictProvider dictTab size
 #define MAX_INDEX_ENTITY      512               // for shp. Index.
 
-enum {API_GPSD, NMEA_USB};                      // GPS way of finding information
+enum {NOAA_WIND, ECMWF_WIND};                   // NOAA or ECMWF for web download
 enum {GPS_INDEX, AIS_INDEX};                    // for NMEA USB serial port reading
 enum {WIND, CURRENT};                           // for grib information, either WIND or CURRENT
 enum {POLAR, WAVE_POLAR};                       // for polar information, either POLAR or WAVE
@@ -341,6 +342,7 @@ typedef struct {
    char parInfoFileName [MAX_SIZE_FILE_NAME];// parameter info
    char traceFileName [MAX_SIZE_FILE_NAME];  // trace is a list of point/time
    char midFileName [MAX_SIZE_FILE_NAME];    // list of mid country related to mmsi and AIS
+   char tidesFileName [MAX_SIZE_FILE_NAME];  // list of ports witht lat, lon fo tides
    int nShpFiles;                            // number of Shp files
    double startTimeInHours;                  // time of beginning of routing after time0Grib
    Pp pOr;                                   // point of origine
@@ -396,6 +398,7 @@ typedef struct {
    double lon;
    int    type;
    int    level;
+   char   cc [MAX_SIZE_COUNTRY_CODE];         // country code
    char   name [MAX_SIZE_POI_NAME];
 } Poi;
 
