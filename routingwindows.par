@@ -1,21 +1,19 @@
-WD:              /home/rr/routing/
-POI:             geo/poi.csv
+#WD:              C:/mysys64/home/rener/routing/ 
+POI:		         geo/poi.csv
 PORT:            geo/port.csv
 POR:             35.86,-41.37
 PDEST:           52.23,-19.42
-TRACE:           trace/2024Bidon.csv
-#CGRIB:           grib/bug.grb
+TRACE:           trace/2024TransatAcoresLaTrinite.csv
 CGRIB:           grib/reference.grb2
-MOST_RECENT_GRIB:0
+MOST_RECENT_GRIB:1
 GRIB_RESOLUTION: 0.25
 GRIB_TIME_STEP:  3
 GRIB_TIME_MAX:   192
-TIDES:           geo/portprinc.csv
 POLAR:           pol/DufourGVSpyAsym.pol
 WAVE_POL:        pol/polwave.csv
 ISSEA:           geo/issea.txt
 MID_COUNTRY:     geo/midcodes.txt
-HELP:            file:///home/rr/routing/helpdir/index.html
+HELP:            file:///C:/msys64/home/rener/routing/helpdir/index.html
 CLI_HELP:        helpdir/clihelp.txt
 SHP:             geo/land-polygons-complete-4326/land_polygons.shp
 START_TIME:      11.00
@@ -52,13 +50,12 @@ MAX_THETA:       90.00
 J_FACTOR:        300
 K_FACTOR:        1
 N_SECTORS:       720
-SMTP_SCRIPT:     python3 /home/rr/routing/py/smtp.py
-IMAP_TO_SEEN:    python3 /home/rr/routing/py/imaptoseen.py
-IMAP_SCRIPT:     python3 /home/rr/routing/py/imap.py
-#WEBKIT:          /home/rr/routing/webkit/mywebkit
-WEBKIT:          google-chrome
-EDITOR:          gedit
-SPREADSHEET:     gedit
-NMEA:            /dev/ttyACM0 13
-NMEA:            /dev/ttyUSB0 15
+SMTP_SCRIPT:     python3 py/smtp.py
+IMAP_TO_SEEN:    python3 py/imaptoseen.py
+IMAP_SCRIPT:     python3 py/imap.py
+WEBKIT:          start
+EDITOR:          notepad
+SPREADSHEET:     notepad
+NMEA:            COM3 9600
+NMEA:            COM4 38400
 MAIL_PW:         Mongouarou$001

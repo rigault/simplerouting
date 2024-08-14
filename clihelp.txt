@@ -1,0 +1,32 @@
+Option for routing program in CLI mode
+
+./routing [-c | -g | -h | -p | -P | -r | -s | -v ] <parameterFile>
+
+-c (cap)
+compute cap to go from pt A to py B and return
+
+-g (grib)
+Print grib wind file
+Meta Info about zone
+Check informations
+
+-h (help)
+Print this help
+
+-i (interest)
+Print POI (Point Of Interest) and Ports
+
+-p (polar for wind)
+Print polar
+Compute SoG Speed over Ground based on twa, twd
+
+-P (polar for waves)
+Print wave polar
+
+-r (Routing)
+Launch routing with parameters described in par/routing.par
+
+-s (sea)
+Say "sea" or "earth" based on position (lat, lon)
+
+-v (version)

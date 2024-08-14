@@ -9,13 +9,13 @@
 <body>
 <header> 
    <div class="container">
-      <div class="column menu">
+      <div class="menu">
          <img src="images/routing.png" alt="Routing symbol" width="200" height="200">
       </diV>
-   <div class="column main">
+   <div class="main">
          <span class=titlename>Rcube</span>
    </div>
-      <div class="column notes">
+      <div class="notes">
          <img src="images/screenshot.png" alt="screenshot" width="350" height="200">
       </div>
    </div>
@@ -24,12 +24,12 @@
 
 <div class="container">
 
-<div class="column menu">
+<div class="menu">
 <h2>Table des matières </h2>
    <a href="#chap1">1. Introduction</a>
    <a href="#chap2">2. Procédure d'installation </a>
    <a href="#chap3">3. Documentation</a>
-   <a href="#chap4">4. Utilisation</a>
+   <a href="#chap4">4. Lancement de l'application</a>
    <a href="#chap5">5. Command Line Interface (CLI)</a>
    <a href="#chap6">6. GPS et AIS</a>
    <a href="#chap7">7. Usage (interface graphique)</a>
@@ -42,7 +42,7 @@
    <a href="#chap14">14. Les logiciels du marché </a>
    <a href="#chap15">15. Approches en open source </a>
    <a href="#chap16">16. Bugs ou comportements particuliers</a>
-   <a href="#chap17">17. Elements bibliographiques </a>
+   <a href="#chap17">17. Éléments bibliographiques </a>
    <a href="#chap18">18. Programmation</a>
 
 <p></p>
@@ -101,7 +101,7 @@
    </table>
 </div>
 
-<div class="column main">
+<div class="main">
 
 <h1 id="chap1">1. Introduction</h1>
 		<p>RCube est un logiciel de routage. Il calcule la route allant
@@ -218,8 +218,7 @@ sudo apt install gcc
 </code></pre>
 
 		<h4>Installer les bibliothèques</h4>
-		<p>Installez les paquets nécessaires pour GTK4, curl,
-		shapelib, eccodes&nbsp;:</p>
+		<p>Installez les paquets nécessaires pour GTK4, curl, shapelib, eccodes&nbsp;:</p>
 <pre>
 <code>
 sudo apt install libgtk-4-dev
@@ -231,7 +230,12 @@ sudo apt-get install -y libeccodes0 libeccodes-dev
 </pre>
 
       <h4>Installation de la police 7 segments pour Dashboard</h4>
-      <code>sudo apt-get install &quot;fonts-dseg&quot;</code>
+      <code>sudo apt-get install fonts-dseg</code>
+      <p>&nbsp;</p>
+
+      <h4>Installation de cdo</h4>
+      <code>sudo apt-get install cdo</code>
+      <p>&nbsp;</p>
 
       <h4>Construction du code</h4>
 
@@ -241,8 +245,6 @@ sudo apt-get install -y libeccodes0 libeccodes-dev
 ./ccall4
 </code>
 </pre>
-
-      <p>Edition de liens</p>
       <h3>Environnement Mac OS</h3>
 
       <h4>Préliminaires</h4>
@@ -260,6 +262,7 @@ $ eval &quot;$(/usr/local/bin/brew shellenv)&quot;
 <code>brew install gcc</code>
 </pre>
 		<h4>Installer les bibliothèques </h4>
+		<p>Installez les paquets nécessaires pour GTK4, curl, shapelib, eccodes&nbsp;:</p>
 <pre>
 <code>
 brew install gtk4
@@ -305,6 +308,7 @@ Peut toutefois nécessiter des ajustements. Par exemple pour l'édition de liens
 		<code>pacman -Syu</code>
 		
 		<h4>Installer les outils de développement et les bibilothèques</h4>
+		<p>Installez toolchain et les paquets nécessaires pour GTK4, curl, shapelib, eccodes&nbsp;:</p>
 <pre><code>
 pacman -S mingw-w64-x86_64-toolchain 
 pacman -S mingw-w64-x86_64-gtk4
@@ -342,8 +346,7 @@ Possible causes:
 		<p> Voir partie AIS GPS</p>
 
       <p> Le fichier routing.par peut nécessiter de ajustements, notamment sur les noms de certains chemins d’accès absolus, à préfixer par C:
-Voir fichier routingwindows.par.
-		</p>
+Voir fichier <a href="../par/routingwindows.par">routingwindows.par</a>.</p>
 
 		<h2>2.2. Organisation des fichiers </h2>
 		<p>Dans le répertoire d’exécution, on doit trouver les répertoires suivants&nbsp;:</p>
@@ -390,7 +393,7 @@ docshow
 <pre>
 <code>./ccall4</code>
 </pre>
-		<p>Le Makefile peut aussi être utilisé</p>
+		<p>Le Makefile peut aussi être utilisé.</p>
 		<pre>
 <code>Make</code>
       </pre>
@@ -514,7 +517,7 @@ routing.png
 			que l’on trouve dans les fichiers suffixés par «&nbsp;.par&nbsp;».</li>
 		</ul>
 
-<h1 id="chap4">4. Utilisation</h1>
+<h1 id="chap4">4. Lancement de l'application</h1>
 		<p>Le lancement de l’application se fait via la commande&nbsp;:</p>
 		<code>
 ./routing
@@ -531,7 +534,7 @@ routing.png
 		<p>Le programme peux être lancé en mode commande avec des paramètres, utilisés
 		essentiellement pour des tests.</p>
 <pre>
-<code>./routing [-c | -g | -h | -p | -P | -r | -s | -v ] &lt;parameterFile&gt;
+<code>./routing [-c | -g | -h | -i | -p | -P | -r | -s | -v ] [&lt;parameterFile&gt;]
 </code>
 </pre>
 
@@ -647,16 +650,16 @@ NMEA: COM4 38400
 
 		<h2>7.4. Menus</h2>
 
-		<h3>Menu grib</h3>
+		<h3>Menu Grib</h3>
 
 		<p>Ce menu permet d’ouvrir des fichiers Grib (vent, courant) présents
 		dans les répertoires "grib" et "currentgrib", d’avoir des informations (métadonnées)
 		sur les Grib chargés (vent, courant), de lancer un téléchargement
-		sur Météoconsult, de lancer un téléchargement via le se service
+		sur Météoconsult, de lancer un téléchargement via le service
 		Web de la NOAA (administration américaine).</p>
 
 		<p>Noter que le chargement des fichiers Grib auprès de
-		fournisseurs de service se faite via la sélection d’une zone
+		fournisseurs de service se fait via la sélection d’une zone
 		géographique (voir utilisation de la souris, clic gauche au début
 		de ce chapitre).</p>
 
@@ -676,24 +679,40 @@ NMEA: COM4 38400
 		<p>Ce menu permet de sauvegarder l’état des paramètres, de charger un
 		nouveau jeu de paramètre, de les éditer.</p>
 
+      <p>Le sous menu "settings", comme le bouton associé, lance une boîte de dialogue qui présente plusieurs onglets.</p>
+
+      <h4>Onglet display</h4>
+
+      <img src="images/settingsdisplay.png" alt="settings display" width="300" height="450">
+
+      <p>L'onglet display joue essentiellement sur la représentation graphique des informations.</p>
+
+      <h4>Onglet parameter</h4>
+
+      <img src="images/settingsparameter.png" alt="settings parameters" width="300" height="450">
+
+      <p>L'onglet parameter permet de contrôler les informations pilotant la construction des isochrones.</p>
+
 		<h3>Menu Display</h3>
 
 		<p>Ce menu permet l’affichage des différentes informations, dans un
 		format assez brut.</p>
 
-		<p>Notez l’existence du sail report, et du routegram&nbsp;!</p>
+		<p>Notez l’existence du sail report, et du routegram.</p>
 
 		<h3>Menu History</h3>
 
 		<p>On peut lancer successivement plusieurs recherches de routes et
 		garder trace de l’historique.</p>
 
-		<p>- les routes historiques sont affichées en fushia avec un index
-		(0, 1 …)</p>
+		<ul>
+         <li>Les routes historiques sont affichées en fushia avec un index
+		(0, 1 …).</li>
 
-		<p>- via cet index on peut les afficher dans le menu history.</p>
+		   <li>Via cet index, on peut les afficher dans le menu history.</li>
 
-		<p>Il est possible de réinitialiser l’historique.</p>
+		   <li>Il est possible de réinitialiser l’historique.</li>
+      </ul>
 
 		<h3>Menu POI (Point Of Interest)</h3>
 
@@ -735,16 +754,15 @@ NMEA: COM4 38400
 
 		<p>Des boutons permettent de zoomer (idem scroll souris).</p>
 
-		<p>Un bouton permet de revenir au centre du grib.</p>
+		<p>Un bouton permet de revenir au centre du Grib.</p>
 
 		<p>Un bouton affiche la palette de couleurs utilisées pour afficher
 		la force du vent.</p>
 
-		<p>Un bouton «&nbsp;outils&nbsp;» (clef à molette&nbsp;) affiche
-		des informations au format brut sur l’analyse des grib vents et courant.</p>
+		<p>Un bouton «&nbsp;outils&nbsp;» (clef à molette&nbsp;) est réservé pur le développement.</p>
 
 		<h2>7.6. Zone GPS</h2>
-		<p>En partie droite des boutons, affiche la position, la vitesse et le cap.</p>
+		<p>En partie droite des boutons, affichage la position, de la vitesse et du cap.</p>
 
 		<h2>7.7. Zone routage</h2>
 		<p>Lorsque une route a été lancée, la troisième ligne affiche en rouge les
@@ -761,47 +779,80 @@ NMEA: COM4 38400
 
 		<p>&alpha;<sub>Météo</sub> = 90 – &alpha;<sub>Math</sub></p>
 
-		<p>Les angles sont exprimés en degrés décimaux soit sur
-		l’intervalle [-180, 180] soit sur l’intervalle [0, 360[&nbsp;.</p>
+		<p>En interne, les angles (TWD, TWA, COG, HDG, AWA..) sont exprimés en degrés décimaux soit sur l’intervalle [-180, 180] soit sur l’intervalle [0, 360[&nbsp;.</p>
 
-		<p>Les latitudes sont exprimées en degrés décimaux sur
-		l’intervalle [-90, + 90]</p>
-
-		<p>Les longitudes sont exprimées en degrés décimaux sur
+		<p>Les longitudes sont également exprimées en interne en degrés décimaux sur
 		l’intervalle [-180, + 180], soit sur l’intervalle [0, 360].</p>
+
+		<p>Les latitudes sont en degrés décimaux sur l’intervalle [-90, + 90]</p>
+
+      <p>Lors de l'affichage, l'expression des latitudes et des longitudes est piloté par le paramètre <samp>DMS_DISP</samp> du fichier "routing.par".<p>
+      <table>
+         <caption>DMS&nbsp;: Degrés Minutes Seconds</caption>
+         <thead>
+         <tr>
+            <th>valeur</th><th>Abbr.</th><th>Signification</th><th>Exemple</th>
+         </tr>
+         </thead>
+         <tbody>
+         <tr>
+            <td>0</td><td>Basic</td><td>Degrés décimaux</td><td>-10.51°</td>
+         </tr>
+         <tr>
+            <td>1</td><td>DD</td><td>Degrés décimaux</td><td>010.51°W</td>
+         </tr>
+         <tr>
+            <td>2</td><td>DM</td><td>Degrés et minutes décimales</td><td>010°30.6'W</td>
+         </tr>
+         <tr>
+            <td>3</td><td>DMS</td><td>Degrés, minutes et secondes</td><td>010°30'36"W</td>
+         </tr>
+      </table>
 
 		<h2>8.2. Conversions </h2>
 
       <p>Soient&nbsp;:</p>
 
-      <p class="math">RAD_TO_DEG&nbsp;= 180/π (conversion des degrés en radians)</p>
+      <p><span class="math">RAD_TO_DEG&nbsp;= 180/π</span> (conversion des degrés en radians)</p>
 
-      <p class="math">DEG_TO_RAD&nbsp;= π/180 (conversion des radians en degrés)</p>
+      <p><span class="math">DEG_TO_RAD&nbsp;= π/180</span> (conversion des radians en degrés)</p>
 
-      <p class = "math">MS_TO_KN = 3600/1852 (conversion des mètres/seconde en nœuds)</p>
+      <p><span class="math">MS_TO_KN = 3600/1852</span> (conversion des mètres/seconde en nœuds)</p>
 
-      <p>HDG : Heading (direction du bateau par rapport au Nord)</p>
+      <p><span class="math">HDG</span>&nbsp;: Heading (direction du bateau par rapport au Nord)</p>
      
-      <p>SOG : (Speed Over Ground), Vitesse du bateau en nœuds</p>
+      <p><span class="math">SOG</span>&nbsp;: Speed Over Ground (Vitesse du bateau en nœuds)</p>
 
       <p>Les fichiers Grib donnent la composante u et v du vent en m/s à 10 mètres du sol.</p>
 
-      <p>Les valeurs de TWD en degrés et de TWS en nœuds sont au modulo 360 près&nbsp;:</p>
+      <p>Les valeurs de TWD en degrés et de TWS en nœuds sont&nbsp;:</p>
 
-      <p class = math>TWD = 180 + RAD_TO_DEG * atan2 (u, v)</p>
+      <p class ="math">TWD = [180 + RAD_TO_DEG * atan2 (u, v)] % 360</p>
 
-      <p class = math>TWS = MS_TO_KN * &radic; (u<sup>2</sup> + v<sup>2</sup>)</p>
+      <p class ="math">TWS = MS_TO_KN * &radic;&nbsp;(u<sup>2</sup> + v<sup>2</sup>)</p>
 
-      <p class = math>TWA = (TWD - HDG) % 360</p>
+      <p>Soit <span class ="math">TWA</span> l'angle du vent réel par rapport à l'axe longitudinal du navire.</p>
+
+      <img src="images/twdtwahdg.png" alt="TWD TWA HDG" width="350" height="200">
+
+      <p class ="math">TWA = (TWD - HDG) % 360</p>
 
       <p>Calcul du vent apparent&nbsp;:</p>
-      <p>Soient&nbsp;:<p>
+
+      <p>Le vent apparent est la somme vectorielle&nbsp;:</p>
+      <ul>
+         <li>du vent réel caractérisé par TWS (vitesse du vent) et TWA (angle du vent par rapport à l'axe longitudinal du bateau),</li>
+         <li>du vent vitesse, opposé à l'avancement du navire et donc de vitesse estimée à SOG (Speed Over Ground).</li>
+      </ul>
+
+      <img src="images/apparentwind.jpg" alt="vent apparent" width="350" height="200">
+
+      <p>Soient&nbsp;:</p>
       <p class = math>a = TWS * sin (DEG_TO_RAD * TWA)</p>
       <p class = math>b = TWS * cos (DEG_TO_RAD * TWA) + SOG</p>
-      <p>On a :
+      <p>On a&nbsp;:</p>
       <p class = "math">AWA = RAD_TO_DEG * atan2 (a, b)</p>
-      <p class = "math">AWS = &radic; (a<sup>2</sup> + b<sup>2</sup>);
-
+      <p class = "math">AWS = &radic; (a<sup>2</sup> + b<sup>2</sup>)</p>
 
 		<h2>8.3. Loxodromie, orthodromie et correction de Givry </h2>
 
@@ -823,51 +874,52 @@ NMEA: COM4 38400
 		une trajectoire sur la surface terrestre qui maintient une
 		direction constante par rapport au nord magnétique. </p>
 
-      <p>Soit P1 de latitude <span class="math">lat1</span>, et de longitude <span class="math">lon1</span>.</p>
+      <p>Soit P1 de latitude <span class="math">lat1</span>, et de longitude <span class="math">lon1</span> exprimées en degrés.</p>
 
-      <p>Soit P2 de latitude <span class="math">lat2</span>, et de longitude <span class="math">lon2</span>.</p>
+      <p>Soit P2 de latitude <span class="math">lat2</span>, et de longitude <span class="math">lon2</span> exprimées en degrés.</p>
 
-      <p>Soit <span class="math">&phi;</span> la latitude moyenne&nbsp;:<p>
+      <p class="math">&delta;lon&nbsp;= lon2 - lon1</p>
+
+      <p class="math">&delta;lat&nbsp;= lat2 - lat1</p>
+
+      <p>Soit <span class="math">&phi;<sub>m</sub></span> la latitude moyenne en degrés&nbsp;:<p>
       
-      <p class = math>&phi;= (lat1 + lat2) / 2</p>
+      <p class = math>&phi;<sub>m</sub>= (lat1 + lat2) / 2</p>
 
-      <p><strong>Le cap loxodromique</strong> à suivre de façon constante pour aller de P1 à P2 est en degrés&nbsp;:
-
-      <p class = "math">loxoCap&nbsp;= RAD_TO_DEG * atan2 ((lon2 - lon1) * cos (DEG_TO_RAD * &phi;),  lat2 - lat1)
-
-      <p><strong>La distance loxodromique</strong> nécessite un calcul plus complexe.</p>
-
-      <p>Soient <span class="math">lat1<sub>rad</sub>, lon1<sub>rad</sub>, lat2<sub>rad</sub>, lon2<sub>rad</sub></span> les latitudes et longitudes exprimées en radians des points P1 et P2.
+      <p>Soient <span class="math">lat1<sub>rad</sub>, lon1<sub>rad</sub>, lat2<sub>rad</sub>, lon2<sub>rad</sub></span> 
+      les latitudes et longitudes exprimées en radians des points P1 et P2.
 
       <p class="math">&delta;lon<sub>rad</sub>&nbsp;= lon2<sub>rad</sub> - lon1<sub>rad</sub></p>
 
       <p class="math">&delta;lat<sub>rad</sub>&nbsp;= lat2<sub>rad</sub> - lat1<sub>rad</sub></p>
 
-      <p class="math">&phi;<sub>rad</sub>&nbsp;= (lat1<sub>rad</sub> + lat2<sub>rad</sub>) / 2</p>
+      <p class="math">&phi;<sub>mrad</sub>&nbsp;= (lat1<sub>rad</sub> + lat2<sub>rad</sub>) / 2</p>
+
+      <p><strong>Le cap loxodromique</strong> à suivre de façon constante pour aller de P1 à P2 est en degrés&nbsp;:
+
+      <p class = "math">loxoCap&nbsp;= RAD_TO_DEG * atan2 (&delta;lon * cos (&phi;<sub>mrad</sub>),  &delta;lat)
+
+      <p><strong>La distance loxodromique</strong> nécessite un calcul plus complexe.</p>
 
       <p>La distance rhumb <span class="math">q</span> est&nbsp;:</p>
 
       <p class = "math">q = &delta;lat<sub>rad</sub> / log(tan(&pi; / 4 + lat2<sub>rad</sub> / 2) / tan(&pi; / 4 + lat1<sub>rad</sub> / 2))</p>
     
-      <p>si <span class="math">q&nbsp;&lt;&nbsp;&epsilon;, q&nbsp;= cos(&phi;<sub>rad</sub>);</span></p>
+      <p>si <span class="math">q&nbsp;&lt;&nbsp;&epsilon;, q&nbsp;= cos(&phi;<sub>mrad</sub>);</span></p>
 
       <p>La distance loxodromique en miles nautiques est<p>
 
-      <p class="math">loxoDist&nbsp;= EARTH_RADIUS * sqrt(&delta;lat<sub>rad</sub><sup>2</sup> + (q * &delta;lon<sub>rad</sub>)<sup>2</sup>)</p>
+      <p class="math">loxoDist&nbsp;= EARTH_RADIUS * &radic;&nbsp;(&delta;lat<sub>rad</sub><sup>2</sup> + (q * &delta;lon<sub>rad</sub>)<sup>2</sup>)</p>
 
-      <p> <span class="math">sqrt</span> est la racine carrée </p>
 
       <p> <span class="math">EARTH_RADIUS ~ 3440.065</span> est le rayon de la terre en miles nautiques.</p>
 
-      <p><strong>Pour les distances faibles, une approximation de la distance par la formule de pythagore</strong> se calcule aisément&nbsp;:</p>
+      <p><strong>Pour les distances faibles, une approximation de la distance par la formule de Pythagore</strong> dans laquelle on considère que la terre est plate se calcule aisément&nbsp;:</p>
  
-      <p class="math">pythagoreDist&nbsp;= 60 * sqrt (&delta;lat<sup>2</sup> + (&delta;lon * coeffLat)<sup>2</sup>)</p>
+      <p class="math">pythagoreDist&nbsp;= 60 * &radic;&nbsp; [&delta;lat<sup>2</sup> + (&delta;lon * cos (&phi;<sub>mrad</sub>))<sup>2</sup>]</p>
 
-      <p>Avec <span class="math">coeffLat = cos (DEG_TO_RAD * &phi;)</span></p>
 
       <p> <span class="math">&delta;lat, &delta;lon</span> sont les différences en latitudes, longitudes exprimées en degrés. D'où le facteur 60 pour la conversion en miles nautiques. </p>
-
-      <p> <span class="math">sqrt</span> est la racine carrée.</p>
 
 		<h3>Orthodromie</h3>
 
@@ -884,7 +936,7 @@ NMEA: COM4 38400
 
       <p>La distance en radians entre P1 et P2 est&nbsp;:<p>
 
-      <p class = "math">distRad&nbsp;= sin(lat1<sub>rad</sub>) * sin(lat2<sub>rad</sub>) + cos(lat1<sub>rad</sub>) * cos(lat2<sub>rad</sub>) * cos(&theta;<sub>rad</sub>)</p>
+      <p class = "math">distRad&nbsp;= arccos [sin(lat1<sub>rad</sub>) * sin(lat2<sub>rad</sub>) + cos(lat1<sub>rad</sub>) * cos(lat2<sub>rad</sub>) * cos(&theta;<sub>rad</sub>)]</p>
       
       <p><strong>La distance orthodromique</strong> en miles nautiques entre P1 et P2 est&nbsp;:<p>
 
@@ -896,7 +948,7 @@ NMEA: COM4 38400
 
       <p>La correction de Givry <span class="math">g</span> s'exprime en degrés par&nbsp;:</p>
 
-      <p class = math>g = 1/2 * (lon1 - lon2) * sin (DEG_TO_RAD * &phi;)</p>
+      <p class = math>g = 1/2 * (lon1 - lon2) * sin (&phi;<sub>mrad</sub>)</p>
 
       <p><strong>Le cap initial orthodromique</strong> à suivre au départ de P1 vers P2 est en degrés&nbsp;:
 
@@ -977,20 +1029,42 @@ NMEA: COM4 38400
 		<h2>10.2. NOAA</h2>
 
 		<p>Le site de l’administration américaine (National Oceanic and Atmosphere
-		Administration) fournit gratuitement les fichiers grib avec le modèle
+		Administration) fournit gratuitement les fichiers Grib avec le modèle
 		GFS.</p>
 
       <p>Le Global Forecast System (GFS) est un modèle de prévision numérique du temps du National Weather Service des États-Unis.</p>
 
 		<p><a href="https://nomads.ncep.noaa.gov/">https://nomads.ncep.noaa.gov/</a></p>
 
-      <p>Le logiciel télécharge les fichiers Grib de la NOAA</p>
+      <p>Le logiciel télécharge les fichiers Grib de la NOAA.</p>
 
 		<p>Noter que chaque téléchargement correspond à un fichier Grib
 		associé à un seul "time step". Le programme concaténe donc n
 		fichiers Grib dans un seul pour avoir un fichier Grib global.</p>
 
-		<h2>10.3. Meteoconsult</h2>
+      <p>Exemple d'accès à un fichier&nbsp;:</p>
+
+      https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p50.pl?dir=/gfs.20240813/06/atmos&<br>
+         var_UGRD=on&var_VGRD=on&subregion=&toplat=50&leftlon=-15&<br>
+         rightlon=0&bottomlat=43&file=gfs.t06z.pgrb2full.0p50.f000		
+
+      <h2>10.3. ECMWF</h2>
+   
+      <p>Le site européen propose des données en open data. </p>
+
+      <p><a href="https://data.ecmwf.int/forecasts">https://data.ecmwf.int/forecasts</a></p>
+
+      <p>Le logiciel télécharge les fichiers Grib de l'ECMWF.</p>
+
+		<p>Comme pour la NOAA, chaque téléchargement correspond à un fichier Grib
+		associé à un seul "time step". La particularité est que le fichier est unique et mondial et contient de 
+      nombreux indicateurs non pertinents pour RCube. Le programme filtre donc chaque fichier pour n'extraire que les "shortname" pertinents,
+      découpe la région spécifiée, puis concatène les n fichiers Grib dans un seul pour avoir un fichier Grib global.</p>
+
+      <p>Exemple d'accès à un fichier&nbsp;:</p>
+      https://data.ecmwf.int/forecasts/20240813/00z/ifs/0p25/oper/20240813000000-0h-oper-fc.grib2
+
+		<h2>10.4. Meteoconsult</h2>
 
 		<p>La récupération des fichiers Meteoconsult est également automatisée dans le logiciel.</p>
       <p>Les informations Meteconsult sont disponibles sur&nbsp;:
@@ -1026,22 +1100,22 @@ NMEA: COM4 38400
 		<p>00Z correspond à minuit UTC, 06Z à 6 heures UTC, 12Z à midi
 		UTC et 18Z à 18 heures UTC.</p>
 
-		<h2>10.4. saildocs</h2>
+		<h2>10.5. saildocs</h2>
 
 		<p>Automatisé dans le logiciel.</p>
 		<p>Voir <a href="http://www.saildocs.com/gribinfo">http://www.saildocs.com/gribinfo</a></p>
 		<p>Adresse mail&nbsp;; <a href="mailto:query@saildocs.com">query@saildocs.com</a></p>
-		<p>Les fichiers grib reçu ont un nom de la forme</p>
+		<p>Les fichiers Grib reçu ont un nom de la forme&nbsp;:</p>
 		<p>gfsyyyymmddhhmmssxxx.grb</p>
 
-		<h2>10.5. mailASail</h2>
+		<h2>10.6. mailASail</h2>
 
 		<p>Automatisé dans le logiciel.</p>
 		<p>Adresse mail&nbsp;: <a href="mailto:weather@mailasail.com">weather@mailasail.com</a></p>
-		<p>Les fichiers grib reçu ont un nom de la forme</p>
+		<p>Les fichiers Grib reçu ont un nom de la forme&nbsp;:</p>
 		<p>grib_yymmdd_hhmmss_gfs.grb</p>
 
-		<h2>10.6. Globalmarinenet</h2>
+		<h2>10.7. Globalmarinenet</h2>
 
 		<p>Adresse mail&nbsp;:
 		<a href="mailto:gmngrib@globalmarinenet.net">gmngrib@globalmarinenet.net</a>.</p>
@@ -1137,6 +1211,27 @@ grib_get_data -L &quot;%.2lf %.2lf&quot; -F &quot;%.2lf&quot; -m -999999 -w shor
          </tbody>
       </table>
       <p></p>
+
+      <p>Extraction des key values.<p>
+      <code>grib_copy -w shortName=10u/10v ecmwf.grib2 ecmwf2.grib</code>
+
+   <h2>CDO</h2>
+   
+   <p>CDO pour "Climate Data Operators" <a href="https://code.mpimet.mpg.de/projects/cdo">CDO Web Site</a> est un ensemble
+   d'opérateurs en ligne de commande permettant de manipuler des modèles météorologiques ou climatologique. Les formats de fichiers
+   supportés sont entre autres&nbsp;: GRIB 1/2. Il y a plus de 600 opérateurs disponibles.</p>
+
+   <p>RCube utilise CDO au travers de deux opérateurs.<p>
+   <ul>
+      <li><code>-sellonlatbox</code> pour extraire une région</li>
+      <li><code>-invertlat</code> pour inverser les latitudes</li>
+   </ul>
+   <p>Exemple&nbsp;</p>
+
+<pre><code>
+   cdo -sellonlatbox,-25.0,-1.0,20.0,50.0 interECMWF-000 extract.grib
+   cdo -invertlat extract.grib extract0.grib
+</code></pre>
 
 <h1 id="chap12">12. Trouver ou générer des polaires</h1>
 
@@ -1352,21 +1447,20 @@ grib_get_data -L &quot;%.2lf %.2lf&quot; -F &quot;%.2lf&quot; -m -999999 -w shor
 <h1 id="chap16">16. Bugs ou comportements particuliers</h1>
 		<h2>16.1. Constantes CONST_...</h2>
    
-      <p>Les constantes CONST_WIND_TWD, CONST_WAVE, CONST_CURRENT_S permettent de simuler un vent ou un courant constant,
-      à des fins de tests ou de simulations. </p>
+      <p>Les constantes CONST_WIND_TWD, CONST_WAVE, CONST_CURRENT_S permettent de simuler un vent ou un courant constant, à des fins de tests ou de simulations. </p>
 
 		<p>Si le vent est constant (avec CONST-TWD &gt; 0) alors les vagues
-		sont de 0m sauf si CONST_WAVE &gt; 0.</p>
+		sont de 0m sauf si CONST_WAVE&nbsp;&gt;&nbsp;0.</p>
 
 		<p>En aucun cas, on ne peut prendre en compte des hauteurs de
-		vagues venant du fichier grib en ayant configuré un vent constant.
+		vagues venant du fichier Grib en ayant configuré un vent constant.
 		En effet, un vent constant avec CONST_WIND_TWS inhibe la lecture
-		des données associées au grib qui contient les données du vent
+		des données associées au Grib qui contient les données du vent
 		et des hauteur de vagues.</p>
 
-		<p>Si par contre si le vent vient du grib (CONS_WIND_TWD = 0) alors
+		<p>Si par contre si le vent vient du Grib (CONS_WIND_TWD = 0) alors
 		la hauteur des vagues est soit lue dans le fichier Grib (0 si
-		valeur absente) soit égale à CONST_WAVE si CONST_WAVE &gt; 0.</p>
+		valeur absente) soit égale à CONST_WAVE si CONST_WAVE&nbsp;&gt;&nbsp;0.</p>
 
 		<p>Noter que les courants sont eux en général lus à partir d’un
 		fichier Grib différent. Il n’y a donc pas de lien entre ce qui
@@ -1382,7 +1476,8 @@ grib_get_data -L &quot;%.2lf %.2lf&quot; -F &quot;%.2lf&quot; -m -999999 -w shor
 		<p>Par contre, il est ignoré entre le dernier isochrone et la
 		destination (fonction GoalP).</p>
 
-<h1 id="chap17">17. Elements bibliographiques </h1>
+<h1 id="chap17">17. Éléments bibliographiques </h1>
+
 		<p>Livres&nbsp;:</p>
 
 		<p>&quot;Weather Routing: A Guide to Modern Meteorological
@@ -1579,6 +1674,8 @@ G_PI
 MAX
 MIN
 CLAMP
+GPOINTER_TO_INT
+GINT_TO_POINTER
 </pre>
 <h3>Fonctions</h3>
 <pre>
@@ -1691,7 +1788,7 @@ In imaptoseen.py: Tous les messages ont été marqués comme lus.
 
       <p>Des commentaires peuvent être ajoutés après le signe "#".</p>
 
-      <p>Exemple</p>
+      <p>Exemple&nbsp;:</p>
 <pre><samp>
 PORT:            geo/port.csv  # nom du fichier port
 POR:             35.86,-41.37  # latitude et longitude du point Origine
@@ -1710,8 +1807,10 @@ SMTP_SCRIPT:     python3 /home/rr/routing/py/smtp.py  #script python pour l'envo
 
 		<p>&nbsp;</p>
 </div>
-<div class="column notes">
+<div class="notes">
+
 <h2>Notes et liens </h2>
+
 <p><a href= "../csources4/html/index.html">Doxygen</a></p>
 <p><a href= "docpar.txt">Documentation sur les paramètres</a></p>
 <p><a href= "clihelp.txt">Help pour le mode CLI (Command Line Interface)</a></p>
@@ -1719,8 +1818,10 @@ SMTP_SCRIPT:     python3 /home/rr/routing/py/smtp.py  #script python pour l'envo
 </div>
 </div>
 <hr>
+
 <footer>
 René Rigault, 2024
 </footer>
+
 </body>
 </html>

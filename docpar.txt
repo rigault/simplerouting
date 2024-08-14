@@ -2,32 +2,40 @@ Name              Comment
 WD:               Working Directory
 POI:              Point of Interests
 PORT:             Point of Interest (ports)
-POR:              Point of Origin
-PDEST:            Point of Destination
+POR:              Point of Origin (lat, lon)
+PDEST:            Point of Destination (lat, lon)
+WP:               Way Point (lat, lon). Severeal WP are accepted
 POR_NAME:         Name of Origin Point
 PDEST_NAME:       Name of Destination Point
 CGRIB:            Grib File Name
 CURRENT_GRIB:     Current Grib File Name
+MOST_RECENT_GRIB: 1 if most recent grib replace CGRIB 0 otherwise
 GRIB_RESOLUTION:  Resolution (lat, lon) requested for Grib files
 GRIB_TIME_STEP:   Step requested for Frib Files
 GRIB_TIME_MAX:    Max in hours requested for Grb Files
 POLAR:            Polar File Name
 WAVE_POL:         Wave Polar File Name
 ISSEA:            Is Sea File Name
+MID_COUNTRY:      Text file namme with MID to Country association (MID is part of MMSI)
+TIDES:            CSC file with lat, lon of ports for tides (France Only)
 HELP:             Help html File Name
 CLI_HELP:         Text Help File Name
 SHP:              Shape File Name
+TRACE:            Trace File Name
 START_TIME:       Start Time in Hours after befinning of Grib
 T_STEP:           Time Step between Isochrones
 RANGE_COG:        Range COG in degrees for Isochrone Calculation
-COG_STEP:         COG Steps in degress for Isochrone Calculation
+COG_STEP:         COG Steps in degrees for Isochrone Calculation
 MAX_ISO:          Max number of Isochrones
-VERBOSE:          Deprecated
-PENALTY0:         Penalty in hours for virement de bort. e.g. : 0.1
-PENALTY1:         Penalty in hours for empannage. eg. : 0.1
+SPECIAL:          Special purpose
+PENALTY0:         Penalty in minutes for virement de bort.
+PENALTY1:         Penalty in minutes for empannage.
 MOTOR_S:          Motor Speed if Threshold done
 THRESHOLD:        Threshold (Sail speed thar lauvhe motor)
-EFFICIENCY:       Efficiency. e.g.: 0.9
+DAY_EFFICIENCY:   Efficiency at day. e.g.: 0.9
+NIGHT_EFFICIENCY: Efficiency at night. e.g.: 0.8
+X_WIND:           x Wind multiply factor. e.g.: 1.15
+MAX_WIND:         max Wind in Knots. Used to avoid routes in too windy areas
 CONST_WAVE:       If > 0, Constant waves height in meters
 CONST_WIND_TWS:   If > 0, Constant Wind Speed in Knots
 CONST_WIND_TWD:   If CONST_WIND_TWS > 0, Constant Wind Direction in degrees
@@ -41,18 +49,25 @@ ISOC_DISP:        Isochrone Display
 COLOR_DISP:       Color Wind Grib Display
 DMS_DISP:         Degree Minutes Second Display 
 WIND_DISP:        Wind Display
+GRID_DISP:        Grid Display (meridian and parallels) every degree
+AVR_OR_GUST_DISP: Wind Average or Wind Gust display
 CURRENT_DISP:     Current Display
 WAVE_DISP:        Wave Display
+INFO_DISP:        Display Info digest
+AIS_DISP:         Display AIS info
 LEVEL_POI_DISP:   Level of Point of Interest for Display
+SPEED_DISP:       Speed of display (fluidity)
+TECHNO_DISP:      Additionnal Info display for technical expert
 MAX_THETA:        Deprecated
 J_FACTOR:         For ForwardOptimization algorithm
 K_FACTOR:         For ForwardOptimization algorithm
-MIN_PT:           Depecated. For ForwardOptimization algorithm
 N_SECTORS:        Number of sectors. For ForwardOptimization algorithm
 SMTP_SCRIPT:      SMTP script Name
 IMAP_TO_SEEN:     Script Name that translate messages to seeen 
 IMAP_SCRIPT:      IMAP script name
 MAIL_PW:          Mail Password (be careful)
+WEBKIT:           WebKit name
 EDITOR:           Editor Name
 SPREADSHEET:      SpreadSheet name (be careful)
 FORBID_ZONE:      Specification of Forbidden Zone
+NMEA:             NMEA port folloewed by index of speed. eg. NMEA: /dev/ttyUSB0, 14
