@@ -21,6 +21,7 @@
 #include "shapefil.h"
 #include "aisgps.h"
 #include "inline.h"
+#include "mailutil.h"
 
 /*! store sail route calculated in engine.c by routing */  
 SailRoute route;
@@ -32,14 +33,15 @@ MyPolygon forbidZones [MAX_N_FORBID_ZONE];
 const struct DictElmt dicTab [4] = {{7, "Weather service US"}, {78, "DWD Germany"}, {85, "Meteo France"}, {98,"ECMWF European"}};
 
 const struct DictProvider providerTab [N_PROVIDERS] = {
-   {"query@saildocs.com",          "Saildocs Wind GFS",      "gfs"},
-   {"query@saildocs.com",          "Saildocs Wind ECWMF",    "ECMWF"},
-   {"query@saildocs.com",          "Saildocs Wind ICON",     "ICON"},
-   {"query@saildocs.com",          "Saildocs Wind ARPEGE",   "ARPEGE"},
-   {"query@saildocs.com",          "Saildocs Wind Arome",    "AROME"},
-   {"query@saildocs.com",          "Saildocs Current RTOFS", "RTOFS"},
-   {"weather@mailasail.com",       "MailaSail Wind GFS",     ""},
-   {"gmngrib@globalmarinenet.net", "GlobalMarinet GFS",      ""}
+   {"query@saildocs.com", "Saildocs Wind GFS",      "gfs",    6, "WIND,GUST,WAVES,RAIN,PRMSL"},
+   {"query@saildocs.com", "Saildocs Wind ECWMF",    "ECMWF",  4, "WIND,MSLP,WAVES"},
+   {"query@saildocs.com", "Saildocs Wind ICON",     "ICON",   4, "WIND,MSLP,WAVES"},
+   {"query@saildocs.com", "Saildocs Wind ARPEGE",   "ARPEGE", 0, ""}, // not available yet
+   {"query@saildocs.com", "Saildocs Wind Arome",    "AROME",  0, ""}, // not available yet
+   {"query@saildocs.com", "Saildocs Current RTOFS", "RTOFS",  2, "CURRENT"},
+   {"weather@mailasail.com","MailaSail Wind GFS",    "",      2, "GRD,WAVE"},
+   {""                     ,"Not Applicable"    ,    "",      0, "NONE"}
+   // {"gmngrib@globalmarinenet.net", "GlobalMarinet GFS", "", ""} // Does not work well
 };
 
 /*! list of wayPoint */
@@ -144,8 +146,6 @@ bool compact (bool full, const char *dir, const char *inFile, const char *shortN
    }
 }
    
-   
-
 /*! concat all files prefixed by prefix and suffixed 0..max (with step) in fileRes */
 bool concat (const char *prefix, int step, int max, const char *fileRes) {
    FILE *fRes = NULL;
@@ -334,8 +334,7 @@ char *formatThousandSep (char *buffer, long value) {
 /*! true if name contains a number */
 bool isNumber (const char *name) {
    while (*name) {
-      if (isdigit(*name))
-      return true;
+      if (isdigit(*name)) return true;
       name++;
    }
    return false; 
@@ -363,7 +362,7 @@ char *dollarSubstitute (const char* str, char *res, size_t maxSize) {
 #endif
 }
 
-/*! translate str in double for latitude longitudes */
+/*! translate str in double for latitude longitude */
 double getCoord (const char *str) {
    double deg = 0.0, min = 0.0, sec = 0.0;
    bool minFound = false;
@@ -454,6 +453,20 @@ char *newDateWeekDay (long intDate, double nHours, char *res) {
    return res;
 }
 
+/*! return date and time using week day after adding myTime (hours) to the Date */
+char *newDateWeekDayVerbose (long intDate, double nHours, char *res) {
+   struct tm tm0 = {0};
+   tm0.tm_year = (intDate / 10000) - 1900;
+   tm0.tm_mon = ((intDate % 10000) / 100) - 1;
+   tm0.tm_mday = intDate % 100;
+   tm0.tm_isdst = -1;                     // avoid adjustments with hours summer winter
+   int totalMinutes = (int)(nHours * 60);
+   tm0.tm_min += totalMinutes;
+   mktime (&tm0);                         // adjust tm0 struct (manage day, mon year overflow)
+   strftime (res, MAX_SIZE_LINE, "%A, %b %d at %H:%M UTC", &tm0);
+   return res;
+}
+
 /*! convert lat to str according to type */
 char *latToStr (double lat, int type, char* str) {
    double mn = 60 * lat - 60 * (int) lat;
@@ -502,84 +515,6 @@ char *durationToStr (double duration, char *res, size_t len) {
    // printf ("Duration: %.2lf hours, equivalent to %d days, %02d:%02d\n", duration, nDays, nHours, nMin);
    return res;
 } 
-
-/*! send SMTP request with right parameters to grib mail provider */
-bool smtpGribRequestPython (int type, double lat1, double lon1, double lat2, double lon2, char *command, size_t maxLength) {
-   int i;
-   char temp [MAX_SIZE_LINE];
-   const char *suffix = "WIND,GUST,WAVES,RAIN,PRMSL"; 
-   char newPw [MAX_SIZE_NAME];
-   if (par.mailPw [0] == '\0') return false;
-   dollarSubstitute (par.mailPw, newPw, MAX_SIZE_NAME);
-   
-   lon1 = lonCanonize (lon1);
-   lon2 = lonCanonize (lon2);
-   
-   if ((lon1 > 0) && (lon2 < 0)) { // zone crossing antimeridien
-      fprintf (stderr, "Error in smtpGribRequestPython: Tentative to cross antemeridian !\n");
-      lon2 = 179.0;
-   }
-   if (setlocale (LC_ALL, "C") == NULL) {                // very important for printf  decimal numbers
-      fprintf (stderr, "Error in main: setlocale failed");
-      return EXIT_FAILURE;
-   }
-   
-   lat1 = floor (lat1);
-   lat2 = ceil (lat2);
-   lon1 = floor (lon1);
-   lon2 = ceil (lon2);
-   switch (type) {
-   case SAILDOCS_GFS:
-   case SAILDOCS_ECMWF:
-   case SAILDOCS_ICON:
-   case SAILDOCS_ARPEGE:
-   case SAILDOCS_AROME:
-   case SAILDOCS_CURR:
-      printf ("smtp saildocs python with: %s %s\n", providerTab [type].service, suffix);
-      snprintf (command, MAX_SIZE_BUFFER, "%s %s grib \"send %s:%d%c,%d%c,%d%c,%d%c|%.2lf,%.2lf|0,%d,..%d|%s\" %s\n",\
-         par.smtpScript, providerTab [type].address, providerTab [type].service,\
-         (int) fabs (round(lat1)), (lat1 > 0) ? 'N':'S', (int) fabs (round(lat2)), (lat2 > 0) ? 'N':'S',\
-		   (int) fabs (round(lon1)), (lon1 > 0) ? 'E':'W', (int) fabs (round(lon2)), (lon2 > 0) ? 'E':'W',\
-		   par.gribResolution, par.gribResolution, par.gribTimeStep, par.gribTimeMax,\
-         (type == SAILDOCS_CURR) ? "CURRENT" : suffix, newPw);
-      break;
-   case MAILASAIL:
-      printf ("smtp mailasail python\n");
-      snprintf (command, MAX_SIZE_BUFFER, "%s %s \"grib gfs %d%c:%d%c:%d%c:%d%c ", 
-         par.smtpScript, providerTab [type].address, \
-         (int) fabs (round(lat1)), (lat1 > 0) ? 'N':'S', (int) fabs (round(lon1)), (lon1 > 0) ? 'E':'W',\
-         (int) fabs (round(lat2)), (lat2 > 0) ? 'N':'S', (int) fabs (round(lon2)), (lon2 > 0) ? 'E':'W');
-      for (i = 0; i < par.gribTimeMax; i+= par.gribTimeStep) {
-         snprintf (temp, MAX_SIZE_LINE, "%d,", i);
-	      g_strlcat (command, temp, maxLength);
-      }
-      snprintf (temp, MAX_SIZE_LINE, "%d GRD,WAVE\" grib %s", i, newPw);
-	   g_strlcat (command, temp, maxLength);
-      break;
-   case GLOBALMARINET:
-      printf ("smtp globalmarinet\n");
-      int lat = (int) (round ((lat1 + lat2)/2));
-      int lon = (int) (round ((lon1 + lon2) /2));
-      int size =  (int) fabs (lat2 - lat1) * 60;
-      int sizeLon = (int)(fabs (lon2 - lon1) * cos (DEG_TO_RAD * lat)) * 60;
-      if (sizeLon > size) size = sizeLon;
-      snprintf (command, MAX_SIZE_BUFFER, "%s %s \"%d%c:%d%c:%d 7day\" \"\" %s",  
-         par.smtpScript, providerTab [type].address, \
-         abs (lat), (lat > 0) ? 'N':'S', abs (lon), (lon > 0) ? 'E':'W',\
-         size, newPw);
-      break;
-   default:;
-   }
-   if (system (command) != 0) {
-      fprintf (stderr, "Error in smtpGribRquest: system call %s\n", command);
-      return false;
-   }
-
-   char *pt = strrchr (command, ' '); // do not print password
-   *pt = '\0';
-   printf ("End command: %s\n", command);
-   return true;
-}
 
 /*! Read poi file and fill internal data structure. Return number of poi */
 int readPoi (const char *fileName) {
@@ -630,7 +565,7 @@ int readPoi (const char *fileName) {
       }
 	}
 	fclose (f);
-   printf ("nPoi : %d\n", i);
+   // printf ("nPoi : %d\n", i);
    return i;
 }
 
@@ -838,7 +773,7 @@ double zoneTimeDiff (const Zone *zone1, const Zone *zone0) {
    else return 0;
 } 
 
-/*! print Grib u v for all lat lon time information */
+/*! print Grib u v ... for all lat lon time information */
 void printGrib (const Zone *zone, const FlowP *gribData) {
    int iGrib;
    printf ("printGribAll\n");
@@ -1543,18 +1478,16 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
          //printf("%.2f %.2f %.2lf %ld %d %s\n", lat, lon, val, timeStep, iGrib, shortName);
          tGribData [iFlow] [iGrib].lat = lat; 
          tGribData [iFlow] [iGrib].lon = lon; 
-         //if ((strcmp (shortName, "10u") == 0) || (strcmp (shortName, "u") == 0) || (strcmp (shortName, "ucurr") == 0)) {
          if ((strcmp (shortName, "10u") == 0) || (strcmp (shortName, "ucurr") == 0)) {
             tGribData [iFlow] [iGrib].u = val;
-            // printf ("10u: %.2lf\n", val);
+            //printf ("10u: %.2lf\n", val);
          }
 
-         //else if ((strcmp (shortName, "10v") == 0) || (strcmp (shortName, "v") == 0) || (strcmp (shortName, "vcurr") == 0))
          else if ((strcmp (shortName, "10v") == 0) || (strcmp (shortName, "vcurr") == 0))
             tGribData [iFlow] [iGrib].v = val;
          else if (strcmp (shortName, "gust") == 0)
             tGribData [iFlow] [iGrib].g = val;
-         else if (strcmp (shortName, "msl") == 0)  { // pressure
+         else if ((strcmp (shortName, "msl") == 0) || (strcmp (shortName, "prmsl") == 0))  { // pressure
             tGribData [iFlow] [iGrib].msl = val;
             // printf ("pressure: %.2lf\n", val);
          }
@@ -1647,8 +1580,17 @@ char *gribToStr (char *str, const Zone *zone, size_t maxLength) {
    return str;
 }
 
+/*! true if str contain one character in charList */
+static bool strNchr (const char *str, const char *listChar) {
+   while (*listChar) {
+      if ((strchr (str, *listChar)) != NULL) return true;
+      listChar++;
+   }
+   return false;
+}
+
 /*! read polar file and fill poLMat matrix */
-bool readPolar (const char *fileName, PolMat *mat) {
+bool readPolar (const char *fileName, PolMat *mat, int lang) {
    FILE *f = NULL;
    char buffer [MAX_SIZE_LINE];
    char *pLine = &buffer [0];
@@ -1656,40 +1598,58 @@ bool readPolar (const char *fileName, PolMat *mat) {
    double v = 0;
    double lastValInCol0 = -1;
    int c;
+   char csvSep [] = CSV_SEP;
    mat->nLine = 0;
    mat->nCol = 0;
    if ((f = fopen (fileName, "r")) == NULL) {
       fprintf (stderr, "Error in readPolar: cannot open: %s\n", fileName);
       return false;
    }
+   if (lang == FR) {
+      strncpy (csvSep, CSV_SEP_FR, sizeof (csvSep)); 
+	   setlocale (LC_NUMERIC, "");
+   }
    while (fgets (pLine, MAX_SIZE_LINE, f) != NULL) {
       c = 0;
-      strToken = strtok (pLine, CSV_SEP);
+      if (pLine [0] == '#') continue;          // ignore if comment
+      if (! strNchr (pLine, csvSep)) continue; // ignore if no separator
+         
+      strToken = strtok (pLine, csvSep);
       while ((strToken != NULL) && (c < MAX_N_POL_MAT_COLS)) {
          if (sscanf (strToken, "%lf", &v) == 1) {
             if (c == 0) {
-              if (v < lastValInCol0) break; // value of column 0 should progress
+              if (v < lastValInCol0) {
+                 fprintf (stderr, "Error in readPolar: value of column 0 should progress\n");
+                 break;
+              } 
               else lastValInCol0 = v; 
             }
             mat->t [mat->nLine][c] = v;
          }
          c += 1;
-         strToken = strtok (NULL, CSV_SEP);
+         strToken = strtok (NULL, csvSep);
       }
+      if (c <= 2) continue; // line is not validated if not at least 2 columns
       if (c >= MAX_N_POL_MAT_COLS) {
          fprintf (stderr, "Error in readPolar: max number of colums: %d\n", MAX_N_POL_MAT_COLS);
+         setlocale (LC_NUMERIC,"C");
+         fclose (f);
          return false;
       }
       if ((c == 0) && (v < lastValInCol0)) break;
-      mat->nLine+= 1;
+      mat->nLine+= 1; // line is not validated if not at least 2 columns
+      
       if (mat->nLine >= MAX_N_POL_MAT_LINES) {
          fprintf (stderr, "Error in readPolar: max number of line: %d\n", MAX_N_POL_MAT_LINES);
+         setlocale (LC_NUMERIC,"C");
+         fclose (f);
          return false;
       }
-      if (mat->nCol < c) mat->nCol = c; // max
+      if ((mat->nCol < c) && mat->nLine == 1) mat->nCol = c; // max
    }
    mat -> t [0][0] = -1;
    fclose (f);
+   setlocale (LC_NUMERIC,"C");
    return true;
 }
 
@@ -1833,7 +1793,7 @@ bool readParam (const char *fileName) {
    char *pLine = &buffer [0];
    memset (&par, 0, sizeof (Par));
    par.opt = 1;
-   par.tStep = 1;
+   par.tStep = 1.0;
    par.cogStep = 5;
    par.rangeCog = 90;
    par.maxIso = MAX_SIZE_ISOC;
@@ -1849,6 +1809,8 @@ bool readParam (const char *fileName) {
    par.xWind = 1.0;
    par.maxWind = 50.0;
    wayPoints.n = 0;
+   wayPoints.totOrthoDist = 0;
+   wayPoints.totLoxoDist = 0;
    
    if ((f = fopen (fileName, "r")) == NULL) {
       fprintf (stderr, "Error in readParam: Cannot open: %s\n", fileName);
@@ -1862,7 +1824,9 @@ bool readParam (const char *fileName) {
       if ((!*pLine) || *pLine == '#' || *pLine == '\n') continue;
       if ((pt = strchr (pLine, '#')) != NULL)               // comment elimination
          *pt = '\0';
-      if (sscanf (pLine, "WD:%255s", par.workingDir) > 0);  // should be first !!!
+      if (sscanf (pLine, "LANG:%d", &par.lang) > 0);
+      else if (sscanf (pLine, "ALLWAYS_SEA:%d", &par.allwaysSea) > 0);
+      else if (sscanf (pLine, "WD:%255s", par.workingDir) > 0);  // should be first !!!
       else if (sscanf (pLine, "POI:%255s", str) > 0) 
          buildRootName (str, par.poiFileName);
       else if (sscanf (pLine, "PORT:%255s", str) > 0)
@@ -1883,6 +1847,7 @@ bool readParam (const char *fileName) {
          if (wayPoints.n > MAX_N_WAY_POINT)
             fprintf (stderr, "Error in readParam: number of wayPoints exceeded; %d\n", MAX_N_WAY_POINT);
          else {
+            // printf ("WP: %d\n", wayPoints.n);
             analyseCoord (strchr (pLine, ':') + 1, &wayPoints.t [wayPoints.n].lat, &wayPoints.t [wayPoints.n].lon);
             wayPoints.n += 1;
          }
@@ -1911,6 +1876,7 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "CLI_HELP:%255s", str) > 0)
          buildRootName (str, par.cliHelpFileName);
       else if (sscanf (pLine, "HELP:%255s", par.helpFileName) > 0); // full link required
+      else if (sscanf (pLine, "PYTHON:%d", &par.python) > 0);
       else if (sscanf (pLine, "SMTP_SCRIPT:%255[^\n]s", par.smtpScript) > 0)
          g_strstrip (par.smtpScript);
       else if (sscanf (pLine, "IMAP_TO_SEEN:%255[^\n]s", par.imapToSeen) > 0)
@@ -1925,7 +1891,7 @@ bool readParam (const char *fileName) {
       }
       else if (sscanf (pLine, "MOST_RECENT_GRIB:%d", &par.mostRecentGrib) > 0);
       else if (sscanf (pLine, "START_TIME:%lf", &par.startTimeInHours) > 0);
-      else if (sscanf (pLine, "T_STEP:%d", &par.tStep) > 0);
+      else if (sscanf (pLine, "T_STEP:%lf", &par.tStep) > 0);
       else if (sscanf (pLine, "RANGE_COG:%d", &par.rangeCog) > 0);
       else if (sscanf (pLine, "COG_STEP:%d", &par.cogStep) > 0);
       else if (sscanf (pLine, "MAX_ISO:%d", &par.maxIso) > 0);
@@ -1959,7 +1925,7 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "DMS_DISP:%d", &par.dispDms) > 0);
       else if (sscanf (pLine, "WIND_DISP:%d", &par.windDisp) > 0);
       else if (sscanf (pLine, "INFO_DISP:%d", &par.infoDisp) > 0);
-      else if (sscanf (pLine, "AVR_OR_GUST_DISP:%d", &par.averageOrGustDisp) > 0);
+      else if (sscanf (pLine, "INDICATOR_DISP:%d", &par.indicatorDisp) > 0);
       else if (sscanf (pLine, "CURRENT_DISP:%d", &par.currentDisp) > 0);
       else if (sscanf (pLine, "WAVE_DISP:%d", &par.waveDisp) > 0);
       else if (sscanf (pLine, "GRID_DISP:%d", &par.gridDisp) > 0);
@@ -1980,7 +1946,12 @@ bool readParam (const char *fileName) {
          forbidZoneAdd (pLine, par.nForbidZone);
          par.nForbidZone += 1;
       }
+      else if (sscanf (pLine, "SMTP_SERVER:%255s", par.smtpServer) > 0);
+      else if (sscanf (pLine, "SMTP_USER_NAME:%255s", par.smtpUserName) > 0);
       else if (sscanf (pLine, "MAIL_PW:%255s", par.mailPw) > 0);
+      else if (sscanf (pLine, "IMAP_SERVER:%255s", par.imapServer) > 0);
+      else if (sscanf (pLine, "IMAP_USER_NAME:%255s", par.imapUserName) > 0);
+      else if (sscanf (pLine, "IMAP_MAIL_BOX:%255s", par.imapMailBox) > 0);
       else if ((par.nNmea < N_MAX_NMEA_PORTS) && 
               (sscanf (pLine, "NMEA:%255s %d", par.nmea [par.nNmea].portName, &par.nmea [par.nNmea].speed) > 0)) {
          par.nNmea += 1;
@@ -2007,6 +1978,8 @@ bool writeParam (const char *fileName, bool header, bool password) {
    }
    if (header) 
       fprintf (f, "Name             Value\n");
+   fprintf (f, "ALLWAYS_SEA:     %d\n", par.allwaysSea);
+   fprintf (f, "LANG:            %d\n", par.lang);
    fprintf (f, "WD:              %s\n", par.workingDir);
    fprintf (f, "POI:             %s\n", par.poiFileName);
    fprintf (f, "PORT:            %s\n", par.portFileName);
@@ -2023,7 +1996,7 @@ bool writeParam (const char *fileName, bool header, bool password) {
    if (par.currentGribFileName [0] != '\0')
       fprintf (f, "CURRENT_GRIB:    %s\n", par.currentGribFileName);
    fprintf (f, "MOST_RECENT_GRIB:%d\n", par.mostRecentGrib);
-   fprintf (f, "GRIB_RESOLUTION: %.1lf\n", par.gribResolution);
+   fprintf (f, "GRIB_RESOLUTION: %.2lf\n", par.gribResolution);
    fprintf (f, "GRIB_TIME_STEP:  %d\n", par.gribTimeStep);
    fprintf (f, "GRIB_TIME_MAX:   %d\n", par.gribTimeMax);
    fprintf (f, "POLAR:           %s\n", par.polarFileName);
@@ -2037,7 +2010,7 @@ bool writeParam (const char *fileName, bool header, bool password) {
       fprintf (f, "SHP:             %s\n", par.shpFileName [i]);
 
    fprintf (f, "START_TIME:      %.2lf\n", par.startTimeInHours);
-   fprintf (f, "T_STEP:          %d\n", par.tStep);
+   fprintf (f, "T_STEP:          %.2lf\n", par.tStep);
    fprintf (f, "RANGE_COG:       %d\n", par.rangeCog);
    fprintf (f, "COG_STEP:        %d\n", par.cogStep);
    fprintf (f, "MAX_ISO:         %d\n", par.maxIso);
@@ -2072,10 +2045,11 @@ bool writeParam (const char *fileName, bool header, bool password) {
    fprintf (f, "DMS_DISP:        %d\n", par.dispDms);
    fprintf (f, "WIND_DISP:       %d\n", par.windDisp);
    fprintf (f, "INFO_DISP:       %d\n", par.infoDisp);
-   fprintf (f, "AVR_OR_GUST_DISP:%d\n", par.averageOrGustDisp);
+   fprintf (f, "INDICATOR_DISP:  %d\n", par.indicatorDisp);
    fprintf (f, "CURRENT_DISP:    %d\n", par.currentDisp);
    fprintf (f, "WAVE_DISP:       %d\n", par.waveDisp);
    fprintf (f, "GRID_DISP:       %d\n", par.gridDisp);
+   fprintf (f, "LEVEL_POI_DISP:  %d\n", par.maxPoiVisible);
    fprintf (f, "SPEED_DISP:      %d\n", par.speedDisp);
    fprintf (f, "AIS_DISP:        %d\n", par.aisDisp);
    fprintf (f, "TECHNO_DISP:     %d\n", par.techno);
@@ -2083,13 +2057,18 @@ bool writeParam (const char *fileName, bool header, bool password) {
    fprintf (f, "J_FACTOR:        %d\n", par.jFactor);
    fprintf (f, "K_FACTOR:        %d\n", par.kFactor);
    fprintf (f, "N_SECTORS:       %d\n", par.nSectors);
+   fprintf (f, "PYTHON:          %d\n", par.python);
    fprintf (f, "SMTP_SCRIPT:     %s\n", par.smtpScript);
    fprintf (f, "IMAP_TO_SEEN:    %s\n", par.imapToSeen);
    fprintf (f, "IMAP_SCRIPT:     %s\n", par.imapScript);
    fprintf (f, "WEBKIT:          %s\n", par.webkit);
    fprintf (f, "EDITOR:          %s\n", par.editor);
    fprintf (f, "SPREADSHEET:     %s\n", par.spreadsheet);
-
+   fprintf (f, "SMTP_SERVER:     %s\n", par.smtpServer);
+   fprintf (f, "SMTP_USER_NAME:  %s\n", par.smtpUserName);
+   fprintf (f, "IMAP_SERVER:     %s\n", par.imapServer);
+   fprintf (f, "IMAP_USER_NAME:  %s\n", par.imapUserName);
+   fprintf (f, "IMAP_MAIL_BOX:   %s\n", par.imapMailBox);
    for (int i = 0; i < par.nNmea; i++)
       fprintf (f, "NMEA:            %s %d\n", par.nmea [i].portName, par.nmea [i].speed); 
 
@@ -2107,11 +2086,11 @@ bool writeParam (const char *fileName, bool header, bool password) {
 
 /*! URL for METEO Consult Wind delay hours before now at closest time 0Z, 6Z, 12Z, or 18Z 
 	Current 12 hours before new at 0Z */
-char *buildMeteoUrl (int type, int i, char *url) {
+char *buildMeteoConsultUrl (int type, int i, char *url) {
    const int METEO_CONSULT_WIND_DELAY = 6;
    const int METEO_CONSULT_CURRENT_DELAY = 12;
    time_t meteoTime = time (NULL) - (3600 * ((type == WIND) ? METEO_CONSULT_WIND_DELAY : METEO_CONSULT_CURRENT_DELAY));
-   struct tm * timeInfos = gmtime (&meteoTime);  // time 4 hours ago
+   struct tm * timeInfos = gmtime (&meteoTime);  // time 4 or 5 or 6 hours ago
    // printf ("Delay: %d hours ago: %s\n", delay [type], asctime (timeInfos));
    int mm = timeInfos->tm_mon + 1;
    int dd = timeInfos->tm_mday;
@@ -2128,7 +2107,7 @@ char *buildMeteoUrl (int type, int i, char *url) {
 /*! URL for NOAA Wind or ECMWF delay hours before now at closest time 0Z, 6Z, 12Z, or 18Z 
 	Current 12 hours before new at 0Z */
 char *buildWebGribUrl (char *url, int typeWeb, int topLat, int leftLon, int bottomLat, int rightLon, int step) {
-   const int NOAA_DELAY = 6;
+   const int NOAA_DELAY = 5; // hours
    const int ECMWF_DELAY = 9;
    char fileName [MAX_SIZE_FILE_NAME];
    time_t meteoTime = time (NULL) - (3600 * ((typeWeb == NOAA_WIND) ? NOAA_DELAY: ECMWF_DELAY));
@@ -2138,21 +2117,25 @@ char *buildWebGribUrl (char *url, int typeWeb, int topLat, int leftLon, int bott
    int mm = timeInfos->tm_mon + 1;
    int dd = timeInfos->tm_mday;
    int hh;
-
+   char startUrl [MAX_SIZE_LINE];
+   const int resolution = (par.gribResolution == 0.25) ? 25 : 50; // 25 mean 0.25 degree, 50 for 0.5 degree
    if (typeWeb == NOAA_WIND) {
       hh = (timeInfos->tm_hour / 6) * 6;    // select 0 or 6 or 12 or 18
-      const char *startUrl = "https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p50.pl?";
-   
-      snprintf (fileName, MAX_SIZE_FILE_NAME, "gfs.t%02dz.pgrb2full.0p50.f%03d", hh, step);
-      //snprintf (url, MAX_SIZE_BUFFER, "%sdir=/gfs.%4d%02d%02d/%02d/atmos&var_GUST=on&var_PRATE=on&var_PRMSL=on&var_UGRD=on&var_VGRD=on&subregion=&toplat=%d&leftlon=%d&rightlon=%d&bottomlat=%d&file=%s", startUrl, yy, mm, dd, hh, topLat, leftLon, rightLon, bottomLat, fileName); 
-      snprintf (url, MAX_SIZE_BUFFER, "%sdir=/gfs.%4d%02d%02d/%02d/atmos&var_UGRD=on&var_VGRD=on&subregion=&toplat=%d&leftlon=%d&rightlon=%d&bottomlat=%d&file=%s", startUrl, yy, mm, dd, hh, topLat, leftLon, rightLon, bottomLat, fileName); 
+      snprintf (startUrl, sizeof (startUrl), "https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p%d.pl?", resolution);
+      if (resolution == 25) // resolution = 0.25
+         snprintf (fileName, MAX_SIZE_FILE_NAME, "gfs.t%02dz.pgrb2.0p25.f%03d", hh, step);
+      else                  // resolution = 0.25
+         snprintf (fileName, MAX_SIZE_FILE_NAME, "gfs.t%02dz.pgrb2full.0p50.f%03d", hh, step);
+      snprintf (url, MAX_SIZE_BUFFER, "%sdir=/gfs.%4d%02d%02d/%02d/atmos&file=%s&var_GUST=on&var_PRMSL=on&var_PRATE=on&var_UGRD=on&var_VGRD=on&lev_10_m_above_ground=on&lev_surface=on&lev_mean_sea_level=on&subregion=&toplat=%d&leftlon=%d&rightlon=%d&bottomlat=%d", 
+         startUrl, yy, mm, dd, hh, fileName, topLat, leftLon, rightLon, bottomLat);
    }
-   else {
+   else { // ECMWF
       hh = (timeInfos->tm_hour / 12) * 12;    // select 0 or 12
-      const char *startUrl = "https://data.ecmwf.int/forecasts";
-   // example of directory; https://data.ecmwf.int/forecasts/20240806/00z/ifs/0p25/oper/
-   // example of filename : 20240806000000-102h-oper-fc.grib2
-      snprintf (url, MAX_SIZE_BUFFER, "%s/%4d%02d%02d/%02dz/ifs/0p25/oper/%4d%02d%02d%02d0000-%dh-oper-fc.grib2", startUrl, yy, mm, dd, hh, yy, mm, dd, hh, step); 
+      strncpy (startUrl, "https://data.ecmwf.int/forecasts", sizeof (startUrl));
+      // example of directory; https://data.ecmwf.int/forecasts/20240806/00z/ifs/0p25/oper/
+      // example of filename : 20240806000000-102h-oper-fc.grib2
+      snprintf (url, MAX_SIZE_BUFFER, "%s/%4d%02d%02d/%02dz/ifs/0p25/oper/%4d%02d%02d%02d0000-%dh-oper-fc.grib2",\
+          startUrl, yy, mm, dd, hh, yy, mm, dd, hh, step); 
    }
    return url;
 }
@@ -2164,16 +2147,16 @@ static size_t WriteCallback (const void* contents, size_t size, size_t nmemb, co
 }
 
 /*! return true if URL has been downloaded */
-bool curlGet (const char *url, char* outputFile) {
+bool curlGet (const char *url, char* outputFile, char *errMessage, int lMax) {
    long http_code;
    CURL* curl = curl_easy_init();
    if (!curl) {
-      fprintf (stderr, "Error in curlGet: Impossible to initialize curl\n");
+      strncpy (errMessage, "Impossible to initialize curl", lMax);
       return false;
    }
    FILE* f = fopen (outputFile, "wb");
    if (!f) {
-      fprintf (stderr, "Error in curlGet: Opening ouput file: %s\n", outputFile);
+      snprintf (errMessage, lMax, "Error opening outputFile: %s", outputFile);
       return false;
    }
 
@@ -2184,13 +2167,15 @@ bool curlGet (const char *url, char* outputFile) {
    CURLcode res = curl_easy_perform(curl);
    
    if (res != CURLE_OK) {
-      fprintf (stderr, "Error in curlGet: Downloading: %s\n", curl_easy_strerror(res));
+      snprintf (errMessage, lMax, "Error Downloading: %s\n", curl_easy_strerror(res));
+      fclose (f);
+      return false;
    }
    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
    curl_easy_cleanup(curl);
    fclose(f);
    if (http_code >= 400 || res != CURLE_OK) {
-      fprintf (stderr, "Error in curlget: HTTP response code: %ld\n", http_code);
+      snprintf (errMessage, lMax, "Error HTTP response code: %ld\n", http_code);
       return false;
    }
    return true;
@@ -2371,7 +2356,7 @@ bool isServerAccessible (const char *url) {
 bool OisDayLight (time_t t, double lat, double lon) {
    struct ln_lnlat_posn observer;
    struct ln_rst_time rst;
-   double julianDay;
+   double julianDay;https://data.ecmwf.int/forecasts
    int ret;
    observer.lat = lat; 
    observer.lng = lon; 
@@ -2434,3 +2419,72 @@ void initWithMostRecentGrib (void) {
    }
 }
 
+/*! send SMTP request with right parameters to grib mail provider */
+bool smtpGribRequest (int type, double lat1, double lon1, double lat2, double lon2, char *command, size_t maxLength) {
+   int i;
+   char temp [MAX_SIZE_LINE];
+   char commandLine [MAX_SIZE_LINE * 4];
+   char newPw [MAX_SIZE_NAME]; // only for Python case 
+   if (par.mailPw [0] == '\0') return false;
+   dollarSubstitute (par.mailPw, newPw, MAX_SIZE_NAME); // only for Python case
+   
+   lon1 = lonCanonize (lon1);
+   lon2 = lonCanonize (lon2);
+   
+   if ((lon1 > 0) && (lon2 < 0)) { // zone crossing antimeridien
+      fprintf (stderr, "Error in smtpGribRequest: Tentative to chttps://data.ecmwf.int/forecastsross antemeridian !\n");
+      lon2 = 179.0;
+   }
+   if (setlocale (LC_ALL, "C") == NULL) {                // very important for printf decimal numbers
+      fprintf (stderr, "Error in main: setlocale failed");
+      return false;
+   }
+   
+   lat1 = floor (lat1);
+   lat2 = ceil (lat2);
+   lon1 = floor (lon1);
+   lon2 = ceil (lon2);
+   if (type != MAILASAIL) {
+      snprintf (command, MAX_SIZE_BUFFER, "send %s:%d%c,%d%c,%d%c,%d%c|%.2lf,%.2lf|0,%d,..%d|%s",\
+         providerTab [type].service,\
+         (int) fabs (round(lat1)), (lat1 > 0) ? 'N':'S', (int) fabs (round(lat2)), (lat2 > 0) ? 'N':'S',\
+		   (int) fabs (round(lon1)), (lon1 > 0) ? 'E':'W', (int) fabs (round(lon2)), (lon2 > 0) ? 'E':'W',\
+		   par.gribResolution, par.gribResolution, par.gribTimeStep, par.gribTimeMax,\
+         providerTab [type].suffix);
+      // printf ("SMTP command: %s\n", command);
+      if (par.python) {
+         snprintf (commandLine, sizeof (commandLine), "%s %s grib \"%s\" %s\n", 
+         par.smtpScript, providerTab [type].address, command, newPw);
+      }
+      else
+         return smtpSend (providerTab [type].address, "grib", command);
+   }
+   else { //MAILASAIL:
+      //printf ("smtp mailasail python\n");
+      snprintf (command, MAX_SIZE_BUFFER, "grib gfs %d%c:%d%c:%d%c:%d%c ",
+         (int) fabs (round(lat1)), (lat1 > 0) ? 'N':'S', (int) fabs (round(lon1)), (lon1 > 0) ? 'E':'W',\
+         (int) fabs (round(lat2)), (lat2 > 0) ? 'N':'S', (int) fabs (round(lon2)), (lon2 > 0) ? 'E':'W');
+      for (i = 0; i < par.gribTimeMax; i+= par.gribTimeStep) {
+         snprintf (temp, MAX_SIZE_LINE, "%d,", i);
+	      g_strlcat (command, temp, maxLength);
+      }
+      snprintf (temp, MAX_SIZE_LINE, "%d %s", i, providerTab [type].suffix);
+      g_strlcat (command, temp, maxLength);
+      if (par.python) {
+         snprintf (commandLine, sizeof (commandLine), "%s %s \"%s\" grib %s\n", 
+         par.smtpScript, providerTab [type].address, command, newPw);
+      }
+      else 
+         return smtpSend (providerTab [type].address, command, "grib");
+   }
+   if (par.python) {
+      if (system (commandLine) != 0) {
+         fprintf (stderr, "Error in smtpGribRquest: system call %s\n", command);
+      }
+
+      char *pt = strrchr (commandLine, ' '); // do not print password
+      *pt = '\0';
+      printf ("End command: %s\n", command);
+   }
+   return true;
+}

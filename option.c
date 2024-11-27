@@ -30,16 +30,16 @@ static void initScenarioOption (void) {
       printf ("Cur grib loaded: %s\n", par.currentGribFileName);
       printf ("Grib DateTime0 : %s\n", gribDateTimeToStr (currentZone.dataDate [0], currentZone.dataTime [0], str, sizeof (str)));
    }
-   if (readPolar (par.polarFileName, &polMat))
+   if (readPolar (par.polarFileName, &polMat, par.lang))
       printf ("Polar loaded   : %s\n", par.polarFileName);
       
-   if (readPolar (par.wavePolFileName, &wavePolMat))
+   if (readPolar (par.wavePolFileName, &wavePolMat, par.lang))
       printf ("Polar loaded   : %s\n", par.wavePolFileName);
    
    nIsoc = 0;
    route.n = 0;
    route.destinationReached = false;
-   initWayPoints ();
+   // initWayPoints ();
 }
 
 /*! Manage command line option reduced to one character */
@@ -107,7 +107,7 @@ void optionManage (char option) {
       else printf ("No network\n");
       break;
    case 'p': // polar
-      readPolar (par.polarFileName, &polMat);
+      readPolar (par.polarFileName, &polMat, par.lang);
       polToStr (buffer, &polMat, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       while (true) {
@@ -119,7 +119,7 @@ void optionManage (char option) {
       }
       break;
    case 'P': // Wave polar
-      readPolar (par.wavePolFileName, &wavePolMat);
+      readPolar (par.wavePolFileName, &wavePolMat, par.lang);
       polToStr (buffer, &wavePolMat, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       while (true) {

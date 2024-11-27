@@ -35,9 +35,8 @@
 #include "rtypes.h"
 #include "rutil.h"
 #include "option.h"
-#include "gpsutil.h"
 
-char   parameterFileName [MAX_SIZE_FILE_NAME];
+char parameterFileName [MAX_SIZE_FILE_NAME];
 
 /*! make initializations and call opionManage () */
 int main (int argc, char *argv[]) {
@@ -51,6 +50,7 @@ int main (int argc, char *argv[]) {
    strncpy (parameterFileName, PARAMETERS_FILE, sizeof (parameterFileName));
    switch (argc) {
       case 1: // no parameter
+         ret = readParam (parameterFileName);
          optionManage ('h'); // help
          break;
       case 2: // one parameter

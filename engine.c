@@ -207,7 +207,7 @@ static int buildNextIsochrone (const Pp *pOr, const Pp *pDest, const Isoc isoLis
          newPt.father = isoList [k].id;
          newPt.vmc = 0;
          newPt.sector = 0;
-         if (isSea (tIsSea, newPt.lat, newPt.lon)) {
+         if (par.allwaysSea || isSea (tIsSea, newPt.lat, newPt.lon)) {
             newPt.dd = orthoDist (newPt.lat, newPt.lon, pDest->lat, pDest->lon);
             double alpha = orthoCap (pOr->lat, pOr->lon, newPt.lat, newPt.lon) - pOrToPDestCog;
          
@@ -355,6 +355,7 @@ static void statRoute (double lastStepDuration) {
       route.t [i-1].od = orthoDist (route.t[i-1].lat, route.t[i-1].lon, route.t[i].lat, route.t[i].lon);
       route.t [i-1].sog = route.t [i-1].od / par.tStep;
       route.totDist += route.t [i-1].od;
+      // printf ("i = %d, od = %.2lf, tot = %.2lf\n", i, route.t [i-1].od, route.totDist);
       route.duration += par.tStep;
       if (route.t [i-1].motor) {
          route.motorDuration += par.tStep;
@@ -377,7 +378,6 @@ static void statRoute (double lastStepDuration) {
    }
    route.t [route.n-1].time = par.tStep * (route.n-1) + par.startTimeInHours;
    route.duration += lastStepDuration;
-   route.totDist += route.t [route.n-1].od;
    if (route.t [route.n-1].motor) {
       route.motorDuration += lastStepDuration;
       route.motorDist += route.t [route.n-1].od;
@@ -405,11 +405,14 @@ static void statRoute (double lastStepDuration) {
       route.t [route.n-1].ld = loxoDist (route.t[route.n-1].lat, route.t[route.n-1].lon, par.pDest.lat, par.pDest.lon);
       route.t [route.n-1].od = orthoDist (route.t[route.n-1].lat, route.t[route.n-1].lon, par.pDest.lat, par.pDest.lon);
       route.t [route.n-1].sog =  route.t [route.n-1].od / route.lastStepDuration;
+      route.maxSog = MAX (route.maxSog, route.t [route.n-1].sog);
+      route.totDist += route.t [route.n-1].od;
    }
    route.avrTws /= route.n;
    route.avrGust /= route.n;
    route.avrWave /= route.n;
    route.avrSog = route.totDist / route.duration;
+   // printf ("od = %.2lf, tot = %.2lf\n", route.t [route.n-1].od, route.totDist); //ATT Other like od sog lcap should be considered
 }
 
 /*! store route */
@@ -458,7 +461,7 @@ void storeRoute (const Pp *pOr, const Pp *pDest, double lastStepDuration) {
    saveRoute ();
 }
 
-/*! produce struinc thatbsay if Motor; Tribord, Babord */
+/*! produce string that says if Motor, Tribord, Babord */
 static char *motorTribordBabord (bool motor, int amure, char* str, size_t len) {
    if (motor)
       strncpy (str, "Mot", len);
@@ -591,10 +594,10 @@ static inline bool goalP (const Pp *pFrom, const Pp *pDest, double t, double dt,
    // ATTENTION Courant non pris en compte dans la suite !!!
    twa = fTwa (cog, tws);      // angle of the boat with the wind
    *amure = (twa > 0) ? TRIBORD : BABORD;
-   *motor =  ((maxSpeedInPolarAt (tws * par.xWind, &polMat) < par.threshold) && (par.motorSpeed > 0));
+   // *motor =  ((maxSpeedInPolarAt (tws * par.xWind, &polMat) < par.threshold) && (par.motorSpeed > 0)); // ATT
    // printf ("maxSpeedinPolar: %.2lf\n", maxSpeedInPolarAt (tws, &polMat));
    double efficiency = (isDayLight (t, pFrom->lat, pFrom->lon)) ? par.dayEfficiency : par.nightEfficiency;
-   sog = (motor) ? par.motorSpeed : efficiency * findPolar (twa, tws * par.xWind, polMat); 
+   sog = (*motor) ? par.motorSpeed : efficiency * findPolar (twa, tws * par.xWind, polMat); 
    if ((w > 0) && ((waveCorrection = findPolar (twa, w, wavePolMat)) > 0)) { 
       sog = sog * (waveCorrection / 100.0);
    }
@@ -604,6 +607,7 @@ static inline bool goalP (const Pp *pFrom, const Pp *pDest, double t, double dt,
       else penalty = par.penalty1 / 60.0;                   // empannage Jibe
    }
    else penalty = 0;
+   // printf ("In goalP: distance = %.2lf, sog = %.2lf motor = %d\n", *distance, sog, *motor);
    return ((sog * (dt - penalty)) > *distance);
 }
 
@@ -616,7 +620,7 @@ static inline bool goal (Pp *pDest, int nIsoc, const Isoc isoList, int len, doub
    bool destinationReached = false;
    isoDesc [nIsoc].distance = 9999.99;
    for (int k = 0; k < len; k++) {
-      if (isSea (tIsSea, isoList [k].lat, isoList [k].lon)) { 
+      if (par.allwaysSea || isSea (tIsSea, isoList [k].lat, isoList [k].lon)) { 
          if (goalP (&isoList [k], pDest, t, dt, &time, &distance, motor, amure))
             destinationReached = true;
 
@@ -706,6 +710,7 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
       return nIsoc + 1;
    }
    isoDesc [nIsoc].size = buildNextIsochrone (pOr, pDest, tempList, 1, t, dt, isocArray [nIsoc], &theBestVmg);
+   if (isoDesc [nIsoc].size == -1) return -1;
    // printf ("%-20s%d, %d\n", "Isochrone no, len: ", 0, isoDesc [0].size);
    lastBestVmg = theBestVmg;
    isoDesc [nIsoc].bestVmg = theBestVmg;
@@ -720,22 +725,25 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
    
    nIsoc += 1;
    //printf ("Routing t = %.2lf, zone: %.2ld\n", t, zone.timeStamp [zone.nTimeStamp-1]);
-   while (t < (zone.timeStamp [zone.nTimeStamp-1]/* + par.tStep*/) && (nIsoc < par.maxIso)) {
+   while (t < (zone.timeStamp [zone.nTimeStamp - 1]/* + par.tStep*/) && (nIsoc < par.maxIso)) {
       t += dt;
-      if (goal (pDest, nIsoc-1, isocArray [nIsoc -1], isoDesc[nIsoc - 1].size, t, dt, &timeLastStep, &motor, &amure)) {
+      // printf ("nIsoc = %d\n", nIsoc);
+      if (goal (pDest, nIsoc - 1, isocArray [nIsoc - 1], isoDesc[nIsoc - 1].size, t, dt, &timeLastStep, &motor, &amure)) {
          isoDesc [nIsoc].size = optimize (pOr, pDest, nIsoc, par.opt, tempList, lTempList, isocArray [nIsoc]);
          if (isoDesc [nIsoc].size == 0) { // no Wind ... we copy
-            isoDesc  [nIsoc].size = isoDesc [nIsoc -1].size;
-            memcpy (isocArray [nIsoc], isocArray [nIsoc-1], isoDesc [nIsoc-1].size * sizeof (Pp));
+            isoDesc  [nIsoc].size = isoDesc [nIsoc - 1].size;
+            memcpy (isocArray [nIsoc], isocArray [nIsoc - 1], isoDesc [nIsoc - 1].size * sizeof (Pp));
          }
          isoDesc [nIsoc].first = findFirst (nIsoc);
          lastClosest = closest (isocArray [nIsoc], isoDesc[nIsoc].size, pDest, &index);
          isoDesc [nIsoc].closest = index; 
          isoDesc [nIsoc].toIndexWp = toIndexWp; 
          *lastStepDuration = timeLastStep;
+         // printf ("destination reached\n");
          return nIsoc + 1;
       }
-      lTempList = buildNextIsochrone (pOr, pDest, isocArray [nIsoc -1], isoDesc [nIsoc -1].size, t, dt, tempList, &theBestVmg);
+      // printf ("continue\n");
+      lTempList = buildNextIsochrone (pOr, pDest, isocArray [nIsoc -1], isoDesc [nIsoc - 1].size, t, dt, tempList, &theBestVmg);
       if (lTempList == -1) return -1;
       lastBestVmg = theBestVmg;
       isoDesc [nIsoc].bestVmg = theBestVmg;

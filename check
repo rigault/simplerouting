@@ -8,4 +8,5 @@ gcc -fanalyzer -c engine.c `pkg-config --cflags glib-2.0`
 gcc -fanalyzer -c rutil.c `pkg-config --cflags glib-2.0`
 gcc -fanalyzer -c aisgps.c `pkg-config --cflags glib-2.0`
 gcc -fanalyzer -c option.c `pkg-config --cflags glib-2.0`
+gcc -fanalyzer -c mailutil.c `pkg-config --cflags gtk4`
 gcc -fanalyzer -c show4.c `pkg-config --cflags gtk4`

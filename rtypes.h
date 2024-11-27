@@ -5,6 +5,7 @@
 
 #define N_MAX_NMEA_PORTS      3
 #define CSV_SEP               ";,\t"
+#define CSV_SEP_FR            ";\t"
 #define GPS_TIME_OUT          2000000           // 2 seconds
 #define N_WIND_URL            6
 #define N_CURRENT_URL         6
@@ -34,10 +35,11 @@
 #define NIL                   (-100000)
 #define MAX_N_DAYS_WEATHER    16               // Max number od days for weather forecast
 #define MAX_N_ISOC            (24*MAX_N_DAYS_WEATHER+1) // max number of isochrones in isocArray
-#define MAX_SIZE_ISOC         10000            // max number of point in an isochrone
+#define MAX_SIZE_ISOC         20000            // max number of point in an isochrone
 #define MAX_N_POL_MAT_COLS    64
 #define MAX_N_POL_MAT_LINES   64
 #define MAX_SIZE_LINE         256		         // max size of pLine in text files
+#define MAX_SIZE_LINE_BASE64  1024              // max size of line in base64 mail file
 #define MAX_SIZE_URL          512		         // max size of a URL
 #define MAX_SIZE_DATE         32                // max size of a string with date inside
 #define MAX_SIZE_BUFFER       1000000
@@ -61,10 +63,10 @@
 #define GPSD_TCP_PORT         "2947"            // TCP port for gps demon
 #define MAX_SIZE_FORBID_ZONE  100               // max size per forbidden zone
 #define MAX_N_FORBID_ZONE     10                // max nummber of forbidden zones
-#define N_PROVIDERS           8                 // for DictProvider dictTab size
+#define N_PROVIDERS           9                 // for DictProvider dictTab size
 #define MAX_INDEX_ENTITY      512               // for shp. Index.
 
-enum {NOAA_WIND, ECMWF_WIND};                   // NOAA or ECMWF for web download
+enum {NOAA_WIND, ECMWF_WIND, MAIL, MAIL_SAILDOCS_CURRENT}; // NOAA or ECMWF for web download or MAIL. Specific for current
 enum {GPS_INDEX, AIS_INDEX};                    // for NMEA USB serial port reading
 enum {WIND, CURRENT};                           // for grib information, either WIND or CURRENT
 enum {POLAR, WAVE_POLAR};                       // for polar information, either POLAR or WAVE
@@ -78,11 +80,24 @@ enum {UNVISIBLE, NORMAL, CAT, PORT, NEW};       // for POI point of interest
 enum {RUNNING, STOPPED, NO_SOLUTION, EXIST_SOLUTION}; // for chooseDeparture.ret values
 enum {NO_ANIMATION, PLAY, LOOP};                // for animationActive status
 enum {WIND_DISP, GUST_DISP, WAVE_DISP, RAIN_DISP, PRESSURE_DISP}; // for display
+enum {EN, FR};                                  // for readPolar
 
 /*! for meteo services */
-enum {SAILDOCS_GFS, SAILDOCS_ECMWF, SAILDOCS_ICON, SAILDOCS_ARPEGE, SAILDOCS_AROME, SAILDOCS_CURR, MAILASAIL, GLOBALMARINET}; // grib mail service providers
-struct DictElmt {int id; char name [MAX_SIZE_NAME];};
-struct DictProvider {char address [MAX_SIZE_LINE]; char libelle [MAX_SIZE_LINE]; char service [MAX_SIZE_NAME];};
+enum {SAILDOCS_GFS, SAILDOCS_ECMWF, SAILDOCS_ICON, SAILDOCS_ARPEGE, SAILDOCS_AROME, SAILDOCS_CURR, MAILASAIL, NOT_MAIL}; 
+// grib mail service providers
+// GLOBAL_MARINET no longer supported
+struct DictElmt {
+   int id; 
+   char name [MAX_SIZE_NAME];
+};
+
+struct DictProvider {
+   char address [MAX_SIZE_LINE];
+   char libelle [MAX_SIZE_LINE];
+   char service [MAX_SIZE_NAME];
+   int  nShortNames;
+   char suffix [MAX_SIZE_NAME];
+};
 
 /*! Structure to store coordinates */
 typedef struct {
@@ -305,9 +320,11 @@ typedef struct {
 
 /*! Parameters */
 typedef struct {
+   int allwaysSea;                           // if 1 (true) then isSea is allways true. No earth avoidance !
+   int lang;                                 // Language for numeric decimal values in readPolar
    int maxPoiVisible;                        // poi visible if <= maxPoiVisible
    int opt;                                  // 0 if no optimization, else number of opt algorithm
-   int tStep;                                // hours
+   double tStep;                             // hours
    int cogStep;                              // step of cog in degrees
    int rangeCog;                             // range of cog from x - RANGE_GOG, x + RAGE_COG+1
    int maxIso;                               // max number of isochrones
@@ -358,7 +375,7 @@ typedef struct {
    int windDisp;                             // display wind nothing or barbule or arrow
    int currentDisp;                          // display current
    int waveDisp;                             // display wave height
-   int averageOrGustDisp;                    // display wave height
+   int indicatorDisp;                        // indicator to display : wind, gist, waves, rain, pressure
    int gridDisp;                             // display meridian and parallels
    int closestDisp;                          // display closest point to pDest in isochrones
    int focalDisp;                            // display focal point 
@@ -376,6 +393,12 @@ typedef struct {
    char editor [MAX_SIZE_NAME];              // name of text file editor
    char webkit [MAX_SIZE_NAME];              // name of webkit application
    char spreadsheet [MAX_SIZE_NAME];         // name of spreadshhet application
+   int  python;                              // true if python script use for mail grib request
+   char smtpServer [MAX_SIZE_NAME];          // SMTP server name
+   char smtpUserName [MAX_SIZE_NAME];        // SMTP user name
+   char imapServer [MAX_SIZE_NAME];          // IMAP server name
+   char imapUserName [MAX_SIZE_NAME];        // IMAP user name
+   char imapMailBox [MAX_SIZE_NAME];         // IMAP mail box
    char mailPw [MAX_SIZE_NAME];              // password for smtp and imap
    bool storeMailPw;                         // store Mail PW
    int  nForbidZone;                         // number of forbidden zones
