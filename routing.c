@@ -47,7 +47,7 @@ int main (int argc, char *argv[]) {
       return EXIT_FAILURE;
    }
 
-   strncpy (parameterFileName, PARAMETERS_FILE, sizeof (parameterFileName));
+   strncpy (parameterFileName, PARAMETERS_FILE, sizeof (parameterFileName) - 1);
    switch (argc) {
       case 1: // no parameter
          ret = readParam (parameterFileName);

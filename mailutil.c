@@ -1,4 +1,5 @@
 /*! compilation: gcc -c mailutil.c `pkg-config --cflags glib-2.0` */
+#define _POSIX_C_SOURCE 200809L // to avoid warning with -std=c11 when using popen function (Posix)
 #include <ctype.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -11,7 +12,7 @@
 #define TEMP_FETCH          "tempfetch.tmp"
 #define MAX_N_ERROR_MESSAGE 10
 
-extern char *dollarSubstitute (const char* str, char *res, size_t maxSize);
+extern char *dollarSubstitute (const char* str, char *res, size_t maxLen);
 extern Par par;
 
 struct uploadStatus {
@@ -34,11 +35,34 @@ static size_t payloadSource (void *ptr, size_t size, size_t nmemb, void *userp) 
    return 0;
 }
 
+/*! send using smtp mail with object and messsage to toAddress with python script */
+bool smtpSendPython (const char *toAddress, const char *object, const char *message) {
+   char commandLine [MAX_SIZE_LINE * 4];
+   char newPw [MAX_SIZE_NAME]; // only for Python case 
+
+   dollarSubstitute (par.mailPw, newPw, MAX_SIZE_NAME);
+
+   snprintf (commandLine, sizeof (commandLine), "%s %s \"%s\" \"%s\" %s\n", 
+      par.smtpScript, toAddress, object, message, newPw);
+   
+   if (system (commandLine) != 0) {
+      fprintf (stderr, "Error in smtpGribRquest: system call %s\n", commandLine);
+      return false;
+   }
+
+   char *pt = strrchr (commandLine, ' '); // do not print password
+   *pt = '\0';
+   printf ("End command: %s\n", commandLine);
+   return true;
+}
+
 /*! send using smtp mail with object and messsage to toAddress */
 bool smtpSend (const char *toAddress, const char *object, const char *message) {
    CURL *curl;
    CURLcode res;
    struct curl_slist *recipients = NULL;
+   if (par.python)
+      return smtpSendPython (toAddress, object, message);
 
    // email content building
    size_t payload_size = strlen (toAddress) + strlen (par.smtpUserName) + strlen (object) + strlen (message) + 256;
@@ -104,7 +128,7 @@ bool smtpSend (const char *toAddress, const char *object, const char *message) {
 /*! mark all messages of mailbox as read 
    return false if no message marked, true if at least one marked */
 static bool markAsReadPython () {
-   char command [MAX_SIZE_LINE *2] = "";
+   char command [MAX_SIZE_LINE * 2] = "";
    char newPw [MAX_SIZE_NAME];
    dollarSubstitute (par.mailPw, newPw, MAX_SIZE_NAME);
    snprintf (command, sizeof (command), "%s %s", par.imapToSeen, newPw);
@@ -154,7 +178,7 @@ static void writeErrorMessage (const char *filename, int n) {
       fprintf (stderr, "In extractFilename: Error opening file: %s\n", filename);
       return;
    }
-   while (fgets(line, sizeof(line), file) && count < n) {
+   while (fgets(line, sizeof (line), file) && count < n) {
       gchar *lowerLine = g_ascii_strdown (line, -1);
       if (strstr (lowerLine, "error")) {
          count = 1;
@@ -178,7 +202,7 @@ static char* extractFilename (const char *filename) {
       return NULL;
    }
 
-   while (fgets(line, sizeof(line), file)) {
+   while (fgets (line, sizeof (line), file)) {
       // check Content-Disposition ou Content-Type with "filename=" or "name="
       gchar *lowerLine = g_ascii_strdown (line, -1);
 
@@ -194,8 +218,8 @@ static char* extractFilename (const char *filename) {
             filenameFound = g_strdup(start); // Copy filename
             break;
          }
-      g_free (lowerLine);
       }
+      g_free (lowerLine);
    }
    fclose(file);
    if (!filenameFound) {
@@ -240,11 +264,11 @@ static char *extractBase64Content (const char *filename) {
 
    if (contentBuffer->len == 0) {
       fprintf (stderr, "in extractBase64Content: no data found in file: %s\n", filename);
-      g_string_free(contentBuffer, TRUE);
+      g_string_free (contentBuffer, TRUE);
       return NULL;
    }
 
-   char *base64_content = g_strdup(contentBuffer->str);
+   char *base64_content = g_strdup (contentBuffer->str);
    g_string_free (contentBuffer, TRUE);
    return base64_content;
 }
@@ -272,7 +296,7 @@ static size_t writeToFile (void *ptr, size_t size, size_t nmemb, FILE *stream) {
 }
 
 /*! read imapbox, check if unseen message. Save first (oldest) content of message in a file */
-static int imapRead (const char* imapServer, const char*username, const char* password, const char *mailbox, char *tempFileName) {
+static int imapRead (const char* imapServer, const char *username, const char *password, const char *mailbox, const char *tempFileName) {
    CURL *curl;
    CURLcode res;
    int firstUnSeen = 0;;
@@ -361,7 +385,7 @@ static int imapRead (const char* imapServer, const char*username, const char* pa
 }
 
 /*! python version for imapGetUnseen */
-static int imapGetUnseenPython (const char *path, char *gribFileName) {
+static int imapGetUnseenPython (const char *path, char *gribFileName, size_t maxLen) {
    char *fileName;
    const int MAX_LINES = 10;
    char line[MAX_SIZE_LINE] = "";
@@ -382,11 +406,12 @@ static int imapGetUnseenPython (const char *path, char *gribFileName) {
    while ((fgets (line, sizeof(line)-1, fp) != NULL) && (n < MAX_LINES)) {
       n += 1;
       printf ("count: %d line: %d: %s", count, n, line);
-      g_strlcat (buffer, line, MAX_SIZE_BUFFER);
+      g_strlcat (buffer, line, sizeof (buffer));
    }
    count += 1;
    pclose(fp);
    if (n > 1) {
+      // printf ("imapGetUnseenPython\n");
       if (strstr (buffer, "Email size limit exceeded") != NULL) {
          return -1;
       }
@@ -396,14 +421,14 @@ static int imapGetUnseenPython (const char *path, char *gribFileName) {
          if ((end = strstr (fileName, " ")) != NULL)
             *(end) = '\0';
          printf ("fileName found:%s\n", fileName);
-         strncpy (gribFileName, fileName, MAX_SIZE_FILE_NAME);
+         g_strlcpy (gribFileName, fileName, maxLen);
          return 1;
       }
       else {
          return -1;
       }
    }
-   return -1;
+   else return 0;
 }
 
 /*! read mailbox, check unseen message. If exist, the grib file is decoded and saved in directory path 
@@ -412,14 +437,14 @@ static int imapGetUnseenPython (const char *path, char *gribFileName) {
    return 1 : unseen message found and decoded 
    name of grib file found returned in gribFileName */
 int imapGetUnseen (const char* imapServer, const char *username, 
-   const char* password, const char *mailbox, const char *path, char *gribFileName) {
+   const char* password, const char *mailbox, const char *path, char *gribFileName, size_t maxLen) {
    if (par.python) {
-      return imapGetUnseenPython (path, gribFileName);
+      return imapGetUnseenPython (path, gribFileName, maxLen);
    }
    // Step1: find the unread message in mailbox and produce temporary file
-   char tempFileName [MAX_SIZE_NAME];
+   char tempFileName [MAX_SIZE_FILE_NAME];
 
-   snprintf (tempFileName, MAX_SIZE_NAME, "%s/%s", path, TEMP_FETCH);
+   snprintf (tempFileName, sizeof (tempFileName), "%s/%s", path, TEMP_FETCH);
    //printf ("tempFileName: %s\n", tempFileName);
    int res = imapRead (imapServer, username, password, mailbox, tempFileName);
    if (res < 1) return 0; // normal return. No error but no message found
@@ -433,7 +458,7 @@ int imapGetUnseen (const char* imapServer, const char *username,
       writeErrorMessage (tempFileName, MAX_N_ERROR_MESSAGE);
       return -1;          // Error: Message found with no gribfile name inside
    }
-   snprintf (gribFileName, MAX_SIZE_NAME, "%s/%s", path, extractedName);
+   snprintf (gribFileName, maxLen, "%s/%s", path, extractedName);
    // printf("Total Grib File Name: %s\n", gribFileName);
 
    // Step 3: extract base64 encoded content from temporary file
@@ -441,16 +466,18 @@ int imapGetUnseen (const char* imapServer, const char *username,
    if (!base64_content) {
       writeErrorMessage (tempFileName, MAX_N_ERROR_MESSAGE);
       fprintf (stderr, "Impossible to extract encoded content.\n");
+      g_free (extractedName);
       return -1;          // Error: Message found but not decodable
    }
 
    // Step 4: Decode Base64 content
    gsize decoded_length;
-   guchar *decoded_data = g_base64_decode(base64_content, &decoded_length);
+   guchar *decoded_data = g_base64_decode (base64_content, &decoded_length);
    g_free (base64_content);
 
    if (!decoded_data) {
       fprintf (stderr, "Error decoding Base64.\n");
+      g_free (extractedName);
       return -1;           // Error
    }
 
@@ -459,6 +486,7 @@ int imapGetUnseen (const char* imapServer, const char *username,
    if (gribFile == NULL) {
       fprintf (stderr, "Error creating output grib file: %s\n", gribFileName);
       g_free (decoded_data);
+      g_free (extractedName);
       return -1;            // Error
    }
 

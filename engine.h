@@ -13,4 +13,10 @@ extern bool    dumpAllIsoc (const char *fileName);
 extern bool    dumpRoute (const char *fileName, Pp dest);
 extern void    *routingLaunch ();
 extern void    *bestTimeDeparture ();
+extern void    *allCompetitors ();
+extern int     mainCompetitor ();
+extern void    freeHistoryRoute();
+
+
+
 

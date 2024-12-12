@@ -52,7 +52,7 @@ struct {
 } gpsRecord;
 
 /*! gps information for helpInfo */
-char *nmeaInfo (char *strGps, int len) {
+char *nmeaInfo (char *strGps, int maxLen) {
    char str [MAX_SIZE_LINE];
    strGps [0] = '\0';
    for (int i = 0; i < par.nNmea; i++) {
@@ -60,7 +60,7 @@ char *nmeaInfo (char *strGps, int len) {
          par.nmea [i].portName, 
          par.nmea [i].speed,
          (par.nmea [i].open) ? "Open\n" : "Closed\n");
-      g_strlcat (strGps, str, len);
+      g_strlcat (strGps, str, maxLen);
    }
    return strGps;
 }
@@ -185,7 +185,7 @@ bool testAisTable () {
    ship->mmsi = 227191400;
    ship->lat = 48.858844;
    ship->lon = 2.294351;
-   strncpy (ship->name, "hello", 21);
+   g_strlcpy (ship->name, "hello", 21);
    ship->lat = 45.2;
    ship->lon = -2.5;
    ship->cog = 45;
@@ -194,7 +194,7 @@ bool testAisTable () {
 
    ship = calloc (1, sizeof(AisRecord));
    ship->mmsi = 607191800;
-   strncpy (ship->name, "bobo", 21);
+   g_strlcpy (ship->name, "bobo", 21);
    ship->lat = 45.3;
    ship->lon = -2.2;
    ship->cog = -45;
@@ -203,7 +203,7 @@ bool testAisTable () {
 
    ship = calloc (1, sizeof(AisRecord));
    ship->mmsi = 999193900;
-   strncpy (ship->name, "coco", 21);
+   g_strlcpy (ship->name, "coco", 21);
    ship->lat = 45.4;
    ship->lon = -3;
    ship->cog = 180;
@@ -232,7 +232,7 @@ void aisToStr (char *res, size_t maxLength) {
       AisRecord *ship = (AisRecord *)value;
       // printf ("Ship MMSI=%d, Lat=%f, Lon=%f\n", ship->mmsi, ship->lat, ship->lon);
       if ((midToCountry (par.midFileName, ship->mmsi / 1000000, country)) == NULL)
-         strncpy (country, "NA", 3);
+         g_strlcpy (country, "NA", 3);
       country [12] = '\0'; // truncated before snprint
       
       snprintf (line, MAX_SIZE_LINE, "%-21s %-12s %8.0d %9d %-12s %-12s %6.2lf %4d %-s\n",
@@ -240,8 +240,8 @@ void aisToStr (char *res, size_t maxLength) {
          country,
          ship->minDist,
          ship->mmsi,
-         latToStr (ship->lat, par.dispDms, strLat), 
-         lonToStr (ship->lon, par.dispDms, strLon),
+         latToStr (ship->lat, par.dispDms, strLat, sizeof (strLat)), 
+         lonToStr (ship->lon, par.dispDms, strLon, sizeof (strLon)),
          ship->sog,
          ship->cog,
          epochToStr (ship->lastUpdate, false, strDate, MAX_SIZE_DATE));
@@ -303,7 +303,7 @@ static void extract_bits (const char *payload, char *bits) {
 /*! extract integer value within a bit string */
 static int getIntFromBits (const char *bits, int start, int length) {
    char buf [33];
-   strncpy (buf, bits + start, length);
+   g_strlcpy (buf, bits + start, length);
    buf [length] = '\0';
    return (int) strtol(buf, NULL, 2);
 }
@@ -440,7 +440,7 @@ static void decodeAisPayload (const char *payload) {
    if (latitude != NIL) ship->lat = ((double) latitude) / 600000.0;
    if (longitude != NIL) ship->lon = ((double) longitude) / 600000.0;
    if ((course >= 0) && (course <= 3600)) ship->cog = ((double) course) / 10.0;
-   if (shipName [0] != '\0') strncpy (ship->name, shipName, MAX_SIZE_SHIP_NAME);
+   if (shipName [0] != '\0') g_strlcpy (ship->name, shipName, MAX_SIZE_SHIP_NAME);
    ship->lastUpdate = time (NULL);
 
    if (my_gps_data.OK) {
@@ -475,7 +475,7 @@ static void decodeAisPayload (const char *payload) {
  * AIVDO :  
  * $AIVDM,1,1,,B,15Muq30003wtPj8MrbQ@bDwt2<0b,0*34 
   * return true if frame decoded */
-static bool decodeNMEA (char *line) {
+static bool decodeNMEA (const char *line) {
    char lig [MAX_SIZE_NMEA];
    //fields found in NMEA AIS Frame*/
    struct {
@@ -602,7 +602,7 @@ void *getNmea (gpointer x) {
 	      // printf ("buffer: %s\n", buffer);
 
          // Ajoutez les nouvelles données dans le tampon temporaire
-         strncat(tempBuffer, buffer, bytesRead);
+         g_strlcat (tempBuffer, buffer, bytesRead);
          tempBufferPos += bytesRead;
 
          // Recherchez des trames complètes dans le tampon temporaire
@@ -612,7 +612,7 @@ void *getNmea (gpointer x) {
          while ((end = strchr(start, '\n')) != NULL) {
             *end = '\0'; // Terminez la trame à la fin de ligne
             if (((start[0] == '!') || (start[0] == '$')) && checksumOK(start)) {
-               decodeNMEA(start);
+               decodeNMEA (start);
             }
             start = end + 1;
          }

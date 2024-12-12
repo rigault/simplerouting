@@ -1,20 +1,32 @@
 /* this file includes in other file provides
-. Constant definition with #define
+. Constant definition with #define and enum
 . Type definitions with typedef
 */
 
+#define N_METEO_CONSULT_WIND_URL    6
+#define N_METEO_CONSULT_CURRENT_URL 6
+#define METEO_CONSULT_WIND_DELAY    5  // nb hours after time run to get new grib
+#define METEO_CONSULT_CURRENT_DELAY 12
+#define NOAA_DELAY                  5
+#define ECMWF_DELAY                 8
+#define METEO_CONSULT_ROOT_GRIB_URL "https://static1.mclcm.net/mc2020/int/cartes/marine/grib/" // Meteoconsult
+#define NOAA_ROOT_GRIB_URL          "https://nomads.ncep.noaa.gov/cgi-bin/"
+#define NOAA_GENERAL_PARAM_GRIB_URL "var_GUST=on&var_PRMSL=on&var_PRATE=on&var_UGRD=on&var_VGRD=on&lev_10_m_above_ground=on&lev_surface=on&lev_mean_sea_level=on"
+#define ECMWF_ROOT_GRIB_URL         "https://data.ecmwf.int/forecasts/"
+
 #define N_MAX_NMEA_PORTS      3
-#define CSV_SEP               ";,\t"
-#define CSV_SEP_FR            ";\t"
+#define CSV_SEP               ",;\t"            // general separators for CSV files
+#define CSV_SEP_POLAR         ";\t"             // for polar no comma because decimal separator may be comma 
 #define GPS_TIME_OUT          2000000           // 2 seconds
-#define N_WIND_URL            6
-#define N_CURRENT_URL         6
-#define ROOT_GRIB_URL         "https://static1.mclcm.net/mc2020/int/cartes/marine/grib/" // Meteoconsult
 //#define WORKING_DIR           "/home/rr/routing/"
 #define WORKING_DIR           "" //ATT
 #define PARAMETERS_FILE       WORKING_DIR"par/routing.par" // default parameter file
 #define TEMP_FILE_NAME        "routing.tmp"  
 #define PROG_LOGO             "routing.png"  
+#define MIN_LAT               (-80.0)           // Minimum latitude for getCoord
+#define MAX_LAT               80.0              // Maximum latitude for getCoord
+#define MIN_LON               (-180.0)          // Minimum longitude for getCoord
+#define MAX_LON               180.0             // Maximum longitude for getCoord
 #define MIN_SPEED_FOR_TARGET  5                 // knots. Difficult to explain. See engine.c, optimize()..
 //#define MISSING               (-999999)       // for grib file missing values
 #define MISSING               (0.001)           // for grib file missing values
@@ -40,7 +52,9 @@
 #define MAX_N_POL_MAT_LINES   64
 #define MAX_SIZE_LINE         256		         // max size of pLine in text files
 #define MAX_SIZE_LINE_BASE64  1024              // max size of line in base64 mail file
-#define MAX_SIZE_URL          512		         // max size of a URL
+#define MAX_SIZE_TEXT         2048		         // max size of text
+#define MAX_SIZE_MESSAGE      2048		         // max size of a mail message
+#define MAX_SIZE_URL          1024		         // max size of a URL
 #define MAX_SIZE_DATE         32                // max size of a string with date inside
 #define MAX_SIZE_BUFFER       1000000
 #define MAX_N_TIME_STAMPS     512
@@ -59,12 +73,15 @@
 #define SMALL_SIZE            5                 // for short string
 #define MAX_SIZE_POI_NAME     64                // max size of city name
 #define MAX_SIZE_COUNTRY_CODE 3                 // max size of country code
-#define MAX_HISTORY_ROUTE     10                // max nimbedr of history route stored
+#define MAX_HISTORY_ROUTE     10                // max number of history route stored
 #define GPSD_TCP_PORT         "2947"            // TCP port for gps demon
 #define MAX_SIZE_FORBID_ZONE  100               // max size per forbidden zone
 #define MAX_N_FORBID_ZONE     10                // max nummber of forbidden zones
-#define N_PROVIDERS           9                 // for DictProvider dictTab size
+#define N_METEO_ADMIN         4                 // administration: Weather Service US, DWD, etc
+#define N_MAIL_SERVICES       9                 // for mailServiceTab size
+#define N_WEB_SERVICES        2                 // for service Tab size (NOAA and ECMWF)
 #define MAX_INDEX_ENTITY      512               // for shp. Index.
+#define MAX_N_COMPETITORS     16                // Number max of competitors
 
 enum {NOAA_WIND, ECMWF_WIND, MAIL, MAIL_SAILDOCS_CURRENT}; // NOAA or ECMWF for web download or MAIL. Specific for current
 enum {GPS_INDEX, AIS_INDEX};                    // for NMEA USB serial port reading
@@ -77,26 +94,31 @@ enum {NO_COLOR, B_W, COLOR};                    // wind representation
 enum {NONE, ARROW, BARBULE};                    // wind representation 
 enum {NOTHING, JUST_POINT, SEGMENT, BEZIER};    // bezier or segment representation
 enum {UNVISIBLE, NORMAL, CAT, PORT, NEW};       // for POI point of interest
-enum {RUNNING, STOPPED, NO_SOLUTION, EXIST_SOLUTION}; // for chooseDeparture.ret values
+enum {RUNNING, STOPPED, NO_SOLUTION, EXIST_SOLUTION}; // for chooseDeparture.ret values and allCompetitors check
 enum {NO_ANIMATION, PLAY, LOOP};                // for animationActive status
 enum {WIND_DISP, GUST_DISP, WAVE_DISP, RAIN_DISP, PRESSURE_DISP}; // for display
-enum {EN, FR};                                  // for readPolar
 
-/*! for meteo services */
+/*! for mail services */
 enum {SAILDOCS_GFS, SAILDOCS_ECMWF, SAILDOCS_ICON, SAILDOCS_ARPEGE, SAILDOCS_AROME, SAILDOCS_CURR, MAILASAIL, NOT_MAIL}; 
 // grib mail service providers
 // GLOBAL_MARINET no longer supported
-struct DictElmt {
+struct MeteoElmt {
    int id; 
    char name [MAX_SIZE_NAME];
 };
 
-struct DictProvider {
+struct GribService { // NOAA_WIND, ECMWF_WIND
+   int  nShortNames;
+   char warning [MAX_SIZE_LINE];
+};
+
+struct MailService { // different saildocs services and mailasail
    char address [MAX_SIZE_LINE];
    char libelle [MAX_SIZE_LINE];
    char service [MAX_SIZE_NAME];
    int  nShortNames;
    char suffix [MAX_SIZE_NAME];
+   char warning [MAX_SIZE_LINE];
 };
 
 /*! Structure to store coordinates */
@@ -146,7 +168,7 @@ typedef struct {
    int bestTime;
 } ChooseDeparture;
 
-/*! For geo map shputil */
+/*! Structure for geo map shputil */
 typedef struct {
    Point  *points;
    double latMin;
@@ -239,7 +261,7 @@ typedef struct {
    double focalLon;  // focal point Lon
 } IsoDesc;
 
-/*! pol Mat description*/
+/*! polat Matrix description */
 typedef struct {
    double t [MAX_N_POL_MAT_LINES][MAX_N_POL_MAT_COLS];
    int    nLine;
@@ -287,6 +309,27 @@ typedef struct {
    WayPoint t [MAX_N_WAY_POINT];
 } WayPointList;
 
+/*! Point for competitor */
+typedef struct {
+   double lat;
+   double lon;
+   bool   allRun;                          // true if all competitors will run at same time
+   double dist;                            // Orthodromic distance to destination 
+   double duration;                        // in hours, duration of the trip.
+   char   strETA [MAX_SIZE_DATE];          // estimated Time of Arrival
+   bool   main;                            // main competitor
+   char   name [MAX_SIZE_NAME];
+} Competitor;
+
+/* list of competitors */
+typedef struct {
+   int n;                                  // numer of competitors
+   int runIndex;                           // index of last competitor running. -1 if all run !
+   int ret;                                // return of allCompetitors running function
+   int main;                               
+   Competitor t [MAX_N_COMPETITORS];
+} CompetitorsList;
+
 /*! Route description  */
 typedef struct {
    int    nIsoc;                            // number of Isochrones
@@ -309,26 +352,26 @@ typedef struct {
    double maxGust;                          // max gust of the route
    double maxWave;                          // max wave of the route
    double maxSog;                           // max Speed Over Ground
+   int    competitorIndex;                  // index of competitor. See CompetitorsList.
    SailPoint t [MAX_N_ISOC + 1];
 } SailRoute;
 
 /*! History Route description  */
 typedef struct {
    int n;
-   SailRoute r [MAX_HISTORY_ROUTE];
+   SailRoute *r;
 } HistoryRoute;
 
 /*! Parameters */
 typedef struct {
    int allwaysSea;                           // if 1 (true) then isSea is allways true. No earth avoidance !
-   int lang;                                 // Language for numeric decimal values in readPolar
    int maxPoiVisible;                        // poi visible if <= maxPoiVisible
    int opt;                                  // 0 if no optimization, else number of opt algorithm
    double tStep;                             // hours
    int cogStep;                              // step of cog in degrees
    int rangeCog;                             // range of cog from x - RANGE_GOG, x + RAGE_COG+1
    int maxIso;                               // max number of isochrones
-   int special;                              // special puropose
+   int special;                              // special purpose
    double constWindTws;                      // if not equal 0, constant wind used in place of grib file
    double constWindTwd;                      // the direction of constant wind if used
    double constWave;                         // constant wave height if used
@@ -337,7 +380,6 @@ typedef struct {
    int jFactor;                              // factor for target point distance used in sectorOptimize
    int kFactor;                              // factor for target point distance used in sectorOptimize
    int minPt;                                // min point per sector. See sectorOptimize
-   double maxTheta;                          // angle for optimization by sector
    int nSectors;                             // number of sector for optimization by sector
    char workingDir [MAX_SIZE_FILE_NAME];     // working directory
    char gribFileName [MAX_SIZE_FILE_NAME];   // name of grib file

@@ -12,6 +12,7 @@
 /*! Make initialization following parameter file load */
 static void initScenarioOption (void) {
    char str [MAX_SIZE_LINE];
+   char errMessage [MAX_SIZE_TEXT] = "";
    int iFlow;
    if (par.gribFileName [0] != '\0') {
       iFlow = WIND;
@@ -30,11 +31,15 @@ static void initScenarioOption (void) {
       printf ("Cur grib loaded: %s\n", par.currentGribFileName);
       printf ("Grib DateTime0 : %s\n", gribDateTimeToStr (currentZone.dataDate [0], currentZone.dataTime [0], str, sizeof (str)));
    }
-   if (readPolar (par.polarFileName, &polMat, par.lang))
+   if (readPolar (par.polarFileName, &polMat, errMessage, sizeof (errMessage)))
       printf ("Polar loaded   : %s\n", par.polarFileName);
+   else
+      fprintf (stderr, "Error in readPolar: %s\n", errMessage);
       
-   if (readPolar (par.wavePolFileName, &wavePolMat, par.lang))
+   if (readPolar (par.wavePolFileName, &wavePolMat, errMessage, sizeof (errMessage)))
       printf ("Polar loaded   : %s\n", par.wavePolFileName);
+   else
+      fprintf (stderr, "Error in readPolar: %s\n", errMessage);
    
    nIsoc = 0;
    route.n = 0;
@@ -47,6 +52,7 @@ void optionManage (char option) {
 	FILE *f = NULL;
    char buffer [MAX_SIZE_BUFFER] = "";
    double w, twa, tws, lon, lat, lat2, lon2, cog;
+   char errMessage [MAX_SIZE_TEXT] = "";
    char str [MAX_SIZE_LINE] = "";
    switch (option) {
    case 'c': // cap
@@ -107,7 +113,7 @@ void optionManage (char option) {
       else printf ("No network\n");
       break;
    case 'p': // polar
-      readPolar (par.polarFileName, &polMat, par.lang);
+      readPolar (par.polarFileName, &polMat, errMessage, sizeof (errMessage));
       polToStr (buffer, &polMat, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       while (true) {
@@ -119,7 +125,7 @@ void optionManage (char option) {
       }
       break;
    case 'P': // Wave polar
-      readPolar (par.wavePolFileName, &wavePolMat, par.lang);
+      readPolar (par.wavePolFileName, &wavePolMat, errMessage, sizeof (errMessage));
       polToStr (buffer, &wavePolMat, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       while (true) {

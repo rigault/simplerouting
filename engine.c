@@ -26,7 +26,9 @@ Pp        isocArray [MAX_N_ISOC][MAX_SIZE_ISOC];  // list of isochrones
 IsoDesc   isoDesc [MAX_N_ISOC];                   // Isochrone meta data
 int       nIsoc = 0;                              // total number of isochrones 
 Pp        lastClosest;                            // closest point to destination in last isochrone computed
-HistoryRoute historyRoute = {0};
+
+HistoryRoute historyRoute = { .n = 0, .r = NULL };
+
 ChooseDeparture chooseDeparture;                  // for choice of departure time
 
 /*! following global variable could be static but linking issue */
@@ -245,14 +247,17 @@ bool isoDescToStr (char *str, size_t maxLength) {
    char strLon [MAX_SIZE_LINE];
    const int DIST_MAX = 100000;
    double distance;
-   strcpy (str, "No toWp Size First Closest Distance VMC      FocalLat    FocalLon\n");
+   if (maxLength < MAX_SIZE_LINE) 
+      return false;
+   g_strlcpy (str, "No toWp Size First Closest Distance VMC      FocalLat    FocalLon\n", MAX_SIZE_LINE);
    for (int i = 0; i < nIsoc; i++) {
       distance = isoDesc [i].distance;
       if (distance > DIST_MAX) distance = -1;
       snprintf (line, MAX_SIZE_LINE, "%03d %03d %03d  %03d   %03d     %07.2lf  %07.2lf  %s  %s\n", i, isoDesc [i].toIndexWp, 
          isoDesc[i].size, isoDesc[i].first, 
          isoDesc[i].closest, distance, isoDesc[i].bestVmg, 
-         latToStr (isoDesc [i].focalLat, par.dispDms, strLat), lonToStr (isoDesc [i].focalLon, par.dispDms, strLon));
+         latToStr (isoDesc [i].focalLat, par.dispDms, strLat, sizeof (strLat)), 
+         lonToStr (isoDesc [i].focalLon, par.dispDms, strLon, sizeof (strLon)));
       if ((strlen (str) + strlen (line)) > maxLength) 
          return false;
       g_strlcat (str, line, maxLength);
@@ -267,12 +272,14 @@ bool allIsocToStr (char *str, size_t maxLength) {
    char strLat [MAX_SIZE_LINE];
    char strLon [MAX_SIZE_LINE];
    Pp pt;
-   strcpy (str, "No  Lat         Lon               Id Father  Amure  Motor\n");
+   if (maxLength < MAX_SIZE_LINE) 
+      return false;
+   g_strlcpy (str, "No  Lat         Lon               Id Father  Amure  Motor\n", MAX_SIZE_LINE);
    for (int i = 0; i < nIsoc; i++) {
       for (int k = 0; k < isoDesc [i].size; k++) {
          pt = isocArray [i][k];
-         snprintf (line, MAX_SIZE_LINE, "%03d %-12s %-12s %6d %6d %6d %6d\n", i, latToStr (pt.lat, par.dispDms, strLat),\
-            lonToStr (pt.lon, par.dispDms, strLon), pt.id, pt.father, pt.amure, pt.motor);
+         snprintf (line, MAX_SIZE_LINE, "%03d %-12s %-12s %6d %6d %6d %6d\n", i, latToStr (pt.lat, par.dispDms, strLat, sizeof (strLat)),\
+            lonToStr (pt.lon, par.dispDms, strLon, sizeof (strLon)), pt.id, pt.father, pt.amure, pt.motor);
          if ((strlen (str) + strlen (line)) > maxLength) 
             return false;
          g_strlcat (str, line, maxLength);
@@ -325,15 +332,25 @@ bool dumpRoute (const char *fileName, Pp dest) {
    return true;
 }
 
+
 /*! store current route in history */
-static void saveRoute (void) {
-   int z = historyRoute.n;
-   if (z < MAX_HISTORY_ROUTE) {
-      memcpy (&historyRoute.r[z], &route, sizeof (SailRoute));
-      historyRoute.n += 1;
-   }
-   else
-      fprintf (stderr, "Error in saveRoute: Limit of MAX_HISTORY_ROUTE reached: %d\n", MAX_HISTORY_ROUTE);
+static void saveRoute (SailRoute *route) {
+    // allocate or rallocate space for routes
+    SailRoute *newRoutes = realloc(historyRoute.r, (historyRoute.n + 1) * sizeof(SailRoute));
+    if (!newRoutes) {
+        fprintf(stderr, "Error in saveRoute: Memory allocation failed\n");
+        return;
+    }
+    historyRoute.r = newRoutes;
+    memcpy (&historyRoute.r[historyRoute.n], route, sizeof (SailRoute));
+    historyRoute.n += 1;
+}
+
+/* free space for history route */
+void freeHistoryRoute() {
+   free (historyRoute.r);
+   historyRoute.r = NULL;
+   historyRoute.n = 0;
 }
 
 /*! stat route */
@@ -458,43 +475,46 @@ void storeRoute (const Pp *pOr, const Pp *pDest, double lastStepDuration) {
    route.t [0].amure = ptLast.amure;
    route.t [0].toIndexWp = pt.toIndexWp;
    statRoute (lastStepDuration);
-   saveRoute ();
+   saveRoute (&route);
 }
 
 /*! produce string that says if Motor, Tribord, Babord */
-static char *motorTribordBabord (bool motor, int amure, char* str, size_t len) {
+static char *motorTribordBabord (bool motor, int amure, char* str, size_t maxLen) {
    if (motor)
-      strncpy (str, "Mot", len);
+      g_strlcpy (str, "Mot", maxLen);
    else
       if (amure == TRIBORD)
-         strncpy (str, "Tri", len);
+         g_strlcpy (str, "Tri", maxLen);
       else
-         strncpy (str, "Bab", len);
+         g_strlcpy (str, "Bab", maxLen);
    return str;
 }
 
 /*! copy route in a string
    true if enough space, false if truncated */
 bool routeToStr (const SailRoute *route, char *str, size_t maxLength) {
-   char line [MAX_SIZE_LINE], strDate [MAX_SIZE_LINE];
-   char strLat [MAX_SIZE_LINE], strLon [MAX_SIZE_LINE];  
+   char line [MAX_SIZE_LINE], strDate [MAX_SIZE_DATE];
+   char strLat [MAX_SIZE_NAME], strLon [MAX_SIZE_NAME];  
    char shortStr [SMALL_SIZE], strDur [MAX_SIZE_LINE], strMot [MAX_SIZE_LINE];
    double awa, aws;
    double maxAws = 0.0;
    double sumAws = 0.0;
    double twa = fTwa (route->t[0].lCap, route->t[0].twd);
    fAwaAws (twa, route->t[0].tws, route->t[0].sog, &awa, &aws);
+   if (maxLength < MAX_SIZE_LINE)
+      return false;
 
-   strcpy (str, "  No  WP Lat        Lon         Date-Time         M/T/B  COG\
-     Dist     SOG  Twd   Twa      Tws    Gust  Awa      Aws   Waves\n");
-   snprintf (line, MAX_SIZE_LINE, " pOr %3d %-12s%-12s %6s %6s %4.0lf° %7.2lf %7.2lf %4d° %4.0lf° %7.2lf %7.2lf %4.0lf° %7.2lf %7.2lf\n", \
+   g_strlcpy (str, "  No  WP Lat        Lon         Date-Time         M/T/B  COG\
+     Dist     SOG  Twd   Twa      Tws    Gust  Awa      Aws   Waves\n", MAX_SIZE_LINE);
+   snprintf (line, MAX_SIZE_LINE, " pOr %3d %-12s%-12s %6s %6s %4d° %7.2lf %7.2lf %4d° %4.0lf° %7.2lf %7.2lf %4.0lf° %7.2lf %7.2lf\n",\
       route->t[0].toIndexWp,\
-      latToStr (route->t[0].lat, par.dispDms, strLat), lonToStr (route->t[0].lon, par.dispDms, strLon), \
-      newDate (zone.dataDate [0], (zone.dataTime [0]/100) + route->t[0].time, strDate), \
-      motorTribordBabord (route->t[0].motor, route->t[0].amure, shortStr, SMALL_SIZE), \
-      route->t[0].lCap, route->t[0].ld, route->t[0].sog, \
+      latToStr (route->t[0].lat, par.dispDms, strLat, sizeof (strLat)),\
+      lonToStr (route->t[0].lon, par.dispDms, strLon, sizeof (strLon)),\
+      newDate (zone.dataDate [0], (zone.dataTime [0]/100) + route->t[0].time, strDate, sizeof (strDate)),\
+      motorTribordBabord (route->t[0].motor, route->t[0].amure, shortStr, SMALL_SIZE),\
+      ((int) (route->t[0].lCap + 360) % 360), route->t[0].ld, route->t[0].sog,\
       (int) (route->t[0].twd + 360) % 360,\
-      twa, route->t[0].tws, \
+      twa, route->t[0].tws,\
       MS_TO_KN * route->t[0].g, awa, aws, route->t[0].w);
 
    g_strlcat (str, line, maxLength);
@@ -506,13 +526,14 @@ bool routeToStr (const SailRoute *route, char *str, size_t maxLength) {
       if ((fabs(route->t[i].lon) > 180.0) || (fabs (route->t[i].lat) > 90.0))
          snprintf (line, MAX_SIZE_LINE, " Isoc %3d: Erreur sur latitude ou longitude\n", i-1);   
       else
-         snprintf (line, MAX_SIZE_LINE, "%4d %3d %-12s%-12s %s %6s %4.0lf° %7.2f %7.2lf %4d° %4.0lf° %7.2lf %7.2lf %4.0lf° %7.2lf %7.2lf\n", \
+         snprintf (line, MAX_SIZE_LINE, "%4d %3d %-12s%-12s %s %6s %4d° %7.2f %7.2lf %4d° %4.0lf° %7.2lf %7.2lf %4.0lf° %7.2lf %7.2lf\n",\
             i-1,\
             route->t[i].toIndexWp,\
-            latToStr (route->t[i].lat, par.dispDms, strLat), lonToStr (route->t[i].lon, par.dispDms, strLon), \
-            newDate (zone.dataDate [0], (zone.dataTime [0]/100) + route->t[i].time, strDate), \
+            latToStr (route->t[i].lat, par.dispDms, strLat, sizeof (strLat)),\
+            lonToStr (route->t[i].lon, par.dispDms, strLon, sizeof (strLon)),\
+            newDate (zone.dataDate [0], (zone.dataTime [0]/100) + route->t[i].time, strDate, sizeof (strDate)), \
             motorTribordBabord (route->t[i].motor, route->t[i].amure, shortStr, SMALL_SIZE), \
-            route->t[i].lCap, route->t[i].ld, route->t[i].sog,\
+            ((int) (route->t[i].lCap  + 360) % 360), route->t[i].ld, route->t[i].sog,\
             (int) (route->t[i].twd + 360) % 360,\
             fTwa (route->t[i].lCap, route->t[i].twd), route->t[i].tws,\
             MS_TO_KN * route->t[i].g, awa, aws, route->t[i].w);
@@ -531,46 +552,9 @@ bool routeToStr (const SailRoute *route, char *str, size_t maxLength) {
       durationToStr (route->duration, strDur, sizeof (strDur)), durationToStr (route->motorDuration, strMot, sizeof (strMot)));
    g_strlcat (str, line, maxLength);
 
-   newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours + route->duration, strDate);
+   newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours + route->duration, strDate, sizeof (strDate));
    snprintf (line, MAX_SIZE_LINE, " Arrival Date&Time: %s", newDate (zone.dataDate [0], \
-      zone.dataTime [0]/100 + par.startTimeInHours + route->duration, strDate));
-   g_strlcat (str, line, maxLength);
-   return true;
-}
-
-/*! copy route in a string
-   true if enough space, false if truncated */
-bool OrouteToStr (const SailRoute *route, char *str, size_t maxLength) {
-   char line [MAX_SIZE_LINE];
-   char strLat [MAX_SIZE_LINE];
-   char strLon [MAX_SIZE_LINE];
-   strcpy (str, " No        Lat        Lon             Id Father  Motor     Cap       Dist      SOG     Twd      Tws    Gust   Waves\n");
-   snprintf (line, MAX_SIZE_LINE, " pOr:      %-12s%-12s %6d %6d %6d %7.2f°   %7.2lf  %7.2lf  %6.0lf° %7.2lf %7.2lf %7.2lf\n", \
-      latToStr (route->t[0].lat, par.dispDms, strLat), lonToStr (route->t[0].lon, par.dispDms, strLon), \
-      route->t[0].id, route->t[0].father, route->t[0].motor, route->t[0].lCap, route->t[0].ld, route->t[0].ld/par.tStep,
-      route->t[0].twd, route->t[0].tws, MS_TO_KN * route->t[0].g, route->t[0].w);
-
-   g_strlcat (str, line, maxLength);
-   for (int i = 1; i < route->n; i++) {
-      if ((fabs(route->t[i].lon) > 180.0) || (fabs (route->t[i].lat) > 90.0))
-         snprintf (line, MAX_SIZE_LINE, " Isoc %3d: Erreur sur latitude ou longitude\n", i-1);   
-      else
-         snprintf (line, MAX_SIZE_LINE, " Isoc %3d: %-12s%-12s %6d %6d %6d %7.2f°   %7.2f  %7.2lf  %6.0lf° %7.2lf %7.2lf %7.2lf\n", \
-            i-1,
-            latToStr (route->t[i].lat, par.dispDms, strLat), lonToStr (route->t[i].lon, par.dispDms, strLon), \
-            route->t[i].id, route->t[i].father, route->t[i].motor,\
-            route->t[i].lCap, route->t[i].ld, route->t[i].ld/par.tStep,
-            route->t[i].twd, route->t[i].tws, MS_TO_KN * route->t[i].g, route->t[i].w);
-      g_strlcat (str, line, maxLength);
-   }
-   
-   snprintf (line, MAX_SIZE_LINE, " Avr %85s  %7.2lf %7.2lf %7.2lf\n", " ", route->avrTws, MS_TO_KN * route->avrGust, route->avrWave); 
-   g_strlcat (str, line, maxLength);
-   snprintf (line, MAX_SIZE_LINE, " Max %85s  %7.2lf %7.2lf %7.2lf\n", " ", route->maxTws, MS_TO_KN * route->maxGust, route->maxWave); 
-   g_strlcat (str, line, maxLength);
-   snprintf (line, MAX_SIZE_LINE, "\n Total distance: %7.2lf NM,    Motor distance: %7.2lf NM\n", route->totDist, route->motorDist);
-   g_strlcat (str, line, maxLength);
-   snprintf (line, MAX_SIZE_LINE, " Total Duration: %7.2lf hours, Motor Duration: %7.2lf hours\n", route->duration, route->motorDuration);
+      zone.dataTime [0]/100 + par.startTimeInHours + route->duration, strDate, sizeof (strDate)));
    g_strlcat (str, line, maxLength);
    return true;
 }
@@ -788,6 +772,7 @@ void *routingLaunch () {
    double lastStepDuration;
    Pp pNext;
    initRouting ();
+   route.competitorIndex = competitors.runIndex;
 
    gettimeofday (&t0, NULL);
    ut0 = t0.tv_sec * MILLION + t0.tv_usec;
@@ -873,4 +858,58 @@ void *bestTimeDeparture () {
    else chooseDeparture.ret = NO_SOLUTION;
    return NULL;
 }
+
+/*! updatecompretitorsDashboard */
+static void updateCompetitorsDashboard (int i, double duration) {
+   if (competitors.n == 0)
+      return;
+   newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours + duration, 
+      competitors.t [i].strETA, MAX_SIZE_DATE); 
+   competitors.t [i].duration = duration; // hours
+   competitors.t [i].dist = orthoDist (competitors.t [i].lat, competitors.t [i].lon, par.pDest.lat, par.pDest.lon);
+}
+
+/*! find index of main competitor. If no competitor, number 0 is selected */
+int mainCompetitor () {
+   if (competitors.n == 0)
+      return 0;
+   for (int i = 0; i < competitors.n; i += 1) {
+      if (competitors.t[i].main)
+         return i;
+   }
+   return 0;
+}
+
+/*! compare competittor duration for qsort */
+static int compareDuration (const void *a, const void *b) {
+    const Competitor *compA = (const Competitor *) a;
+    const Competitor *compB = (const Competitor *) b;
+    if (compA->duration < compB->duration) return -1;
+    if (compA->duration > compB->duration) return 1;
+    return 0;
+}
+
+/*! launch all competitors */
+void *allCompetitors () {
+   for (int i = 0; i < competitors.n; i +=1) // reset eta(s)
+      competitors.t [i].strETA [0] = '\0';
+   
+   for (int i = 0; i < competitors.n; i +=1) {
+      competitors.runIndex = i;
+      par.pOr.lat = competitors.t [i].lat;
+      par.pOr.lon = competitors.t [i].lon;
+      routingLaunch ();
+      if (route.ret < 0) {
+         competitors.ret = NO_SOLUTION;
+         return NULL;
+      }
+      updateCompetitorsDashboard (i, route.duration); // set eta(s) and dist
+   }
+   if (competitors.n > 1)
+      qsort (competitors.t, competitors.n, sizeof(Competitor), compareDuration);
+   
+   competitors.ret = EXIST_SOLUTION;
+   return NULL;
+}
+      
 

@@ -4,7 +4,7 @@ CFLAGS="-Wall -Wextra -Wpedantic -Wformat=2 -Wwrite-strings -Wredundant-decls -W
 gcc $CFLAGS -c engine.c `pkg-config --cflags glib-2.0`
 gcc $CFLAGS -c option.c `pkg-config --cflags glib-2.0`
 gcc $CFLAGS -c aisgps.c `pkg-config --cflags glib-2.0`
-gcc -c mailutil.c `pkg-config --cflags glib-2.0`
+gcc $CFLAGS -c mailutil.c `pkg-config --cflags glib-2.0`
 gcc $CFLAGS -Wno-format-nonliteral -c rutil.c `pkg-config --cflags glib-2.0` 
 
 #gcc -c show4.c `pkg-config --cflags gtk4`

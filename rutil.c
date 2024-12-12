@@ -30,22 +30,30 @@ SailRoute route;
 MyPolygon forbidZones [MAX_N_FORBID_ZONE];
 
 /*! dictionnary of meteo services */
-const struct DictElmt dicTab [4] = {{7, "Weather service US"}, {78, "DWD Germany"}, {85, "Meteo France"}, {98,"ECMWF European"}};
+const struct MeteoElmt meteoTab [N_METEO_ADMIN] = {{7, "Weather service US"}, {78, "DWD Germany"}, {85, "Meteo France"}, {98,"ECMWF European"}};
 
-const struct DictProvider providerTab [N_PROVIDERS] = {
-   {"query@saildocs.com", "Saildocs Wind GFS",      "gfs",    6, "WIND,GUST,WAVES,RAIN,PRMSL"},
-   {"query@saildocs.com", "Saildocs Wind ECWMF",    "ECMWF",  4, "WIND,MSLP,WAVES"},
-   {"query@saildocs.com", "Saildocs Wind ICON",     "ICON",   4, "WIND,MSLP,WAVES"},
-   {"query@saildocs.com", "Saildocs Wind ARPEGE",   "ARPEGE", 0, ""}, // not available yet
-   {"query@saildocs.com", "Saildocs Wind Arome",    "AROME",  0, ""}, // not available yet
-   {"query@saildocs.com", "Saildocs Current RTOFS", "RTOFS",  2, "CURRENT"},
-   {"weather@mailasail.com","MailaSail Wind GFS",    "",      2, "GRD,WAVE"},
-   {""                     ,"Not Applicable"    ,    "",      0, "NONE"}
+const struct MailService mailServiceTab [N_MAIL_SERVICES] = {
+   {"query@saildocs.com", "Saildocs Wind GFS",      "gfs",    6, "WIND,GUST,WAVES,RAIN,PRMSL", "With 1 (resp 3, 6, 12) hours time step, max forecast is 1, (resp 8, 10, 16) days"},
+   {"query@saildocs.com", "Saildocs Wind ECWMF",    "ECMWF",  4, "WIND,MSLP,WAVES", "Min time step: 3 hours with 6 days max forecast. Time step 6 hours and above allow 10 days max forecast."},
+   {"query@saildocs.com", "Saildocs Wind ICON",     "ICON",   4, "WIND,MSLP,WAVES", "Min time step: 3 hours, 7.5 days max forecast for 00Z and 12Z, 5 days for 6Z and 18Z"},
+   {"query@saildocs.com", "Saildocs Wind ARPEGE",   "ARPEGE", 0, "", "Not available yet"},
+   {"query@saildocs.com", "Saildocs Wind Arome",    "AROME",  0, "", "Not available yet"}, 
+   {"query@saildocs.com", "Saildocs Current RTOFS", "RTOFS",  2, "CURRENT", "Min time step: 6 hours. 8 days max forecast."},
+   {"weather@mailasail.com","MailaSail Wind GFS",    "",      2, "GRD,WAVE", "Resolution allways 1 degree. Min time step: 3 hours with 8 days max forecast. Time Step: 12 hours for 10 days forcast" },
+   {""                     ,"Not Applicable"    ,    "",      0, "NONE", ""}
    // {"gmngrib@globalmarinenet.net", "GlobalMarinet GFS", "", ""} // Does not work well
+};
+
+const struct GribService serviceTab [N_WEB_SERVICES] = {
+   {6, "Time Step 1 hours requires 0.25 Resolution with 5 days max forecast. Time step 3 hours allows max 8 days forecast. Timestep 6 hours for 16 days forecast."},
+   {3, "Resolution allways 0.25. Time Step min 3 hours with 6 days max forecast. Time step 6 hours and above allow 10 days forecast."}
 };
 
 /*! list of wayPoint */
 WayPointList wayPoints;
+
+/*! list of competitors */
+CompetitorsList competitors;
 
 /*! polar matrix description */
 PolMat polMat;
@@ -77,7 +85,7 @@ int readCurrentGribRet = -1;        // to check if readCurrentGrib is terminated
 int  nTotEntities = 0;              // cumulated number of entities
 Entity *entities = NULL;
 
-const char *WIND_URL [N_WIND_URL * 2] = {
+const char *METEO_CONSULT_WIND_URL [N_METEO_CONSULT_WIND_URL * 2] = {
    "Atlantic North",   "%sMETEOCONSULT%02dZ_VENT_%02d%02d_Nord_Atlantique.grb",
    "Atlantic Center",  "%sMETEOCONSULT%02dZ_VENT_%02d%02d_Centre_Atlantique.grb",
    "Antilles",         "%sMETEOCONSULT%02dZ_VENT_%02d%02d_Antilles.grb",
@@ -86,7 +94,7 @@ const char *WIND_URL [N_WIND_URL * 2] = {
    "Gascogne",         "%sMETEOCONSULT%02dZ_VENT_%02d%02d_Gascogne.grb"
 };
 
-const char *CURRENT_URL [N_CURRENT_URL * 2] = {
+const char *METEO_CONSULT_CURRENT_URL [N_METEO_CONSULT_CURRENT_URL * 2] = {
    "Atlantic North",    "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Nord_Atlantique.grb",
    "Atlantic Center",   "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Centre_Atlantique.grb",
    "Antilles",          "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Antilles.grb",
@@ -110,7 +118,7 @@ void *commandRun (void *data) {
 
 /*! treatment for NOAA or ECMWF files. Select shortnames and subregion defined by lon and lat values and produce output file
    return true if all OK */
-bool compact (bool full, const char *dir, const char *inFile, const char *shortNames, double lonLeft, double lonRight, double latMin, double latMax, char *outFile) {
+bool compact (bool full, const char *dir, const char *inFile, const char *shortNames, double lonLeft, double lonRight, double latMin, double latMax, const char *outFile) {
    FILE *fs;
    char command [MAX_SIZE_LINE];
    snprintf (command, MAX_SIZE_LINE, "grib_copy -w shortName=%s %s %s%s", shortNames, inFile, dir, "inter0.tmp");
@@ -147,7 +155,7 @@ bool compact (bool full, const char *dir, const char *inFile, const char *shortN
 }
    
 /*! concat all files prefixed by prefix and suffixed 0..max (with step) in fileRes */
-bool concat (const char *prefix, int step, int max, const char *fileRes) {
+bool concat (const char *prefix, const char *suffix, int step, int max, const char *fileRes) {
    FILE *fRes = NULL;
    if ((fRes = fopen (fileRes, "w")) == NULL) {
       fprintf (stderr, "Error in concat: Cannot write: %s\n", fileRes);
@@ -155,7 +163,7 @@ bool concat (const char *prefix, int step, int max, const char *fileRes) {
    }
    for (int i = 0; i <= max; i += step) {
       char fileName [MAX_SIZE_FILE_NAME];
-      snprintf (fileName, sizeof(fileName), "%s%03d", prefix, i);
+      snprintf (fileName, sizeof(fileName), "%s%03d%s", prefix, i, suffix);
       FILE *f = fopen(fileName, "rb");
       if (f == NULL) {
          fprintf (stderr, "Error in concat: opening impossible %s\n", fileName);
@@ -164,7 +172,7 @@ bool concat (const char *prefix, int step, int max, const char *fileRes) {
       char buffer[MAX_SIZE_LINE];
       size_t n;
       while ((n = fread(buffer, 1, sizeof(buffer), f)) > 0) {
-         fwrite(buffer, 1, n, fRes);
+         fwrite (buffer, 1, n, fRes);
       }
       fclose(f);
    }
@@ -202,23 +210,15 @@ bool initSHP (const char* nameFile) {
    printf ("Geo nEntities  : %d, nShapeType: %d\n", nEntities, nShapeType);
    printf ("Geo limits     : %.2lf, %.2lf, %.2lf, %.2lf\n", minBound[0], minBound[1], maxBound[0], maxBound[1]);
 
-   if (nTotEntities == 0) {
-      if ((entities = (Entity *) malloc (sizeof(Entity) * nEntities)) == NULL) {
-         fprintf (stderr, "Error in initSHP: malloc failed\n");
-         return false;
-      }
+   Entity *temp = (Entity *) realloc(entities, sizeof(Entity) * (nEntities + nTotEntities));
+   if (temp == NULL) {
+      fprintf(stderr, "Error in initSHP: realloc failed\n");
+      free(entities); // Optionnel si entities est NULL au départ, mais sûr.
+      return false;
+   } else {
+      entities = temp;
    }
-   else {
-      Entity *temp = (Entity *)realloc(entities, sizeof(Entity) * (nEntities + nTotEntities));
-      if (temp == NULL) {
-         free (entities);
-         fprintf (stderr, "Error in initSHP: realloc failed\n");
-         return false;
-      } else {
-         entities = temp;
-      }
-   }
- 
+
    for (int i = 0; i < nEntities; i++) {
       SHPObject *psShape = SHPReadObject(hSHP, i);
       if (psShape == NULL) {
@@ -279,7 +279,7 @@ void freeSHP (void) {
 
 /*! select most recent file in "directory" that contains "pattern" in name 
   return true if found with name of selected file */
-bool mostRecentFile (const char *directory, const char *pattern, char *name) {
+static bool mostRecentFile (const char *directory, const char *pattern, char *name, size_t maxLen) {
    DIR *dir = opendir(directory);
    if (dir == NULL) {
       fprintf (stderr, "Error in mostRecentFile: opening: %s\n", directory);
@@ -297,11 +297,11 @@ bool mostRecentFile (const char *directory, const char *pattern, char *name) {
          && (stat(filepath, &statbuf) == 0) 
          && (S_ISREG(statbuf.st_mode) && statbuf.st_mtime > latestTime)) {
          latestTime = statbuf.st_mtime;
-         if (strlen (entry->d_name) < MAX_SIZE_FILE_NAME)
-            strncpy (name, entry->d_name, MAX_SIZE_FILE_NAME);
+         if (strlen (entry->d_name) < maxLen)
+            g_strlcpy (name, entry->d_name, maxLen);
          else {
-            fprintf (stderr, "Error in mostRecentFile: File name size is: %zu and exceed MAX_SIZE_FILE_NAME: %d\n", \
-               strlen (entry->d_name), MAX_SIZE_FILE_NAME);
+            fprintf (stderr, "Error in mostRecentFile: File name size is: %zu and exceed Max Size: %zu\n", \
+               strlen (entry->d_name), maxLen);
             break;
          }
       }
@@ -311,7 +311,7 @@ bool mostRecentFile (const char *directory, const char *pattern, char *name) {
 }
 
 /*! format big number with thousand sep. Example 1000000 formated as 1 000 000 */
-char *formatThousandSep (char *buffer, long value) {
+char *formatThousandSep (char *buffer, size_t maxLen, long value) {
    char str [MAX_SIZE_LINE];
    snprintf (str, MAX_SIZE_LINE, "%ld", value);
    int length = strlen (str);
@@ -326,6 +326,10 @@ char *formatThousandSep (char *buffer, long value) {
       buffer [j++] = str [i++];
       buffer [j++] = str [i++];
       buffer [j++] = ' ';
+      if (j >= (int) maxLen) {
+         j = maxLen - 1;
+         break;
+      }
    }
    buffer [j] = '\0';
    return buffer;
@@ -333,23 +337,20 @@ char *formatThousandSep (char *buffer, long value) {
 
 /*! true if name contains a number */
 bool isNumber (const char *name) {
-   while (*name) {
-      if (isdigit(*name)) return true;
-      name++;
-   }
-   return false; 
+    return strpbrk (name, "0123456789") != NULL;
 }
 
-/*! replace $ by sequence */
-char *dollarSubstitute (const char* str, char *res, size_t maxSize) {
+/*! replace $ by sequence 
+   can be simplified with g_string_replace(gstr, "$", "\\$", TRUE); */
+char *dollarSubstitute (const char* str, char *res, size_t maxLen) {
 #ifdef _WIN32
-   strncpy (res, str, maxSize); // no issue with $ with Windows 
+   g_strlcpy (res, str, maxLen); // no issue with $ with Windows 
    return res;
 #else  
    res [0] = '\0';
    if (str == NULL) return NULL;
    int len = 0;
-   for (size_t i = 0; (i < maxSize) && (str[i] != '\0'); ++i) {
+   for (size_t i = 0; (i < maxLen) && (str[i] != '\0'); ++i) {
       if (str[i] == '$') {
          res[len++] = '\\';
          res[len++] = '$';
@@ -362,21 +363,35 @@ char *dollarSubstitute (const char* str, char *res, size_t maxSize) {
 #endif
 }
 
+/*! copy str in res with adding newline every n character */ 
+char *strCpyMaxWidth (const char *str, int n, char *res, size_t maxLen) {
+    if (!str || n <= 0 || !res) {
+        return NULL;
+    }
+    int len = strlen (str);
+    int i = 0, j = 0;
+
+    while ((i < len) && (j < (int) maxLen)) {
+        res[j++] = str[i++];
+        if (((i % n) == 0) && (i < len)) {  // Insert '\n' every n characters
+            res[j++] = '\n';
+        }
+        
+    }
+    if (j == (int) maxLen) j -= 1;
+    res[j] = '\0';
+    return res;
+}
+
 /*! translate str in double for latitude longitude */
-double getCoord (const char *str) {
+double getCoord (const char *str, double minLimit, double maxLimit) {
    double deg = 0.0, min = 0.0, sec = 0.0;
    bool minFound = false;
-   int sign = 1;
-   char *pt = NULL;
    const char *neg = "SsWwOo";            // value returned is negative if south or West
-   // find sign
-   while (*neg) {
-      if (strchr (str, *neg) != NULL) {   // south or West
-         sign = -1;
-         break;
-      }
-      neg += 1;
-   }
+   int sign = 1;
+   
+   sign = (strpbrk (str, neg) == NULL) ? 1 : -1; // -1 if neg found
+   char *pt = NULL;
    // find degrees
    while (*str && (! (isdigit (*str) || (*str == '-') || (*str == '+')))) 
       str++;
@@ -389,9 +404,8 @@ double getCoord (const char *str) {
       if ((pt = strstr (str, "°")) != NULL) // degree ° is UTF8 coded with 2 bytes
          pt += 2;
       else 
-         if (((pt = strchr (str, 'N')) != NULL) || ((pt = strchr (str, 'S')) != NULL) || 
-             ((pt = strchr (str, 'E')) != NULL) || ((pt = strchr (str, 'W')) != NULL))
-         pt += 1;
+         if ((pt = strpbrk (str, neg)) != NULL)
+            pt += 1;
             
       if (pt != NULL)
          min = strtod (pt, NULL);
@@ -400,16 +414,17 @@ double getCoord (const char *str) {
    if (minFound && (strchr (str, '"') != NULL)) {
       sec = strtod (strchr (str, '\'') + 1, NULL);
    }
-   return sign * (deg + min/60.0 + sec/3600.0);
+   
+   return CLAMP (sign * (deg + min/60.0 + sec/3600.0), minLimit, maxLimit);
 }
 
 /*! build root name if not already a root name */
-char *buildRootName (const char *fileName, char *rootName) {
+char *buildRootName (const char *fileName, char *rootName, size_t maxLen) {
    if (fileName [0] == '/') 
-      strncpy (rootName, fileName, MAX_SIZE_FILE_NAME);
+      g_strlcpy (rootName, fileName, maxLen);
    else if (par.workingDir [0] != '\0')
-      snprintf (rootName, MAX_SIZE_FILE_NAME, "%s%s", par.workingDir, fileName);
-   else snprintf (rootName, MAX_SIZE_FILE_NAME, "%s%s", WORKING_DIR, fileName);
+      snprintf (rootName, maxLen, "%s%s", par.workingDir, fileName);
+   else snprintf (rootName, maxLen, "%s%s", WORKING_DIR, fileName);
    return (rootName);
 }
 
@@ -425,7 +440,7 @@ long getFileSize (const char *fileName) {
 }
 
 /*! return date and time using ISO notation after adding myTime (hours) to the Date */
-char *newDate (long intDate, double nHours, char *res) {
+char *newDate (long intDate, double nHours, char *res, size_t maxLen) {
    struct tm tm0 = {0};
    tm0.tm_year = (intDate / 10000) - 1900;
    tm0.tm_mon = ((intDate % 10000) / 100) - 1;
@@ -434,13 +449,13 @@ char *newDate (long intDate, double nHours, char *res) {
    int totalMinutes = (int)(nHours * 60);
    tm0.tm_min += totalMinutes;
    mktime (&tm0);                         // adjust tm0 struct (manage day, mon year overflow)
-   snprintf (res, MAX_SIZE_LINE, "%4d/%02d/%02d %02d:%02d", tm0.tm_year + 1900, tm0.tm_mon + 1, tm0.tm_mday,\
+   snprintf (res, maxLen, "%4d/%02d/%02d %02d:%02d", tm0.tm_year + 1900, tm0.tm_mon + 1, tm0.tm_mday,\
       tm0.tm_hour, tm0.tm_min);
    return res;
 }
 
 /*! return date and time using week day after adding myTime (hours) to the Date */
-char *newDateWeekDay (long intDate, double nHours, char *res) {
+char *newDateWeekDay (long intDate, double nHours, char *res, size_t maxLen) {
    struct tm tm0 = {0};
    tm0.tm_year = (intDate / 10000) - 1900;
    tm0.tm_mon = ((intDate % 10000) / 100) - 1;
@@ -449,12 +464,12 @@ char *newDateWeekDay (long intDate, double nHours, char *res) {
    int totalMinutes = (int)(nHours * 60);
    tm0.tm_min += totalMinutes;
    mktime (&tm0);                         // adjust tm0 struct (manage day, mon year overflow)
-   strftime (res, MAX_SIZE_LINE, "%a %H:%M", &tm0);
+   strftime (res, maxLen, "%a %H:%M", &tm0);
    return res;
 }
 
 /*! return date and time using week day after adding myTime (hours) to the Date */
-char *newDateWeekDayVerbose (long intDate, double nHours, char *res) {
+char *newDateWeekDayVerbose (long intDate, double nHours, char *res, size_t maxLen) {
    struct tm tm0 = {0};
    tm0.tm_year = (intDate / 10000) - 1900;
    tm0.tm_mon = ((intDate % 10000) / 100) - 1;
@@ -463,21 +478,21 @@ char *newDateWeekDayVerbose (long intDate, double nHours, char *res) {
    int totalMinutes = (int)(nHours * 60);
    tm0.tm_min += totalMinutes;
    mktime (&tm0);                         // adjust tm0 struct (manage day, mon year overflow)
-   strftime (res, MAX_SIZE_LINE, "%A, %b %d at %H:%M UTC", &tm0);
+   strftime (res, maxLen, "%A, %b %d at %H:%M UTC", &tm0);
    return res;
 }
 
 /*! convert lat to str according to type */
-char *latToStr (double lat, int type, char* str) {
+char *latToStr (double lat, int type, char* str, size_t maxLen) {
    double mn = 60 * lat - 60 * (int) lat;
    double sec = 3600 * lat - (3600 * (int) lat) - (60 * (int) mn);
    char c = (lat > 0) ? 'N' : 'S';
    switch (type) {
-   case BASIC: snprintf (str, MAX_SIZE_LINE, "%.2lf°", lat); break;
-   case DD: snprintf (str, MAX_SIZE_LINE, "%06.2lf°%c", fabs (lat), c); break;
-   case DM: snprintf (str, MAX_SIZE_LINE, "%02d°%05.2lf'%c", (int) fabs (lat), fabs(mn), c); break;
+   case BASIC: snprintf (str, maxLen, "%.2lf°", lat); break;
+   case DD: snprintf (str, maxLen, "%06.2lf°%c", fabs (lat), c); break;
+   case DM: snprintf (str, maxLen, "%02d°%05.2lf'%c", (int) fabs (lat), fabs(mn), c); break;
    case DMS: 
-      snprintf (str, MAX_SIZE_LINE, "%02d°%02d'%02.0lf\"%c", (int) fabs (lat), (int) fabs(mn), fabs(sec), c);
+      snprintf (str, maxLen, "%02d°%02d'%02.0lf\"%c", (int) fabs (lat), (int) fabs(mn), fabs(sec), c);
       break;
    default:;
    }
@@ -485,17 +500,16 @@ char *latToStr (double lat, int type, char* str) {
 }
 
 /*! convert lon to str according to type */
-char *lonToStr (double lon, int type, char *str) {
+char *lonToStr (double lon, int type, char *str, size_t maxLen) {
    double mn = 60 * lon - 60 * (int) lon;
    double sec = 3600 * lon - (3600 * (int) lon) - (60 * (int) mn);
-   char cc [10];
-   strcpy (cc, (lon > 0) ? "E" : "W");
+   char c = (lon > 0) ? 'E' : 'W';
    switch (type) {
-   case BASIC: snprintf (str, MAX_SIZE_LINE, "%.2lf°", lon); break;
-   case DD: snprintf (str, MAX_SIZE_LINE, "%06.2lf°%s", fabs (lon), cc); break;
-   case DM: snprintf (str, MAX_SIZE_LINE, "%03d°%05.2lf'%s", (int) fabs (lon), fabs(mn), cc); break;
+   case BASIC: snprintf (str, maxLen, "%.2lf°", lon); break;
+   case DD: snprintf (str, maxLen, "%06.2lf°%c", fabs (lon), c); break;
+   case DM: snprintf (str, maxLen, "%03d°%05.2lf'%c", (int) fabs (lon), fabs(mn), c); break;
    case DMS:
-      snprintf (str, MAX_SIZE_LINE, "%03d°%02d'%02.0lf\"%s", (int) fabs (lon), (int) fabs(mn), fabs(sec), cc);
+      snprintf (str, maxLen, "%03d°%02d'%02.0lf\"%c", (int) fabs (lon), (int) fabs(mn), fabs(sec), c);
       break;
    default:;
    }
@@ -503,15 +517,15 @@ char *lonToStr (double lon, int type, char *str) {
 }
 
 /*! convert hours in string with days, hours, minutes */
-char *durationToStr (double duration, char *res, size_t len) {
+char *durationToStr (double duration, char *res, size_t maxLen) {
    int nDays, nHours, nMin;
    nDays = duration / 24;
    nHours = fmod (duration, 24.0);
    nMin = 60 * fmod (duration, 1.0);
    if (nDays == 0)
-      snprintf (res, len, "%02d:%02d", nHours, nMin); 
+      snprintf (res, maxLen, "%02d:%02d", nHours, nMin); 
    else
-      snprintf (res, len, "%d Days %02d:%02d", nDays, nHours, nMin);
+      snprintf (res, maxLen, "%d Days %02d:%02d", nDays, nHours, nMin);
    // printf ("Duration: %.2lf hours, equivalent to %d days, %02d:%02d\n", duration, nDays, nHours, nMin);
    return res;
 } 
@@ -523,45 +537,36 @@ int readPoi (const char *fileName) {
    char *pt = NULL;
 	FILE *f = NULL;
    int i = nPoi;
-   bool first = true;
-   char *latToken, *lonToken, *typeToken, *levelToken, *ccToken, *nameToken;
+
 	if ((f = fopen (fileName, "r")) == NULL) {
 		fprintf (stderr, "Error in readPoi: impossible to read: %s\n", fileName);
 		return 0;
 	}
    while ((fgets (pLine, MAX_SIZE_LINE, f) != NULL )) {
-      if (first) {
-         first = false;
-         continue;
-      }
       if ((pt = strchr (pLine, '#')) != NULL)               // comment elimination
          *pt = '\0';
       g_strstrip (pLine);
-      if ((latToken = strtok (pLine, CSV_SEP)) != NULL) {            // Lat
-         if ((lonToken = strtok (NULL, CSV_SEP)) != NULL) {          // Lon
-            if ((typeToken = strtok (NULL, CSV_SEP))!= NULL ) {      // Type
-               if ((levelToken = strtok (NULL, CSV_SEP))!= NULL ) {  // Level
-                  if ((nameToken = strtok (NULL, CSV_SEP))!= NULL ) {   // Name
-                     tPoi [i].lat = getCoord (latToken);
-                     tPoi [i].lon = getCoord (lonToken);
-                     tPoi [i].type = strtol (typeToken, NULL, 10);
-                     tPoi [i].level = strtol (levelToken, NULL, 10);
-                     strncpy (tPoi [i].name, nameToken, MAX_SIZE_POI_NAME);
-                     g_strstrip (tPoi [i].name);
-                     if ((ccToken = strtok (NULL, CSV_SEP))!= NULL ) {   // Country optionnal
-                        g_strstrip (ccToken);
-                        strncpy (tPoi [i].cc, ccToken, MAX_SIZE_COUNTRY_CODE);
-                     }
-                     i += 1;
-                     if (i >= MAX_N_POI) {
-                        fprintf (stderr, "Error in readPoi: Exceed MAX_N_POI : %d\n", i);
-	                     fclose (f);
-                        return 0;
-                     } 
-                  }
-               }
-            }
-         }
+      char **tokens = g_strsplit (pLine, ";", 6); // Maximum 6 tokens
+
+      if (!tokens[0] || !tokens[1] || !tokens[2] || !tokens[3] || !tokens[4]) {
+         g_strfreev(tokens);
+         continue;  // Invalid line, skip it
+      }
+
+      tPoi [i].lat = getCoord (tokens [0], MIN_LAT, MAX_LAT);
+      tPoi [i].lon = getCoord (tokens [1], MIN_LON, MAX_LON);
+      tPoi [i].type = strtol (tokens [2], NULL, 10);
+      tPoi [i].level = strtol (tokens [3], NULL, 10);
+      g_strlcpy (tPoi [i].name, tokens [4], MAX_SIZE_POI_NAME);
+      g_strstrip (tPoi [i].name);
+      if (tokens [5]) { // optionnal country code
+         g_strlcpy (tPoi [i].cc, g_strstrip (tokens[5]), MAX_SIZE_COUNTRY_CODE);
+      }
+      i += 1;
+      if (i >= MAX_N_POI) {
+         fprintf (stderr, "Error in readPoi: Exceed MAX_N_POI : %d\n", i);
+	      fclose (f);
+         return 0;
       }
 	}
 	fclose (f);
@@ -585,12 +590,15 @@ bool writePoi (const char *fileName) {
    return true;
 }
 
-/*! give the point refered by its name. return index found, -1 if not found */
-int findPoiByName (const char *name, double *lat, double *lon) {
+int oldfindPoiByName (const char *name, double *lat, double *lon) {
    const size_t MIN_NAME_LENGTH = 3;
    int i;
    char *upperPoi = NULL;;
+   if (!name || !lat || !lon) {
+      return -1; // Invalid arguments
+   }
    char *upperName = g_utf8_strup (name, MAX_SIZE_NAME);
+
    g_strstrip (upperName);
    if (strlen (upperName) <= MIN_NAME_LENGTH) {
       free (upperPoi);
@@ -604,45 +612,86 @@ int findPoiByName (const char *name, double *lat, double *lon) {
          *lon = tPoi [i].lon;
          break;
       }
+      free (upperPoi);
    }
    free (upperPoi);
    free (upperName);
    return (i < nPoi) ? i : -1;
 }
 
+/*! give the point refered by its name. return index found, -1 if not found */
+int findPoiByName(const char *name, double *lat, double *lon) {
+    const size_t MIN_NAME_LENGTH = 3;
+    if (!name || !lat || !lon) {
+        return -1; // Invalid arguments
+    }
+
+    // Normalize the input name for case-insensitive comparison
+    char *normalized_name = g_utf8_casefold(name, -1);
+    g_strstrip(normalized_name);
+
+    if (strlen(normalized_name) < MIN_NAME_LENGTH) {
+        g_free(normalized_name);
+        return -1; // Name too short
+    }
+
+    for (int i = 0; i < nPoi; i++) {
+        // Normalize the POI name
+        char *normalized_poi = g_utf8_casefold(tPoi[i].name, -1);
+
+        // Check if the input name is a substring of the POI name (case-insensitive)
+        if (g_strstr_len(normalized_poi, -1, normalized_name)) {
+            *lat = tPoi[i].lat;
+            *lon = tPoi[i].lon;
+            g_free(normalized_poi);
+            g_free(normalized_name);
+            return i; // Found
+        }
+
+        g_free(normalized_poi);
+    }
+
+    g_free(normalized_name);
+    return -1; // Not found
+}
+
 /*! printf poi table */ 
 void poiPrint () {
-   char strLat [MAX_SIZE_LINE] = "";
-   char strLon [MAX_SIZE_LINE] = "";
+   char strLat [MAX_SIZE_NAME] = "";
+   char strLon [MAX_SIZE_NAME] = "";
    printf ("Lat         Lon         type level Country Name\n");
    for (int i = 0; i < nPoi; i++) {
       if (tPoi [i].type > UNVISIBLE) {
-         printf ("%-12s %-12s %4d %5d %7s %s\n", latToStr (tPoi[i].lat, par.dispDms, strLat), \
-            lonToStr (tPoi[i].lon, par.dispDms, strLon), tPoi [i].type, tPoi [i].level, tPoi [i].cc, tPoi[i].name);
+         printf ("%-12s %-12s %4d %5d %7s %s\n",\
+            latToStr (tPoi[i].lat, par.dispDms, strLat, sizeof (strLat)),\
+            lonToStr (tPoi[i].lon, par.dispDms, strLon, sizeof (strLon)),\
+            tPoi [i].type, tPoi [i].level, tPoi [i].cc, tPoi[i].name);
       }
    }
    printf ("\nNumber of Points Of Interest: %d\n", nPoi);
 }
 
 /*! translate poi table into a string */
-char *poiToStr (bool portCheck, char *str, size_t maxLength) {
+char *poiToStr (bool portCheck, char *str, size_t maxLen) {
    char line [MAX_SIZE_LINE] = "";
-   char strLat [MAX_SIZE_LINE] = "";
+   char strLat [MAX_SIZE_NAME] = "";
    char strLon [MAX_SIZE_LINE] = "";
    snprintf (str, MAX_SIZE_LINE, "Lat         Lon           Type  Level Country Name\n");
    
    for (int i = 0; i < nPoi; i++) {
       if ((tPoi [i].type > UNVISIBLE) && ((tPoi [i].type != PORT) || portCheck)) {
-         snprintf (line, MAX_SIZE_LINE, "%-12s %-12s %6d %6d %7s %s\n", latToStr (tPoi[i].lat, par.dispDms, strLat), \
-            lonToStr (tPoi[i].lon, par.dispDms, strLon), tPoi [i].type, tPoi [i].level, tPoi [i].cc, tPoi[i].name);
-	      g_strlcat (str, line, maxLength);
+         snprintf (line, MAX_SIZE_LINE, "%-12s %-12s %6d %6d %7s %s\n",\
+            latToStr (tPoi[i].lat, par.dispDms, strLat, sizeof (strLat)),\
+            lonToStr (tPoi[i].lon, par.dispDms, strLon, sizeof (strLon)),\
+            tPoi [i].type, tPoi [i].level, tPoi [i].cc, tPoi[i].name);
+	      g_strlcat (str, line, maxLen);
       }
    }
    return str;
 }
 
 /*! return name of nearest port found in file fileName from lat, lon. return empty string if not found */
-char *nearestPort (double lat, double lon, const char *fileName, char *res) {
+char *nearestPort (double lat, double lon, const char *fileName, char *res, size_t maxLen) {
    const double MIN_SHOM_LAT = 43.0;
    const double MAX_SHOM_LAT = 51.0;
    const double MIN_SHOM_LON = -4.0;
@@ -665,7 +714,7 @@ char *nearestPort (double lat, double lon, const char *fileName, char *res) {
          double d = orthoDist (lat, lon, latPort, lonPort);
          if (d < minDist) {
             minDist = d;
-            strncpy (res, portName, MAX_SIZE_POI_NAME);
+            g_strlcpy (res, portName, maxLen);
                // printf ("%s %.2lf %.2lf %.2lf %.2lf %.2lf \n", portName, d, lat, lon, latPort, lonPort);
          }
       }
@@ -725,15 +774,35 @@ double offsetLocalUTC (void) {
    return offsetSeconds;
 }
 
+/* return number of hours between now minus beginning of the grib */
+double diffTimeBetweenNowAndGribOrigin (long intDate, double nHours) {
+   time_t now = time (NULL);
+   struct tm tm0 = {0};
+   tm0.tm_year = (intDate / 10000) - 1900;
+   tm0.tm_mon = ((intDate % 10000) / 100) - 1;
+   tm0.tm_mday = intDate % 100;
+   tm0.tm_hour = (int ) nHours;
+   tm0.tm_sec += offsetLocalUTC ();       // make sure we use UTC
+   tm0.tm_isdst = -1;                     // avoid adjustments with hours summer winter
+    // Convertir struct tm en timestamp (secondes depuis Epoch)
+   time_t timeTm0 = mktime (&tm0);
+   if ((timeTm0 != -1) && (now -= -1) && (now > timeTm0)) 
+      return difftime (now, timeTm0) / 3600;
+   else {
+      fprintf (stderr, "In diffTimeBetweenNowAndGribOrigin, Error\n");
+      return -1;
+   }
+}
+
 /*! convert epoch time to string with or without seconds */
-char *epochToStr (time_t t, bool seconds, char *str, size_t len) {
+char *epochToStr (time_t t, bool seconds, char *str, size_t maxLen) {
    struct tm *utc = gmtime (&t);
    if (seconds)
-      snprintf (str, len, "%d/%02d/%02d %02d:%02d:%02d", 
+      snprintf (str, maxLen, "%d/%02d/%02d %02d:%02d:%02d", 
          utc->tm_year + 1900, utc->tm_mon + 1, utc->tm_mday,
          utc->tm_hour, utc->tm_min, utc->tm_sec);
    else
-      snprintf (str, len, "%d/%02d/%02d %02d:%02d", 
+      snprintf (str, maxLen, "%d/%02d/%02d %02d:%02d", 
          utc->tm_year + 1900, utc->tm_mon + 1, utc->tm_mday,
          utc->tm_hour, utc->tm_min);
       
@@ -741,13 +810,13 @@ char *epochToStr (time_t t, bool seconds, char *str, size_t len) {
 }
 
 /*! return str representing grib date */
-char *gribDateTimeToStr (long date, long time, char *str, size_t len) {
+char *gribDateTimeToStr (long date, long time, char *str, size_t maxLen) {
    int year = date / 10000;
    int mon = (date % 10000) / 100;
    int day = date % 100;
    int hour = time / 100;
    int min = time % 100;
-   snprintf (str, len, "%4d/%02d/%02d %02d:%02d", year, mon, day, hour, min);
+   snprintf (str, maxLen, "%4d/%02d/%02d %02d:%02d", year, mon, day, hour, min);
    return str;
 }
 
@@ -1076,6 +1145,7 @@ static inline double arrondiMax (double v, double step) {
 /*! provide 4 wind points around p */
 static inline void find4PointsAround (double lat, double lon,  double *latMin, 
    double *latMax, double *lonMin, double *lonMax, Zone *zone) {
+
    *latMin = arrondiMin (lat, zone->latStep);
    *latMax = arrondiMax (lat, zone->latStep);
    *lonMin = arrondiMin (lon, zone->lonStep);
@@ -1262,6 +1332,7 @@ void findCurrentGrib (double lat, double lon, double t, double *uCurr,\
    }
 }
 
+/*! Modify arrr with new value if not already in array. Return new array size*/
 static long updateLong (long value, size_t n, size_t maxSize, long array []) {
    bool found = false;
    for (size_t i = 0; i < n; i++) {
@@ -1313,7 +1384,7 @@ static bool readGribLists (const char *fileName, Zone *zone) {
          }
       } 
       if ((! found) && (zone->nShortName < MAX_N_SHORT_NAME)) { // new shortName
-         strncpy (zone->shortName [zone->nShortName], shortName, MAX_SIZE_SHORT_NAME); 
+         g_strlcpy (zone->shortName [zone->nShortName], shortName, MAX_SIZE_SHORT_NAME); 
          zone->nShortName += 1;
       }
       zone->nTimeStamp = updateLong (timeStep, zone->nTimeStamp, MAX_N_TIME_STAMPS, zone->timeStamp); 
@@ -1324,8 +1395,8 @@ static bool readGribLists (const char *fileName, Zone *zone) {
    fclose (f);
    // Replace unknown by gust ? (GFS case where gust identified by specific indicatorOfParameter)
    for (size_t i = 0; i < zone->nShortName; i++) {
-      if (strcmp(zone->shortName[i], "unknown") == 0)
-         strcpy(zone->shortName[i], "gust?");
+      if (strcmp (zone->shortName[i], "unknown") == 0)
+         g_strlcpy (zone->shortName[i], "gust?", 6);
    }
    return true;
 }
@@ -1404,6 +1475,7 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
    long timeInterval = 0;
    memset (zone, 0,  sizeof (Zone));
    zone->wellDefined = false;
+
    if (! readGribLists (fileName, zone)) {
       return false;
    }
@@ -1419,7 +1491,10 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
       //return false;
    }
 
-   if (tGribData [iFlow] != NULL) free (tGribData [iFlow]); 
+   if (tGribData [iFlow] != NULL) {
+      free (tGribData [iFlow]); 
+      tGribData [iFlow] = NULL;
+   }
    if ((tGribData [iFlow] = calloc ((zone->nTimeStamp + 1) * zone->nbLat * zone->nbLon, sizeof (FlowP))) == NULL) { // nTimeStamp + 1
       fprintf (stderr, "Error in readGribAll: calloc tGribData [iFlow]\n");
       return false;
@@ -1431,8 +1506,10 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
    // Iterator on lat/lon/values.
    codes_iterator* iter = NULL;
    if ((f = fopen (fileName, "rb")) == NULL) {
-       fprintf (stderr, "Error in readGribAll: Unable to open file %s\n", fileName);
-       return false;
+      free (tGribData [iFlow]); 
+      tGribData [iFlow] = NULL;
+      fprintf (stderr, "Error in readGribAll: Unable to open file %s\n", fileName);
+      return false;
    }
    zone->nMessage = 0;
    zone->allTimeStepOK = true;
@@ -1458,6 +1535,10 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
          zone->allTimeStepOK = false;
          fprintf (stderr, "In readGribAll: All time Step Are Not defined message: %d, timeStep: %ld shortName: %s\n", 
             zone->nMessage, timeStep, shortName);
+         //free (tGribData [iFlow]); 
+         //tGribData [iFlow] = NULL;
+         //fclose (f);
+         //return false;
       }
       oldTimeStep = timeStep;
 
@@ -1474,15 +1555,22 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
          lon = lonCanonize (lon);
          iGrib = indexOf ((int) timeStep, lat, lon, zone);
    
-         if (iGrib == -1) return NULL;
+         if (iGrib == -1) {
+            fprintf (stderr, "In readGribAll: Error iGrib : %d\n", iGrib); 
+            free (tGribData [iFlow]); 
+            tGribData [iFlow] = NULL;
+            codes_handle_delete (h);
+            codes_grib_iterator_delete (iter);
+            iter = NULL;
+            h = NULL;
+            fclose (f);
+            return false;
+         }
          //printf("%.2f %.2f %.2lf %ld %d %s\n", lat, lon, val, timeStep, iGrib, shortName);
          tGribData [iFlow] [iGrib].lat = lat; 
          tGribData [iFlow] [iGrib].lon = lon; 
-         if ((strcmp (shortName, "10u") == 0) || (strcmp (shortName, "ucurr") == 0)) {
+         if ((strcmp (shortName, "10u") == 0) || (strcmp (shortName, "ucurr") == 0))
             tGribData [iFlow] [iGrib].u = val;
-            //printf ("10u: %.2lf\n", val);
-         }
-
          else if ((strcmp (shortName, "10v") == 0) || (strcmp (shortName, "vcurr") == 0))
             tGribData [iFlow] [iGrib].v = val;
          else if (strcmp (shortName, "gust") == 0)
@@ -1502,6 +1590,8 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
       }
       codes_grib_iterator_delete (iter);
       codes_handle_delete (h);
+      iter = NULL;
+      h = NULL;
       zone->nMessage += 1;
    }
  
@@ -1534,16 +1624,18 @@ char *gribToStr (char *str, const Zone *zone, size_t maxLength) {
    char strLat1 [MAX_SIZE_NAME] = "", strLon1 [MAX_SIZE_NAME] = "";
    char centreName [MAX_SIZE_NAME] = "";
    
-   for (size_t i = 0; i < sizeof(dicTab) / sizeof(dicTab[0]); i++) // search name of center
-     if (dicTab [i].id == zone->centreId) 
-        strncpy (centreName, dicTab [i].name, sizeof (centreName) - 1);
+   for (size_t i = 0; i < sizeof(meteoTab) / sizeof(meteoTab[0]); i++) // search name of center
+     if (meteoTab [i].id == zone->centreId) 
+        g_strlcpy (centreName, meteoTab [i].name, sizeof (centreName));
          
-   newDate (zone->dataDate [0], zone->dataTime [0]/100, strTmp);
+   newDate (zone->dataDate [0], zone->dataTime [0]/100, strTmp, sizeof (strTmp));
    snprintf (str, maxLength, "Centre ID: %ld %s   %s   Ed number: %ld\nnMessages: %d\nstepUnits: %ld\n# values : %ld\n",\
       zone->centreId, centreName, strTmp, zone->editionNumber, zone->nMessage, zone->stepUnits, zone->numberOfValues);
-   snprintf (line, MAX_SIZE_LINE, "Zone From: %s, %s To: %s, %s\n", \
-      latToStr (zone->latMin, par.dispDms, strLat0), lonToStr (zone->lonLeft, par.dispDms, strLon0),\
-      latToStr (zone->latMax, par.dispDms, strLat1), lonToStr (zone->lonRight, par.dispDms, strLon1));
+   snprintf (line, MAX_SIZE_LINE, "Zone From: %s, %s To: %s, %s\n",\
+      latToStr (zone->latMin, par.dispDms, strLat0, sizeof (strLat0)),\
+      lonToStr (zone->lonLeft, par.dispDms, strLon0, sizeof (strLon0)),\
+      latToStr (zone->latMax, par.dispDms, strLat1, sizeof (strLat1)),\
+      lonToStr (zone->lonRight, par.dispDms, strLon1, sizeof (strLon1)));
    g_strlcat (str, line, maxLength);   
    snprintf (line, MAX_SIZE_LINE, "LatStep  : %04.4f° LonStep: %04.4f°\n", zone->latStep, zone->lonStep);
    g_strlcat (str, line, maxLength);   
@@ -1580,76 +1672,131 @@ char *gribToStr (char *str, const Zone *zone, size_t maxLength) {
    return str;
 }
 
-/*! true if str contain one character in charList */
-static bool strNchr (const char *str, const char *listChar) {
-   while (*listChar) {
-      if ((strchr (str, *listChar)) != NULL) return true;
-      listChar++;
+/* str to double accerpting both . or , as decimal separator */
+bool strtodNew (const char *str, double *v) {
+   if (str == NULL)
+      return false;
+   if (!isNumber (str))
+      return false;
+   char *mutableStr = g_strdup(str);
+   g_strdelimit (mutableStr, ",", '.');
+
+   char *endptr;
+   *v = strtod (mutableStr, &endptr);
+   if (endptr == mutableStr)
+      return false;
+   g_free(mutableStr);
+   
+   return true;
+}
+
+/*! Check polar and return false and a report if something to say */
+static bool polarCheck (PolMat *mat, char *report, size_t maxLen) {
+   double maxInRow, maxInCol;
+   int cMax, rowMax;
+   report [0] ='\0';
+   for (int c = 1; c < mat->nCol; c += 1) {  // check values in line 0 progress
+      if (mat->t [0][c] < mat->t[0][c-1]) {
+         snprintf (report, maxLen, "Report: values in row 0 should progress, col: %d\n", c);
+      }
    }
-   return false;
+   for (int row = 1; row < mat->nLine; row += 1) {
+      if ((mat->t [row][0] < mat->t[row-1] [0])) {
+         snprintf (report, maxLen, "Report: values in col 0 should progress, row: %d\n", row);
+      }
+   }
+   for (int row = 1; row < mat->nLine; row += 1) {
+      maxInRow = -1.0;
+      cMax = -1;
+      for (int c = 1; c < mat->nCol; c += 1) { // find maxInRow
+         if (mat->t[row][c] > maxInRow) {
+            maxInRow = mat->t[row][c];
+            cMax = c;
+         }
+      }
+      for (int c = 2; c <= cMax; c += 1) {
+         if (mat->t [row][c] < mat->t[row][c-1]) {
+            snprintf (report, maxLen, "Report: values in row: %d should progress at col: %d up to maxInRow: %.2lf\n", row, c, maxInRow);
+         }
+      }
+      for (int c = cMax + 1; c < mat->nCol; c += 1) {
+         if ((mat->t [row][c] > mat->t[row][c-1])) {
+            snprintf (report, maxLen, "Report: values in row: %d should regress at col: %d after maxInRow: %.2lf\n", row, c, maxInRow);
+         }
+      }
+   }
+
+   for (int c = 1; c < mat->nCol; c += 1) {
+      maxInCol = -1.0;
+      rowMax = -1;
+      for (int row = 1; row < mat->nLine; row += 1) { // find maxInRow
+         if (mat->t[row][c] > maxInCol) {
+            maxInCol = mat->t[row][c];
+            rowMax = row;
+         }
+      }
+      for (int row = 2; row <= rowMax; row += 1) {
+         if (mat->t [row][c] < mat->t[row-1][c]) {
+            snprintf (report, maxLen, "Report: values in col: %d should progress at row: %d up to maxInCol: %.2lf\n", c, row, maxInCol);
+         }
+      }
+      for (int row = rowMax + 1; row < mat->nLine; row += 1) {
+         if ((mat->t [row][c] > mat->t[row-1][c])) {
+            snprintf (report, maxLen, "Report: values in col: %d should regress at row: %d after maxInCol: %.2lf\n", c, row, maxInCol);
+         }
+      }
+   }
+   return (report [0] == '\0'); // True if no error found
 }
 
 /*! read polar file and fill poLMat matrix */
-bool readPolar (const char *fileName, PolMat *mat, int lang) {
+bool readPolar (const char *fileName, PolMat *mat, char *errMessage, size_t maxLen) {
    FILE *f = NULL;
    char buffer [MAX_SIZE_LINE];
    char *pLine = &buffer [0];
    char *strToken;
    double v = 0;
-   double lastValInCol0 = -1;
    int c;
-   char csvSep [] = CSV_SEP;
+      
    mat->nLine = 0;
    mat->nCol = 0;
    if ((f = fopen (fileName, "r")) == NULL) {
-      fprintf (stderr, "Error in readPolar: cannot open: %s\n", fileName);
+      snprintf (errMessage, maxLen,  "Error in readPolar: cannot open: %s\n", fileName);
       return false;
-   }
-   if (lang == FR) {
-      strncpy (csvSep, CSV_SEP_FR, sizeof (csvSep)); 
-	   setlocale (LC_NUMERIC, "");
    }
    while (fgets (pLine, MAX_SIZE_LINE, f) != NULL) {
       c = 0;
-      if (pLine [0] == '#') continue;          // ignore if comment
-      if (! strNchr (pLine, csvSep)) continue; // ignore if no separator
+      if (pLine [0] == '#') continue;                       // ignore if comment
+      if (strpbrk (pLine, CSV_SEP_POLAR) == NULL) continue; // ignore if no separator
          
-      strToken = strtok (pLine, csvSep);
+      strToken = strtok (pLine, CSV_SEP_POLAR);
       while ((strToken != NULL) && (c < MAX_N_POL_MAT_COLS)) {
-         if (sscanf (strToken, "%lf", &v) == 1) {
-            if (c == 0) {
-              if (v < lastValInCol0) {
-                 fprintf (stderr, "Error in readPolar: value of column 0 should progress\n");
-                 break;
-              } 
-              else lastValInCol0 = v; 
-            }
+         if (strtodNew (strToken, &v)) {
             mat->t [mat->nLine][c] = v;
+            c += 1;
          }
-         c += 1;
-         strToken = strtok (NULL, csvSep);
+         if ((mat->nLine == 0) && (c == 0))
+            c += 1;
+         strToken = strtok (NULL, CSV_SEP_POLAR);
       }
       if (c <= 2) continue; // line is not validated if not at least 2 columns
       if (c >= MAX_N_POL_MAT_COLS) {
-         fprintf (stderr, "Error in readPolar: max number of colums: %d\n", MAX_N_POL_MAT_COLS);
-         setlocale (LC_NUMERIC,"C");
+         snprintf (errMessage, maxLen, "Error in readPolar: max number of colums: %d\n", MAX_N_POL_MAT_COLS);
          fclose (f);
          return false;
       }
-      if ((c == 0) && (v < lastValInCol0)) break;
-      mat->nLine+= 1; // line is not validated if not at least 2 columns
+      mat->nLine+= 1;
       
       if (mat->nLine >= MAX_N_POL_MAT_LINES) {
-         fprintf (stderr, "Error in readPolar: max number of line: %d\n", MAX_N_POL_MAT_LINES);
-         setlocale (LC_NUMERIC,"C");
+         snprintf (errMessage, maxLen, "Error in readPolar: max number of line: %d\n", MAX_N_POL_MAT_LINES);
          fclose (f);
          return false;
       }
-      if ((mat->nCol < c) && mat->nLine == 1) mat->nCol = c; // max
+      if (mat->nLine == 1) mat->nCol = c; // max
    }
    mat -> t [0][0] = -1;
    fclose (f);
-   setlocale (LC_NUMERIC,"C");
+   polarCheck (mat, errMessage, maxLen);
    return true;
 }
 
@@ -1711,15 +1858,19 @@ char *polToStr (char * str, const PolMat *mat, size_t maxLength) {
 }
 
 /*! find name, lat and lon */
-static void analyseCoord (char *str, double *lat, double *lon) {
+bool analyseCoord (const char *strCoord, double *lat, double *lon) {
    char *pt = NULL;
+   char *str = g_strdup (strCoord);
    g_strstrip (str);
-   if (isNumber (str)) {
-      pt = strchr (str, ',');
-      *lon = getCoord (strchr (str, ',') +1);
-      if (pt != NULL) *pt = '\0'; // pas joli
-      *lat = getCoord (str);
+   if (isNumber (str) && ((pt = strchr (str, ',')) || (pt = strchr (str, '-')))) {
+      *lon = getCoord (pt + 1, MIN_LON, MAX_LON);
+      *pt = '\0'; // cut str in two parts
+      *lat = getCoord (str, MIN_LAT, MAX_LAT);
+      g_free (str);
+      return true;
    }
+   g_free (str);
+   return false;
 }
 
 /*! return true if p is in polygon po
@@ -1761,6 +1912,7 @@ void updateIsSeaWithForbiddenAreas (void) {
 /*! read forbid zone */
 static void forbidZoneAdd (char *line, int n) {
    char *latToken, *lonToken;
+   printf ("Forbid Zone    : %d\n", n);
    if ((forbidZones [n].points = (Point *) malloc (MAX_SIZE_FORBID_ZONE * sizeof(Point))) == NULL) {
       fprintf (stderr, "Error in forbidZoneAdd: malloc with n = %d\n", n);
       return;
@@ -1769,14 +1921,14 @@ static void forbidZoneAdd (char *line, int n) {
    if (((latToken = strtok (line, ",")) != NULL) && \
       ((lonToken = strtok (NULL, ";")) != NULL)) { // first point
 
-      forbidZones [n].points[0].lat = strtod (latToken, NULL);  
-      forbidZones [n].points[0].lon = strtod (lonToken, NULL);
+      forbidZones [n].points[0].lat = getCoord (latToken, MIN_LAT, MAX_LAT);  
+      forbidZones [n].points[0].lon = getCoord (lonToken, MIN_LON, MAX_LON);
       forbidZones [n].n = 1;
       while ((lonToken != NULL) && (latToken != NULL) && (forbidZones [n].n < MAX_SIZE_FORBID_ZONE)) {
          if ((latToken = strtok (NULL, ",")) != NULL) {         // lat
-            forbidZones [n].points[forbidZones [n].n].lat = strtod (latToken, NULL);  
+            forbidZones [n].points[forbidZones [n].n].lat = getCoord (latToken, MIN_LAT, MAX_LAT);  
             if ((lonToken = strtok (NULL, ";")) != NULL) {      // lon
-               forbidZones [n].points[forbidZones [n].n].lon = strtod (lonToken, NULL);
+               forbidZones [n].points[forbidZones [n].n].lon = getCoord (lonToken, MIN_LON, MAX_LON);
                forbidZones [n].n += 1;
             }
          }
@@ -1789,7 +1941,7 @@ bool readParam (const char *fileName) {
    FILE *f = NULL;
    char *pt = NULL;
    char str [MAX_SIZE_LINE];
-   char buffer [MAX_SIZE_BUFFER];
+   char buffer [MAX_SIZE_TEXT];
    char *pLine = &buffer [0];
    memset (&par, 0, sizeof (Par));
    par.opt = 1;
@@ -1809,47 +1961,68 @@ bool readParam (const char *fileName) {
    par.xWind = 1.0;
    par.maxWind = 50.0;
    wayPoints.n = 0;
-   wayPoints.totOrthoDist = 0;
-   wayPoints.totLoxoDist = 0;
+   wayPoints.totOrthoDist = 0.0;
+   wayPoints.totLoxoDist = 0.0;
+   competitors.n = 0;
+   competitors.runIndex = -1;
    
    if ((f = fopen (fileName, "r")) == NULL) {
       fprintf (stderr, "Error in readParam: Cannot open: %s\n", fileName);
       return false;
    }
 
-   while (fgets (pLine, MAX_SIZE_BUFFER, f) != NULL ) {
+   while (fgets (pLine, sizeof (buffer), f) != NULL ) {
       str [0] = '\0';
       while (isspace (*pLine)) pLine++;
       // printf ("%s", pLine);
       if ((!*pLine) || *pLine == '#' || *pLine == '\n') continue;
       if ((pt = strchr (pLine, '#')) != NULL)               // comment elimination
          *pt = '\0';
-      if (sscanf (pLine, "LANG:%d", &par.lang) > 0);
-      else if (sscanf (pLine, "ALLWAYS_SEA:%d", &par.allwaysSea) > 0);
+      if (sscanf (pLine, "ALLWAYS_SEA:%d", &par.allwaysSea) > 0);
       else if (sscanf (pLine, "WD:%255s", par.workingDir) > 0);  // should be first !!!
       else if (sscanf (pLine, "POI:%255s", str) > 0) 
-         buildRootName (str, par.poiFileName);
+         buildRootName (str, par.poiFileName, sizeof (par.poiFileName));
       else if (sscanf (pLine, "PORT:%255s", str) > 0)
-         buildRootName (str, par.portFileName);
+         buildRootName (str, par.portFileName, sizeof (par.portFileName));
       else if (strstr (pLine, "POR:") != NULL) {
-         analyseCoord (strchr (pLine, ':') + 1, &par.pOr.lat, &par.pOr.lon);
-         par.pOr.lon = lonCanonize (par.pOr.lon);
-         par.pOr.id = -1;
-         par.pOr.father = -1;
+            if (analyseCoord (strchr (pLine, ':') + 1, &par.pOr.lat, &par.pOr.lon)) {
+            par.pOr.lon = lonCanonize (par.pOr.lon);
+            par.pOr.id = -1;
+            par.pOr.father = -1;
+         }
       } 
       else if (strstr (pLine, "PDEST:") != NULL) {
-         analyseCoord (strchr (pLine, ':') + 1, &par.pDest.lat, &par.pDest.lon);
-         par.pDest.lon = lonCanonize (par.pDest.lon);
-         par.pDest.id = 0;
-         par.pDest.father = 0;
+         if (analyseCoord (strchr (pLine, ':') + 1, &par.pDest.lat, &par.pDest.lon)) {
+            par.pDest.lon = lonCanonize (par.pDest.lon);
+            par.pDest.id = 0;
+            par.pDest.father = 0;
+         }
       }
       else if (strstr (pLine, "WP:") != NULL) {
          if (wayPoints.n > MAX_N_WAY_POINT)
             fprintf (stderr, "Error in readParam: number of wayPoints exceeded; %d\n", MAX_N_WAY_POINT);
          else {
-            // printf ("WP: %d\n", wayPoints.n);
-            analyseCoord (strchr (pLine, ':') + 1, &wayPoints.t [wayPoints.n].lat, &wayPoints.t [wayPoints.n].lon);
-            wayPoints.n += 1;
+            if (analyseCoord (strchr (pLine, ':') + 1, &wayPoints.t [wayPoints.n].lat, &wayPoints.t [wayPoints.n].lon))
+               wayPoints.n += 1;
+         }
+      }
+      else if (strstr (pLine, "COMPETITOR:") != NULL) {
+         if (competitors.n > MAX_N_COMPETITORS)
+            fprintf (stderr, "Error in readParam: number of competitors exceeded; %d\n", MAX_N_COMPETITORS);
+         else {
+            competitors.t [competitors.n].name [0] = '\0';
+            if (((pt = strrchr (pLine, ';')) != NULL) && (sscanf (pt + 1, "%64s", competitors.t [competitors.n].name) > 0)) {
+               *pt = '\0'; // cut line
+               g_strstrip (competitors.t [competitors.n].name);
+            }
+            if (analyseCoord (strchr (pLine, ':') + 1, &competitors.t [competitors.n].lat, &competitors.t [competitors.n].lon)) {
+            // printf ("i:%d, lat: %.2lf, lon: %.2lf, %s\n\n", competitors.n, competitors.t [competitors.n].lat, competitors.t [competitors.n].lon, competitors.t [competitors.n].name);
+               if (competitors.n == 0) {
+                  par.pOr.lat = competitors.t [0].lat;
+                  par.pOr.lon = competitors.t [0].lon;
+               }
+               competitors.n += 1;
+            }
          }
       }
       else if (sscanf (pLine, "POR_NAME:%255s", par.pOrName) > 0);
@@ -1858,23 +2031,23 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "GRIB_TIME_STEP:%d", &par.gribTimeStep) > 0);
       else if (sscanf (pLine, "GRIB_TIME_MAX:%d", &par.gribTimeMax) > 0);
       else if (sscanf (pLine, "TRACE:%255s", str) > 0)
-         buildRootName (str, par.traceFileName);
+         buildRootName (str, par.traceFileName, sizeof (par.traceFileName));
       else if (sscanf (pLine, "CGRIB:%255s", str) > 0)
-         buildRootName (str, par.gribFileName);
+         buildRootName (str, par.gribFileName, sizeof (par.gribFileName));
       else if (sscanf (pLine, "CURRENT_GRIB:%255s", str) > 0)
-         buildRootName (str, par.currentGribFileName);
+         buildRootName (str, par.currentGribFileName, sizeof (par.currentGribFileName));
       else if (sscanf (pLine, "WAVE_POL:%255s", str) > 0)
-         buildRootName (str, par.wavePolFileName);
+         buildRootName (str, par.wavePolFileName, sizeof (par.wavePolFileName));
       else if (sscanf (pLine, "POLAR:%255s", str) > 0)
-         buildRootName (str, par.polarFileName);
+         buildRootName (str, par.polarFileName, sizeof (par.polarFileName));
       else if (sscanf (pLine, "ISSEA:%255s", str) > 0)
-         buildRootName (str, par.isSeaFileName);
+         buildRootName (str, par.isSeaFileName, sizeof (par.isSeaFileName));
       else if (sscanf (pLine, "TIDES:%255s", str) > 0)
-         buildRootName (str, par.tidesFileName);
+         buildRootName (str, par.tidesFileName, sizeof (par.tidesFileName));
       else if (sscanf (pLine, "MID_COUNTRY:%255s", str) > 0)
-         buildRootName (str, par.midFileName);
+         buildRootName (str, par.midFileName, sizeof (par.midFileName));
       else if (sscanf (pLine, "CLI_HELP:%255s", str) > 0)
-         buildRootName (str, par.cliHelpFileName);
+         buildRootName (str, par.cliHelpFileName, sizeof (par.cliHelpFileName));
       else if (sscanf (pLine, "HELP:%255s", par.helpFileName) > 0); // full link required
       else if (sscanf (pLine, "PYTHON:%d", &par.python) > 0);
       else if (sscanf (pLine, "SMTP_SCRIPT:%255[^\n]s", par.smtpScript) > 0)
@@ -1884,7 +2057,7 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "IMAP_SCRIPT:%255[^\n]s", par.imapScript) > 0)
          g_strstrip (par.imapScript);
       else if (sscanf (pLine, "SHP:%255s", str) > 0) {
-         buildRootName (str, par.shpFileName [par.nShpFiles]);
+         buildRootName (str, par.shpFileName [par.nShpFiles], sizeof (par.shpFileName [0]));
          par.nShpFiles += 1;
          if (par.nShpFiles >= MAX_N_SHP_FILES) 
             fprintf (stderr, "Error in readParam: Number max of SHP files reached: %d\n", par.nShpFiles);
@@ -1908,13 +2081,12 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "CONST_CURRENT_S:%lf", &par.constCurrentS) > 0);
       else if (sscanf (pLine, "CONST_CURRENT_D:%lf", &par.constCurrentD) > 0);
       else if (sscanf (pLine, "DUMPI:%255s", str) > 0)
-         buildRootName (str, par.dumpIFileName);
+         buildRootName (str, par.dumpIFileName, sizeof (par.dumpIFileName));
       else if (sscanf (pLine, "DUMPR:%255s", str) > 0)
-         buildRootName (str, par.dumpRFileName);
+         buildRootName (str, par.dumpRFileName, sizeof (par.dumpRFileName));
       else if (sscanf (pLine, "PAR_INFO:%255s", str) > 0)
-         buildRootName (str, par.parInfoFileName);
+         buildRootName (str, par.parInfoFileName, sizeof (par.parInfoFileName));
       else if (sscanf (pLine, "OPT:%d", &par.opt) > 0);
-      else if (sscanf (pLine, "MAX_THETA:%lf", &par.maxTheta) > 0);
       else if (sscanf (pLine, "J_FACTOR:%d", &par.jFactor) > 0);
       else if (sscanf (pLine, "K_FACTOR:%d", &par.kFactor) > 0);
       else if (sscanf (pLine, "PENALTY0:%d", &par.penalty0) > 0);
@@ -1942,7 +2114,7 @@ bool readParam (const char *fileName) {
       else if ((strstr (pLine, "FORBID_ZONE:") != NULL) && (par.nForbidZone < MAX_N_FORBID_ZONE)) {
          pLine = strchr (pLine, ':') + 1;
          g_strstrip (pLine);
-         strncpy (par.forbidZone [par.nForbidZone], pLine, sizeof (par.forbidZone) - 1);
+         g_strlcpy (par.forbidZone [par.nForbidZone], pLine, MAX_SIZE_LINE);
          forbidZoneAdd (pLine, par.nForbidZone);
          par.nForbidZone += 1;
       }
@@ -1961,7 +2133,7 @@ bool readParam (const char *fileName) {
    if (par.mailPw [0] != '\0') {
       par.storeMailPw = true;
    }
-      
+   if (competitors.n > 0) competitors.t[0].main = true; // default main competitor is 0
    if (par.maxIso > MAX_N_ISOC) par.maxIso = MAX_N_ISOC;
    if (par.constWindTws != 0) initZone (&zone);
    fclose (f);
@@ -1971,6 +2143,8 @@ bool readParam (const char *fileName) {
 /*! write parameter file from fill struct par 
    header or not, password or not */
 bool writeParam (const char *fileName, bool header, bool password) {
+   char strLat [MAX_SIZE_NAME] = "";
+   char strLon [MAX_SIZE_NAME] = "";
    FILE *f = NULL;
    if ((f = fopen (fileName, "w")) == NULL) {
       fprintf (stderr, "Error in writeParam: Cannot write: %s\n", fileName);
@@ -1978,19 +2152,30 @@ bool writeParam (const char *fileName, bool header, bool password) {
    }
    if (header) 
       fprintf (f, "Name             Value\n");
-   fprintf (f, "ALLWAYS_SEA:     %d\n", par.allwaysSea);
-   fprintf (f, "LANG:            %d\n", par.lang);
    fprintf (f, "WD:              %s\n", par.workingDir);
+   fprintf (f, "ALLWAYS_SEA:     %d\n", par.allwaysSea);
    fprintf (f, "POI:             %s\n", par.poiFileName);
    fprintf (f, "PORT:            %s\n", par.portFileName);
-   fprintf (f, "POR:             %.2lf,%.2lf\n", par.pOr.lat, par.pOr.lon);
-   fprintf (f, "PDEST:           %.2lf,%.2lf\n", par.pDest.lat, par.pDest.lon);
+   
+   latToStr (par.pOr.lat, par.dispDms, strLat, sizeof (strLat));
+   lonToStr (par.pOr.lon, par.dispDms, strLon, sizeof (strLon));
+   fprintf (f, "POR:             %.2lf,%.2lf #%s,%s\n", par.pOr.lat, par.pOr.lon, strLat, strLon);
+
+   latToStr (par.pDest.lat, par.dispDms, strLat, sizeof (strLat));
+   lonToStr (par.pDest.lon, par.dispDms, strLon, sizeof (strLon));
+   fprintf (f, "PDEST:           %.2lf,%.2lf #%s,%s\n", par.pDest.lat, par.pDest.lon, strLat, strLon);
+
    if (par.pOrName [0] != '\0')
       fprintf (f, "POR_NAME:        %s\n", par.pOrName);
    if (par.pDestName [0] != '\0')
       fprintf (f, "PDEST_NAME:        %s\n", par.pDestName);
    for (int i = 0; i < wayPoints.n; i++)
       fprintf (f, "WP:              %.2lf,%.2lf\n", wayPoints.t [i].lat, wayPoints.t [i].lon);
+   for (int i = 0; i < competitors.n; i++) {
+      latToStr (competitors.t [i].lat, par.dispDms, strLat, sizeof (strLat));
+      lonToStr (competitors.t [i].lon, par.dispDms, strLon, sizeof (strLon));
+      fprintf (f, "COMPETITOR:        %s,%s; %s\n", strLat, strLon, competitors.t[i].name);
+   }
    fprintf (f, "TRACE:           %s\n", par.traceFileName);
    fprintf (f, "CGRIB:           %s\n", par.gribFileName);
    if (par.currentGribFileName [0] != '\0')
@@ -2053,7 +2238,6 @@ bool writeParam (const char *fileName, bool header, bool password) {
    fprintf (f, "SPEED_DISP:      %d\n", par.speedDisp);
    fprintf (f, "AIS_DISP:        %d\n", par.aisDisp);
    fprintf (f, "TECHNO_DISP:     %d\n", par.techno);
-   fprintf (f, "MAX_THETA:       %.2lf\n", par.maxTheta);
    fprintf (f, "J_FACTOR:        %d\n", par.jFactor);
    fprintf (f, "K_FACTOR:        %d\n", par.kFactor);
    fprintf (f, "N_SECTORS:       %d\n", par.nSectors);
@@ -2072,43 +2256,42 @@ bool writeParam (const char *fileName, bool header, bool password) {
    for (int i = 0; i < par.nNmea; i++)
       fprintf (f, "NMEA:            %s %d\n", par.nmea [i].portName, par.nmea [i].speed); 
 
-   if (password)
-      fprintf (f, "MAIL_PW:         %s\n", par.mailPw);
    for (int i = 0; i < par.nForbidZone; i++) {
       fprintf (f, "FORBID_ZONE:     ");
-      for (int j = 0; j < forbidZones [i].n; j++)
-         fprintf (f, "%2.lf, %.2lf; ", forbidZones [i].points [j].lat, forbidZones [i].points [j].lon);
+      for (int j = 0; j < forbidZones [i].n; j++) {
+         latToStr (forbidZones [i].points [j].lat, par.dispDms, strLat, sizeof (strLat));
+         lonToStr (forbidZones [i].points [j].lon, par.dispDms, strLon, sizeof (strLon));
+         fprintf (f, "%s,%s; ", strLat, strLon);
+      }
       fprintf (f, "\n");
    }
+   if (password)
+      fprintf (f, "MAIL_PW:         %s\n", par.mailPw);
+
    fclose (f);
    return true;
 }
 
-/*! URL for METEO Consult Wind delay hours before now at closest time 0Z, 6Z, 12Z, or 18Z 
-	Current 12 hours before new at 0Z */
-char *buildMeteoConsultUrl (int type, int i, char *url) {
-   const int METEO_CONSULT_WIND_DELAY = 6;
-   const int METEO_CONSULT_CURRENT_DELAY = 12;
-   time_t meteoTime = time (NULL) - (3600 * ((type == WIND) ? METEO_CONSULT_WIND_DELAY : METEO_CONSULT_CURRENT_DELAY));
+/*! URL for METEO Consult Wind delay hours before now at closest time run 0Z, 6Z, 12Z, or 18Z 
+	return time run  type : WIND or CURRENT, i : zone index, delay: nb of hours to get a run */
+int buildMeteoConsultUrl (int type, int i, int delay, char *url, size_t maxLen) {
+   time_t meteoTime = time (NULL) - (3600 * delay);
    struct tm * timeInfos = gmtime (&meteoTime);  // time 4 or 5 or 6 hours ago
-   // printf ("Delay: %d hours ago: %s\n", delay [type], asctime (timeInfos));
    int mm = timeInfos->tm_mon + 1;
    int dd = timeInfos->tm_mday;
-   int hh = (timeInfos->tm_hour / 6) * 6;    // select 0 or 6 or 12 or 18
+   int hh = (type == WIND) ? (timeInfos->tm_hour / 6) * 6 : 0;    // select 0 or 6 or 12 or 18 for WIND, allways 0 for current
    if (type == CURRENT) {
-      snprintf (url, MAX_SIZE_BUFFER, CURRENT_URL [i*2 + 1], ROOT_GRIB_URL, 0, mm, dd); // allways 0
+      snprintf (url, maxLen, METEO_CONSULT_CURRENT_URL [i*2 + 1], METEO_CONSULT_ROOT_GRIB_URL, hh, mm, dd); // allways 0
    }
    else {
-      snprintf (url, MAX_SIZE_BUFFER, WIND_URL [i*2 + 1], ROOT_GRIB_URL, hh, mm, dd);
+      snprintf (url, maxLen, METEO_CONSULT_WIND_URL [i*2 + 1], METEO_CONSULT_ROOT_GRIB_URL, hh, mm, dd);
    }
-   return url;
+   return hh;
 }
 
-/*! URL for NOAA Wind or ECMWF delay hours before now at closest time 0Z, 6Z, 12Z, or 18Z 
-	Current 12 hours before new at 0Z */
-char *buildWebGribUrl (char *url, int typeWeb, int topLat, int leftLon, int bottomLat, int rightLon, int step) {
-   const int NOAA_DELAY = 5; // hours
-   const int ECMWF_DELAY = 9;
+/*! URL for NOAA Wind or ECMWF delay hours before now at closest time run 0Z, 6Z, 12Z, or 18Z 
+   return time run */
+int buildGribUrl (int typeWeb, int topLat, int leftLon, int bottomLat, int rightLon, int step, char *url, size_t maxLen) {
    char fileName [MAX_SIZE_FILE_NAME];
    time_t meteoTime = time (NULL) - (3600 * ((typeWeb == NOAA_WIND) ? NOAA_DELAY: ECMWF_DELAY));
    struct tm * timeInfos = gmtime (&meteoTime);  // time x hours ago
@@ -2121,23 +2304,24 @@ char *buildWebGribUrl (char *url, int typeWeb, int topLat, int leftLon, int bott
    const int resolution = (par.gribResolution == 0.25) ? 25 : 50; // 25 mean 0.25 degree, 50 for 0.5 degree
    if (typeWeb == NOAA_WIND) {
       hh = (timeInfos->tm_hour / 6) * 6;    // select 0 or 6 or 12 or 18
-      snprintf (startUrl, sizeof (startUrl), "https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p%d.pl?", resolution);
+      snprintf (startUrl, sizeof (startUrl), "%sfilter_gfs_0p%d.pl?", NOAA_ROOT_GRIB_URL, resolution);
+
       if (resolution == 25) // resolution = 0.25
-         snprintf (fileName, MAX_SIZE_FILE_NAME, "gfs.t%02dz.pgrb2.0p25.f%03d", hh, step);
+         snprintf (fileName, sizeof (fileName), "gfs.t%02dz.pgrb2.0p25.f%03d", hh, step);
       else                  // resolution = 0.25
-         snprintf (fileName, MAX_SIZE_FILE_NAME, "gfs.t%02dz.pgrb2full.0p50.f%03d", hh, step);
-      snprintf (url, MAX_SIZE_BUFFER, "%sdir=/gfs.%4d%02d%02d/%02d/atmos&file=%s&var_GUST=on&var_PRMSL=on&var_PRATE=on&var_UGRD=on&var_VGRD=on&lev_10_m_above_ground=on&lev_surface=on&lev_mean_sea_level=on&subregion=&toplat=%d&leftlon=%d&rightlon=%d&bottomlat=%d", 
-         startUrl, yy, mm, dd, hh, fileName, topLat, leftLon, rightLon, bottomLat);
+         snprintf (fileName, sizeof (fileName), "gfs.t%02dz.pgrb2full.0p50.f%03d", hh, step);
+
+      snprintf (url, maxLen, "%sdir=/gfs.%4d%02d%02d/%02d/atmos&file=%s&%s&subregion=&toplat=%d&leftlon=%d&rightlon=%d&bottomlat=%d", 
+            startUrl, yy, mm, dd, hh, fileName, NOAA_GENERAL_PARAM_GRIB_URL, topLat, leftLon, rightLon, bottomLat);
    }
    else { // ECMWF
       hh = (timeInfos->tm_hour / 12) * 12;    // select 0 or 12
-      strncpy (startUrl, "https://data.ecmwf.int/forecasts", sizeof (startUrl));
       // example of directory; https://data.ecmwf.int/forecasts/20240806/00z/ifs/0p25/oper/
       // example of filename : 20240806000000-102h-oper-fc.grib2
-      snprintf (url, MAX_SIZE_BUFFER, "%s/%4d%02d%02d/%02dz/ifs/0p25/oper/%4d%02d%02d%02d0000-%dh-oper-fc.grib2",\
-          startUrl, yy, mm, dd, hh, yy, mm, dd, hh, step); 
+      snprintf (url, maxLen, "%s%4d%02d%02d/%02dz/ifs/0p25/oper/%4d%02d%02d%02d0000-%dh-oper-fc.grib2",\
+          ECMWF_ROOT_GRIB_URL, yy, mm, dd, hh, yy, mm, dd, hh, step); 
    }
-   return url;
+   return hh;
 }
 
 /*! call back for curlGet */
@@ -2147,16 +2331,16 @@ static size_t WriteCallback (const void* contents, size_t size, size_t nmemb, co
 }
 
 /*! return true if URL has been downloaded */
-bool curlGet (const char *url, char* outputFile, char *errMessage, int lMax) {
+bool curlGet (const char *url, const char *outputFile, char *errMessage, int maxLen) {
    long http_code;
    CURL* curl = curl_easy_init();
-   if (!curl) {
-      strncpy (errMessage, "Impossible to initialize curl", lMax);
+   if (curl == NULL) {
+      g_strlcpy (errMessage, "Impossible to initialize curl", maxLen);
       return false;
    }
    FILE* f = fopen (outputFile, "wb");
-   if (!f) {
-      snprintf (errMessage, lMax, "Error opening outputFile: %s", outputFile);
+   if (f == NULL) {
+      snprintf (errMessage, maxLen, "Error opening outputFile: %s", outputFile);
       return false;
    }
 
@@ -2167,7 +2351,7 @@ bool curlGet (const char *url, char* outputFile, char *errMessage, int lMax) {
    CURLcode res = curl_easy_perform(curl);
    
    if (res != CURLE_OK) {
-      snprintf (errMessage, lMax, "Error Downloading: %s\n", curl_easy_strerror(res));
+      snprintf (errMessage, maxLen, "Error Downloading: %s\n", curl_easy_strerror(res));
       fclose (f);
       return false;
    }
@@ -2175,7 +2359,7 @@ bool curlGet (const char *url, char* outputFile, char *errMessage, int lMax) {
    curl_easy_cleanup(curl);
    fclose(f);
    if (http_code >= 400 || res != CURLE_OK) {
-      snprintf (errMessage, lMax, "Error HTTP response code: %ld\n", http_code);
+      snprintf (errMessage, maxLen, "Error HTTP response code: %ld\n", http_code);
       return false;
    }
    return true;
@@ -2224,7 +2408,7 @@ bool findLastTracePoint (const char *fileName, double *lat, double *lon, double 
       return false;
    }
    while (fgets (line, MAX_SIZE_LINE, f) != NULL ) {
-      strncpy (lastLine, line, MAX_SIZE_LINE);
+      g_strlcpy (lastLine, line, MAX_SIZE_LINE);
    }
    fclose (f);
    return (sscanf (lastLine, "%lf;%lf;%lf", lat, lon, time) >= 3);
@@ -2317,13 +2501,13 @@ bool isServerAccessible (const char *url) {
     CURL *curl;
     CURLcode res;
 
-    curl_global_init(CURL_GLOBAL_DEFAULT);
-    curl = curl_easy_init();
+    curl_global_init (CURL_GLOBAL_DEFAULT);
+    curl = curl_easy_init ();
 
     if (curl) {
         curl_easy_setopt (curl, CURLOPT_URL, url);
         curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
-        res = curl_easy_perform(curl);
+        res = curl_easy_perform (curl);
         if (res != CURLE_OK) {
             fprintf (stderr, "Error in isServerAccessible: Curl request: %s\n", curl_easy_strerror(res));
             curl_easy_cleanup (curl);
@@ -2332,7 +2516,7 @@ bool isServerAccessible (const char *url) {
         }
 
         long http_code;
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+        curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &http_code);
 
         // 2xx means server accessible
         if (http_code >= 200 && http_code < 300) {
@@ -2411,28 +2595,24 @@ void initWithMostRecentGrib (void) {
    char fileName [MAX_SIZE_FILE_NAME];
    par.gribFileName [0] = '\0';
    if ((strlen (par.workingDir) + strlen ("grib/"))  < sizeof (par.gribFileName)) { 
-      g_strlcat (par.gribFileName, par.workingDir, MAX_SIZE_FILE_NAME);
-      g_strlcat (par.gribFileName, "grib/", MAX_SIZE_FILE_NAME);
-      mostRecentFile (par.gribFileName, ".gr", fileName); // most recent grib file found
+      g_strlcat (par.gribFileName, par.workingDir, sizeof (par.gribFileName));
+      g_strlcat (par.gribFileName, "grib/", sizeof (par.gribFileName));
+      mostRecentFile (par.gribFileName, ".gr", fileName, sizeof (fileName)); // most recent grib file found
       if ((strlen (par.gribFileName) + strlen (fileName))  < sizeof (par.gribFileName))
-         g_strlcat (par.gribFileName, fileName, MAX_SIZE_FILE_NAME);
+         g_strlcat (par.gribFileName, fileName, sizeof (par.gribFileName));
    }
 }
 
-/*! send SMTP request with right parameters to grib mail provider */
-bool smtpGribRequest (int type, double lat1, double lon1, double lat2, double lon2, char *command, size_t maxLength) {
+/*! build object and body of grib mail */
+bool buildGribMail (int type, double lat1, double lon1, double lat2, double lon2, char *object,  char *body, size_t maxLength) {
    int i;
    char temp [MAX_SIZE_LINE];
-   char commandLine [MAX_SIZE_LINE * 4];
-   char newPw [MAX_SIZE_NAME]; // only for Python case 
-   if (par.mailPw [0] == '\0') return false;
-   dollarSubstitute (par.mailPw, newPw, MAX_SIZE_NAME); // only for Python case
    
    lon1 = lonCanonize (lon1);
    lon2 = lonCanonize (lon2);
    
    if ((lon1 > 0) && (lon2 < 0)) { // zone crossing antimeridien
-      fprintf (stderr, "Error in smtpGribRequest: Tentative to chttps://data.ecmwf.int/forecastsross antemeridian !\n");
+      fprintf (stderr, "Error in smtpGribRequest: Tentative to cross antemeridian !\n");
       lon2 = 179.0;
    }
    if (setlocale (LC_ALL, "C") == NULL) {                // very important for printf decimal numbers
@@ -2445,46 +2625,27 @@ bool smtpGribRequest (int type, double lat1, double lon1, double lat2, double lo
    lon1 = floor (lon1);
    lon2 = ceil (lon2);
    if (type != MAILASAIL) {
-      snprintf (command, MAX_SIZE_BUFFER, "send %s:%d%c,%d%c,%d%c,%d%c|%.2lf,%.2lf|0,%d,..%d|%s",\
-         providerTab [type].service,\
+      snprintf (body, maxLength, "send %s:%d%c,%d%c,%d%c,%d%c|%.2lf,%.2lf|0,%d,..%d|%s",\
+         mailServiceTab [type].service,\
          (int) fabs (round(lat1)), (lat1 > 0) ? 'N':'S', (int) fabs (round(lat2)), (lat2 > 0) ? 'N':'S',\
 		   (int) fabs (round(lon1)), (lon1 > 0) ? 'E':'W', (int) fabs (round(lon2)), (lon2 > 0) ? 'E':'W',\
 		   par.gribResolution, par.gribResolution, par.gribTimeStep, par.gribTimeMax,\
-         providerTab [type].suffix);
-      // printf ("SMTP command: %s\n", command);
-      if (par.python) {
-         snprintf (commandLine, sizeof (commandLine), "%s %s grib \"%s\" %s\n", 
-         par.smtpScript, providerTab [type].address, command, newPw);
-      }
-      else
-         return smtpSend (providerTab [type].address, "grib", command);
+         mailServiceTab [type].suffix);
+      snprintf (object, maxLength, "grib");
    }
    else { //MAILASAIL:
       //printf ("smtp mailasail python\n");
-      snprintf (command, MAX_SIZE_BUFFER, "grib gfs %d%c:%d%c:%d%c:%d%c ",
+      snprintf (object, maxLength, "grib gfs %d%c:%d%c:%d%c:%d%c ",
          (int) fabs (round(lat1)), (lat1 > 0) ? 'N':'S', (int) fabs (round(lon1)), (lon1 > 0) ? 'E':'W',\
          (int) fabs (round(lat2)), (lat2 > 0) ? 'N':'S', (int) fabs (round(lon2)), (lon2 > 0) ? 'E':'W');
       for (i = 0; i < par.gribTimeMax; i+= par.gribTimeStep) {
          snprintf (temp, MAX_SIZE_LINE, "%d,", i);
-	      g_strlcat (command, temp, maxLength);
+	      g_strlcat (object, temp, maxLength);
       }
-      snprintf (temp, MAX_SIZE_LINE, "%d %s", i, providerTab [type].suffix);
-      g_strlcat (command, temp, maxLength);
-      if (par.python) {
-         snprintf (commandLine, sizeof (commandLine), "%s %s \"%s\" grib %s\n", 
-         par.smtpScript, providerTab [type].address, command, newPw);
-      }
-      else 
-         return smtpSend (providerTab [type].address, command, "grib");
-   }
-   if (par.python) {
-      if (system (commandLine) != 0) {
-         fprintf (stderr, "Error in smtpGribRquest: system call %s\n", command);
-      }
-
-      char *pt = strrchr (commandLine, ' '); // do not print password
-      *pt = '\0';
-      printf ("End command: %s\n", command);
+      snprintf (temp, MAX_SIZE_LINE, "%d %s", i, mailServiceTab [type].suffix);
+      g_strlcat (object, temp, maxLength);
+      snprintf (body, maxLength, "grib");
    }
    return true;
 }
+
