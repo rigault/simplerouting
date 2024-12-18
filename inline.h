@@ -11,11 +11,6 @@ static inline bool isSea (char * isSeaArray, double lat, double lon) {
    return isSeaArray [(iLat * 3601) + iLon];
 }
 
-/*! true if P (lat, lon) is within the zone */
-static inline bool isInZone (double lat, double lon, Zone *zone) {
-   return (lat >= zone->latMin) && (lat <= zone->latMax) && (lon >= zone->lonLeft) && (lon <= zone->lonRight);
-}
-
 /*! return lon on ]-180, 180 ] interval */
 static inline double lonCanonize (double lon) {
    lon = fmod (lon, 360);
@@ -23,6 +18,11 @@ static inline double lonCanonize (double lon) {
    else if (lon <= -180) lon += 360;
    return lon;
 } 
+
+/*! true if P (lat, lon) is within the zone */
+static inline bool isInZone (double lat, double lon, Zone *zone) {
+   return (lat >= zone->latMin) && (lat <= zone->latMax) && (lon >= zone->lonLeft) && (lon <= zone->lonRight);
+}
 
 /*! true wind direction */
 static inline double fTwd (double u, double v) {

@@ -68,10 +68,29 @@ void optionManage (char option) {
       printf ("Orthodist1 : %.2lf,   Orthodist2: %.2lf\n", orthoDist (lat, lon, lat2, lon2), orthoDist (lat2, lon2, lat, lon));
       printf ("Loxodist1  : %.2lf,   Loxodist2 : %.2lf\n", loxoDist(lat, lon, lat2, lon2), loxoDist (lat2, lon2, lat, lon));
       break;
+   case 'd': // distance
+      while (true) {
+         double latA, lonA, latB, lonB, latX, lonX, res;
+         printf ("Lat A: "); 
+         if (scanf ("%lf", &latA) < 1) break;
+         printf ("Lon A: "); 
+         if (scanf ("%lf", &lonA) < 1) break;
+         printf ("Lat B: "); 
+         if (scanf ("%lf", &latB) < 1) break;
+         printf ("Lon B: "); 
+         if (scanf ("%lf", &lonB) < 1) break;
+         printf ("Lat X: "); 
+         if (scanf ("%lf", &latX) < 1) break;
+         printf ("Lon X: "); 
+         if (scanf ("%lf", &lonX) < 1) break;
+         res =  distSegment (latX, lonX, latA, lonA, latB, lonB);
+         printf ("Distance from X to [AB]: %.2lf\n", res);
+      }
+      break;
    case 'g': // grib
       printf ("Grib File Name: %s\n", par.gribFileName);
       readGribAll (par.gribFileName, &zone, WIND);
-      gribToStr (buffer, &zone, MAX_SIZE_BUFFER);
+      gribToStr (&zone, buffer, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       printf ("grib print...\n");
       printGrib (&zone, tGribData [WIND]);
@@ -81,7 +100,7 @@ void optionManage (char option) {
       break;
    case 'G': // grib
       readGribAll (par.currentGribFileName, &currentZone, CURRENT);
-      gribToStr (buffer, &currentZone, MAX_SIZE_BUFFER);
+      gribToStr (&currentZone, buffer, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       printf ("grib print...\n");
       printGrib (&currentZone, tGribData [CURRENT]);
@@ -114,7 +133,7 @@ void optionManage (char option) {
       break;
    case 'p': // polar
       readPolar (par.polarFileName, &polMat, errMessage, sizeof (errMessage));
-      polToStr (buffer, &polMat, MAX_SIZE_BUFFER);
+      polToStr (&polMat, buffer, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       while (true) {
          printf ("twa true wind angle = ");
@@ -126,7 +145,7 @@ void optionManage (char option) {
       break;
    case 'P': // Wave polar
       readPolar (par.wavePolFileName, &wavePolMat, errMessage, sizeof (errMessage));
-      polToStr (buffer, &wavePolMat, MAX_SIZE_BUFFER);
+      polToStr (&wavePolMat, buffer, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       while (true) {
          printf ("angle = " );
@@ -157,6 +176,25 @@ void optionManage (char option) {
          if (isSea (tIsSea, lat, lon))
             printf ("Sea\n");
          else printf ("Earth\n");
+      }
+      break;
+   /*case 't': // test
+      while (1) {
+         double lon1, lon2;
+         printf ("Lon1 = ");
+         if (scanf ("%lf", &lon1) < 1) break;
+         printf ("Lon2 = ");
+         if (scanf ("%lf", &lon2) < 1) break;
+         normalizeLon (&lon1, &lon2);
+         printf ("Normalized: lon1 = %.2lf, lon2 = %.2lf\n", lon1, lon2);
+      }
+      break;*/
+   case 'T': // test
+      while (1) {
+         double lon;
+         printf ("lon = ");
+         if (scanf ("%lf", &lon) < 1) break;
+         printf ("fMod (lon)= %.2lf, lonCanonize (lon) = %.2lf\n", fmod (lon, 360.0), lonCanonize (lon));
       }
       break;
    case 'v': // version

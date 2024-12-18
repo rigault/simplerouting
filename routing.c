@@ -36,6 +36,7 @@
 #include "rutil.h"
 #include "option.h"
 
+
 char parameterFileName [MAX_SIZE_FILE_NAME];
 
 /*! make initializations and call opionManage () */

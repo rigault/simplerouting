@@ -27,8 +27,8 @@
 #define AIS_CHAR_OFFSET       48            // for AIS decoding character
 #define T_SHIP_MAX            (30 * 60)     // 30 minutes
 
-#define MAX_SIZE_NMEA         1024          // for NMEA Frame buffer size
 #define SIZE_DATE_TIME        10            // Date and time in NMEA GPS frame
+#define MAX_SIZE_NMEA         1024          // for NMEA Frame buffer size
 
 MyGpsData my_gps_data; 
 GHashTable *aisTable;
@@ -215,7 +215,7 @@ bool testAisTable () {
 }
 
 /*! ais information to string */
-void aisToStr (char *res, size_t maxLength) {
+void aisToStr (char *str, size_t maxLen) {
    char strLat [MAX_SIZE_NAME] = "", strLon [MAX_SIZE_NAME] = "";
    char line [MAX_SIZE_LINE];
    char strDate [MAX_SIZE_DATE];
@@ -226,7 +226,7 @@ void aisToStr (char *res, size_t maxLength) {
    gpointer key, value;
    g_hash_table_iter_init (&iter, aisTable);
 
-   snprintf (res, MAX_SIZE_LINE, \
+   snprintf (str, MAX_SIZE_LINE, \
       "Name                  Country       MinDist      MMSI        Lat          Lon    SOG  COG LastUpdate                 \n");
    while (g_hash_table_iter_next(&iter, &key, &value)) {
       AisRecord *ship = (AisRecord *)value;
@@ -246,7 +246,7 @@ void aisToStr (char *res, size_t maxLength) {
          ship->cog,
          epochToStr (ship->lastUpdate, false, strDate, MAX_SIZE_DATE));
 
-      g_strlcat (res, line, maxLength);
+      g_strlcat (str, line, maxLen);
    }
 }
 

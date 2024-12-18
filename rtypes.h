@@ -26,7 +26,7 @@
 #define MIN_LAT               (-80.0)           // Minimum latitude for getCoord
 #define MAX_LAT               80.0              // Maximum latitude for getCoord
 #define MIN_LON               (-180.0)          // Minimum longitude for getCoord
-#define MAX_LON               180.0             // Maximum longitude for getCoord
+#define MAX_LON               360.0             // Maximum longitude for getCoord
 #define MIN_SPEED_FOR_TARGET  5                 // knots. Difficult to explain. See engine.c, optimize()..
 //#define MISSING               (-999999)       // for grib file missing values
 #define MISSING               (0.001)           // for grib file missing values
@@ -43,11 +43,12 @@
 #define PROG_AUTHOR           "René Rigault"
 #define DESCRIPTION           "Routing calculates best route from pOr (Origin) to pDest (Destination) \
    taking into account grib files and boat polars"
+
 #define MILLION               1000000
 #define NIL                   (-100000)
 #define MAX_N_DAYS_WEATHER    16               // Max number od days for weather forecast
-#define MAX_N_ISOC            (24*MAX_N_DAYS_WEATHER+1) // max number of isochrones in isocArray
-#define MAX_SIZE_ISOC         20000            // max number of point in an isochrone
+#define MAX_N_ISOC            (10 * 24*MAX_N_DAYS_WEATHER+1) // max number of isochrones in isocArray
+#define MAX_SIZE_ISOC         25000            // max number of point in an isochrone
 #define MAX_N_POL_MAT_COLS    64
 #define MAX_N_POL_MAT_LINES   64
 #define MAX_SIZE_LINE         256		         // max size of pLine in text files
@@ -82,6 +83,7 @@
 #define N_WEB_SERVICES        2                 // for service Tab size (NOAA and ECMWF)
 #define MAX_INDEX_ENTITY      512               // for shp. Index.
 #define MAX_N_COMPETITORS     16                // Number max of competitors
+#define MAX_SIZE_SHIP_NAME    21                // see AIS specificatin
 
 enum {NOAA_WIND, ECMWF_WIND, MAIL, MAIL_SAILDOCS_CURRENT}; // NOAA or ECMWF for web download or MAIL. Specific for current
 enum {GPS_INDEX, AIS_INDEX};                    // for NMEA USB serial port reading
@@ -134,6 +136,7 @@ typedef struct {
    unsigned int yB;
    unsigned int yT;
    double latMin;
+   bool   anteMeridian;       // set at true if zone crosses meridian 180
    double latMax;
    double lonLeft;
    double lonRight;
@@ -208,6 +211,7 @@ typedef struct {
 
 /*! zone description */
 typedef struct {
+   bool   anteMeridian;       // set at true if zone crosses meridian 180
    bool   allTimeStepOK;
    bool   wellDefined;
    long   centreId;
@@ -370,7 +374,6 @@ typedef struct {
    double tStep;                             // hours
    int cogStep;                              // step of cog in degrees
    int rangeCog;                             // range of cog from x - RANGE_GOG, x + RAGE_COG+1
-   int maxIso;                               // max number of isochrones
    int special;                              // special purpose
    double constWindTws;                      // if not equal 0, constant wind used in place of grib file
    double constWindTwd;                      // the direction of constant wind if used
@@ -424,6 +427,7 @@ typedef struct {
    int infoDisp;                             // display digest information
    int speedDisp;                            // Speed of Display 
    int aisDisp;                              // AIS display
+   int shpPointsDisp;                        // display points only for SHP files
    int penalty0;                             // penalty in minutes when amure change front
    int penalty1;                             // penalty in minutes when amure change back
    double motorSpeed;                        // motor speed if used
@@ -454,9 +458,6 @@ typedef struct {
    int nNmea;                                // number of ports activated
 } Par;
 
-/*! Isochrone */
-typedef Pp Isoc [MAX_SIZE_ISOC];             // isochrone is an array of points
-
 /*! for point of interest management */
 typedef struct {
    double lat;
@@ -479,4 +480,16 @@ typedef struct {
    time_t time;   // epoch time
    bool   OK;
 } MyGpsData;
+
+/*! value in NMEA AIS frame */
+typedef struct {
+   int mmsi;
+   double lat;
+   double lon;
+   double sog;
+   int cog;
+   char name [MAX_SIZE_SHIP_NAME];
+   time_t lastUpdate;
+   int minDist;      // evaluation in meters of min Distance to detect collision
+} AisRecord;
 

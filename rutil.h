@@ -1,5 +1,4 @@
 /*! list of wayPoint */
-extern SailRoute route;
 extern WayPointList wayPoints;
 
 /*! forbid zones */
@@ -44,6 +43,7 @@ extern const char *METEO_CONSULT_CURRENT_URL [];
 extern CompetitorsList competitors;
 
 /*! functions defined in rutil.c */
+extern int    mainCompetitor ();
 extern double offsetLocalUTC (void);
 extern double diffTimeBetweenNowAndGribOrigin (long intDate, double nHours);
 extern void   *commandRun (void *data);
@@ -58,6 +58,7 @@ extern char   *buildRootName (const char *fileName, char *rootName, size_t maxLe
 extern bool   isNumber (const char *name);
 extern double getCoord (const char *str, double min, double max);
 extern bool   analyseCoord (const char *strCoord, double *lat, double *lon);
+extern void   polygonToStr (char *buffer, size_t maxLen);
 extern long   getFileSize (const char *fileName);
 extern char   *latToStr (double lat, int type, char* str, size_t maxLen);
 extern char   *lonToStr (double lon, int type, char* str, size_t maxLen);
@@ -68,7 +69,7 @@ extern time_t gribDateTimeToEpoch (long date, long time);
 extern char   *gribDateTimeToStr (long date, long time, char *str, size_t len);
 extern double zoneTimeDiff (const Zone *zone1, const Zone *zone0);
 extern bool   readPolar (const char *fileName, PolMat *mat, char *errMessage, size_t maxLen);
-extern char   *polToStr (char *str, const PolMat *mat, size_t maxLength);
+extern char   *polToStr (const PolMat *mat, char *str, size_t maxLen);
 extern void   *readGrib (void *data);
 extern bool   readGribAll (const char *fileName, Zone *zone, int iFlow);
 extern void   findWindGrib (double lat, double lon, double t, double *u, double *v, double *gust, double *w, double *twd, double *tws );
@@ -78,11 +79,10 @@ extern void   findCurrentGrib (double lat, double lon, double t, double *uCurr, 
 extern char   *newDate (long intDate, double myTime, char *res, size_t maxLen);
 extern char   *newDateWeekDay (long intDate, double myTime, char *res, size_t maxLen);
 extern char   *newDateWeekDayVerbose (long intDate, double myTime, char *res, size_t maxLen);
-extern char   *gribToStr (char *str, const Zone *zone, size_t maxLength);
+extern char   *gribToStr (const Zone *zone, char *str, size_t maxLen);
 extern double maxValInPol (const PolMat *mat);
 extern void   bestVmg (double tws, PolMat *mat, double *vmgAngle, double *vmgSpeed);
 extern void   bestVmgBack (double tws, PolMat *mat, double *vmgAngle, double *vmgSpeed);
-extern bool   fileToStr (char *fileName, char* str, size_t maxLength);
 extern bool   readParam (const char *fileName);
 extern bool   writeParam (const char *fileName, bool header, bool password);
 extern void   printGrib (const Zone *zone, const FlowP *gribData);
@@ -93,11 +93,11 @@ extern int    findPoiByName (const char *name, double *lat, double *lon);
 extern void   poiPrint ();
 extern char   *nearestPort (double lat, double lon, const char *fileName, char *str, size_t maxLen);
 extern char   *poiToStr (bool portCheck, char *str, size_t maxLen);
-extern bool   checkGribInfoToStr (int type, Zone *zone, char *buffer, size_t maxLength);
-extern bool   checkGribToStr (char *buffer, size_t maxLength);
+extern bool   checkGribInfoToStr (int type, Zone *zone, char *buffer, size_t maxLen);
+extern bool   checkGribToStr (char *buffer, size_t maxLen);
 extern char   *dollarSubstitute (const char* str, char *res, size_t maxLen);
 extern char   *strCpyMaxWidth (const char *str, int n, char *res, size_t maxLen);
-extern bool   curlGet (const char *url, const char *outputFile, char *errMessage, int maxLen); 
+extern bool   curlGet (const char *url, const char *outputFile, char *errMessage, size_t maxLen); 
 extern void   updateIsSeaWithForbiddenAreas (void);
 extern bool   isServerAccessible (const char *url);
 extern bool   addTraceGPS (const char *fileName);
@@ -110,4 +110,4 @@ extern void   initWayPoints (void);
 extern void   initWithMostRecentGrib (void);
 extern int    buildMeteoConsultUrl (int type, int i, int delay, char *url, size_t maxLen);
 extern int    buildGribUrl (int typeWeb, int topLat, int leftLon, int bottomLat, int rightLon, int step, char *url, size_t maxLen);
-extern bool   buildGribMail (int type, double lat1, double lon1, double lat2, double lon2, char *object, char *command, size_t maxLength);
+extern bool   buildGribMail (int type, double lat1, double lon1, double lat2, double lon2, char *object, char *command, size_t maxLen);
