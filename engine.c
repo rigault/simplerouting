@@ -31,7 +31,7 @@ Pp        lastClosest;                            // closest point to destinatio
 /*! store sail route calculated in engine.c by routing */  
 SailRoute route;
 
-HistoryRoute historyRoute = { .n = 0, .r = NULL };
+//HistoryRouteList historyRoute = { .n = 0, .r = NULL };
 
 ChooseDeparture chooseDeparture;                  // for choice of departure time
 
@@ -377,25 +377,39 @@ bool dumpRoute (const char *fileName, Pp dest) {
    return true;
 }
 
-
 /*! store current route in history */
 static void saveRoute (SailRoute *route) {
-    // allocate or rallocate space for routes
-    SailRoute *newRoutes = realloc (historyRoute.r, (historyRoute.n + 1) * sizeof(SailRoute));
-    if (!newRoutes) {
-        fprintf(stderr, "Error in saveRoute: Memory allocation failed\n");
-        return;
-    }
-    historyRoute.r = newRoutes;
-    memcpy (&historyRoute.r[historyRoute.n], route, sizeof (SailRoute));
-    historyRoute.n += 1;
+   route = route;/*
+   return;
+   // allocate or rallocate space for routes
+   SailRoute *newRoutes = realloc (historyRoute.r, (historyRoute.n + 1) * sizeof(SailRoute));
+   if (newRoutes == NULL) {
+      fprintf(stderr, "Error in saveRoute: Memory allocation failed\n");
+      return;
+   }
+   historyRoute.r = newRoutes;
+   historyRoute.r[historyRoute.n] = *route; // Copy simple fillds witout pointerq
+
+   // Allocation and copy of points
+   size_t pointsSize = (route->nIsoc + 1) * sizeof(SailPoint);
+   historyRoute.r[historyRoute.n].t = malloc (pointsSize);
+   if (!historyRoute.r[historyRoute.n].t) {
+      fprintf(stderr, "Error in saveRoute: Memory allocation for SailPoint array failed\n");
+      return;
+   }
+   memcpy(historyRoute.r[historyRoute.n].t, route->t, pointsSize); // deep copy of points
+
+   historyRoute.n += 1;*/
 }
 
+
 /* free space for history route */
-void freeHistoryRoute () {
+void freeHistoryRoute () {/*
+   for (int i = 0; i < historyRoute.n; i += 1)
+      free (historyRoute.r [i].t);
    free (historyRoute.r);
    historyRoute.r = NULL;
-   historyRoute.n = 0;
+   historyRoute.n = 0;*/
 }
 
 /*! stat route */
@@ -490,7 +504,7 @@ void storeRoute (SailRoute *route, const Pp *pOr, const Pp *pDest, double lastSt
    Pp pt = *pDest;
    Pp ptLast = *pDest;
    route->t [route->n - 1].lat = pDest->lat;
-   route->t [route->n - 1].lon = pDest->lon;
+   route->t [route->n - 1].lon = lonCanonize (pDest->lon);
    route->t [route->n - 1].id = pDest->id;
    route->t [route->n - 1].father = pDest->father;
    route->t [route->n - 1].motor = pDest->motor;
@@ -501,7 +515,7 @@ void storeRoute (SailRoute *route, const Pp *pOr, const Pp *pDest, double lastSt
       if (iFather == -1) continue;
       pt = isocArray [i * MAX_SIZE_ISOC + iFather];
       route->t [i+1].lat = pt.lat;
-      route->t [i+1].lon = pt.lon;
+      route->t [i+1].lon = lonCanonize (pt.lon);
       route->t [i+1].id = pt.id;
       route->t [i+1].father = pt.father;
       route->t [i+1].motor = ptLast.motor;
@@ -510,7 +524,7 @@ void storeRoute (SailRoute *route, const Pp *pOr, const Pp *pDest, double lastSt
       ptLast = pt;
    }
    route->t [0].lat = pOr->lat;
-   route->t [0].lon = pOr->lon;
+   route->t [0].lon = lonCanonize (pOr->lon);
    route->t [0].id = pOr->id;
    route->t [0].father = pOr->father;
    route->t [0].motor = ptLast.motor;
@@ -566,7 +580,7 @@ bool routeToStr (const SailRoute *route, char *str, size_t maxLen) {
       if (aws > maxAws) maxAws = aws;
       sumAws += aws;
       if ((fabs(route->t[i].lon) > 180.0) || (fabs (route->t[i].lat) > 90.0))
-         snprintf (line, MAX_SIZE_LINE, " Isoc %3d: Erreur sur latitude ou longitude\n", i-1);   
+         snprintf (line, MAX_SIZE_LINE, " Isoc %3d: Error on latitude or longitude\n", i-1);   
       else
          snprintf (line, MAX_SIZE_LINE, "%4d %3d %-12s%-12s %s %6s %4d° %7.2f %7.2lf %4d° %4.0lf° %7.2lf %7.2lf %4.0lf° %7.2lf %7.2lf\n",\
             i-1,\
@@ -730,45 +744,47 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
    int index;                       // index of closest point to pDest in insochrone
    double theBestVmg;
    Pp *tempList = NULL;             // one dimension array of points
-   Pp *tempIsocArray = NULL;        // temporary allocation
-   IsoDesc *tempIsoDesc = NULL;    // temporary allocation
    
    const double MIN_STEP = 0.25;
+
+   if (dt < MIN_STEP) {
+      fprintf (stderr, "In routing: time step for routing <= %.2lf\n", MIN_STEP);
+      return -1;
+   }
 
    if ((tempList = malloc (MAX_SIZE_ISOC * sizeof(Pp))) == NULL) {
       fprintf (stderr, "in Routing: error in memory templIst allocation\n");
       return -1;
    }
 
-   if (dt < MIN_STEP) {
-      fprintf (stderr, "In routing: time step for routing <= %.2lf\n", MIN_STEP);
-      free (tempList);
-      return -1;
-   }
-
    maxNIsoc = 1 + zone.timeStamp [zone.nTimeStamp - 1] / dt;
-   if (maxNIsoc >= MAX_N_ISOC) {
-      fprintf (stderr, "in Routing: maxNIsoc > MAX_N_ISOC: possible issue with SailRoute objects. MAX_N_ISOC = %d\n", MAX_N_ISOC);
+
+   Pp *tempIsocArray = (Pp*) realloc (isocArray, maxNIsoc * MAX_SIZE_ISOC * sizeof(Pp));
+   if (tempIsocArray == NULL) {
+      fprintf (stderr, "in Routing: realloc error for isocArray\n");
       free (tempList);
       return -1;
    }
-
-   if ((tempIsocArray = (Pp*) realloc (isocArray, maxNIsoc * MAX_SIZE_ISOC * sizeof(Pp))) == NULL) {
-      fprintf (stderr, "in Routing: realloc error for isocArray\n");
+   isocArray = tempIsocArray;
+   
+   IsoDesc *tempIsoDesc = (IsoDesc *) realloc (isoDesc, maxNIsoc * sizeof (IsoDesc));
+   if (tempIsoDesc == NULL) {
+      fprintf (stderr, "in Routing: realloc for IsoDesc failed\n");
       free (isocArray);
       free (tempList);
       return -1;
-   }
-   else isocArray = tempIsocArray;
-   
-   if ((tempIsoDesc = (IsoDesc *) realloc (isoDesc, maxNIsoc * sizeof (IsoDesc))) == NULL) {
-      fprintf (stderr, "in Routing: realloc for IsoDesc failed\n");
+   } 
+   isoDesc = tempIsoDesc;
+
+   SailPoint *tempSailPoint = (SailPoint *) realloc (route.t, (maxNIsoc + 1) * sizeof(SailPoint));
+   if (tempSailPoint  == NULL) {
+      fprintf (stderr, "in Routing: realloc for route.t failed\n");
       free (isoDesc);
       free (isocArray);
       free (tempList);
       return -1;
    } 
-   else isoDesc = tempIsoDesc;
+   route.t = tempSailPoint;
 
    pOr->dd = orthoDist (pOr->lat, pOr->lon, pDest->lat, pDest->lon);
    pOr->vmc = 0;
@@ -808,7 +824,10 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
    nIsoc += 1;
    //printf ("Routing t = %.2lf, zone: %.2ld\n", t, zone.timeStamp [zone.nTimeStamp-1]);
    while (t < (zone.timeStamp [zone.nTimeStamp - 1]/* + par.tStep*/) && (nIsoc < maxNIsoc)) {
-      if (route.ret == -2) return -2; // stopped by user in another thread !!!
+      if (route.ret == -2) {
+         free (tempList);
+         return -2; // stopped by user in another thread !!!
+      }
       t += dt;
       // printf ("nIsoc = %d\n", nIsoc);
       if (goal (pDest, nIsoc - 1, &isocArray [(nIsoc - 1) * MAX_SIZE_ISOC], isoDesc[nIsoc - 1].size, t, dt, &timeLastStep, &motor, &amure)) {
@@ -828,7 +847,10 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
       }
       // printf ("continue\n");
       lTempList = buildNextIsochrone (pOr, pDest, &isocArray [(nIsoc -1) * MAX_SIZE_ISOC], isoDesc [nIsoc - 1].size, t, dt, tempList, &theBestVmg);
-      if (lTempList == -1) return -1;
+      if (lTempList == -1) {
+         free (tempList);
+         return -1;
+      }
       lastBestVmg = theBestVmg;
       isoDesc [nIsoc].bestVmg = theBestVmg;
       isoDesc [nIsoc].size = optimize (pOr, pDest, nIsoc, par.opt, tempList, lTempList, &isocArray [nIsoc * MAX_SIZE_ISOC]);
@@ -992,7 +1014,7 @@ static int compareDuration (const void *a, const void *b) {
 
 /*! launch all competitors */
 void *allCompetitors () {
-   for (int i = 0; i < competitors.n; i +=1) // reset eta(s)
+   for (int i = 0; i < competitors.n; i += 1) // reset eta(s)
       competitors.t [i].strETA [0] = '\0';
    
    for (int i = 0; i < competitors.n; i +=1) {
@@ -1063,6 +1085,6 @@ void competitorsToStr (char *buffer, size_t maxLen) {
    }
 
    newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours, strDep, sizeof (strDep)); 
-   snprintf (line, MAX_SIZE_LINE, "Departure Date: %s\n", strDep);
+   snprintf (line, MAX_SIZE_LINE, "Departure Date: %s, Isoc Time Step: %.2lf h\n", strDep, par.tStep);
    g_strlcat (buffer, line, maxLen);
 }

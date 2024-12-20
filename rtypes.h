@@ -36,7 +36,7 @@
 #define RAD_TO_DEG            (180.0/G_PI)
 #define DEG_TO_RAD            (G_PI/180.0)
 #define SIZE_T_IS_SEA         (3601 * 1801)
-#define MAX_N_WAY_POINT       10
+#define MAX_N_WAY_POINT       10               // Max number of Way Points
 #define PROG_WEB_SITE         "http://www.orange.com"  
 #define PROG_NAME             "routing"  
 #define PROG_VERSION          "0.1"  
@@ -47,8 +47,7 @@
 #define MILLION               1000000
 #define NIL                   (-100000)
 #define MAX_N_DAYS_WEATHER    16               // Max number od days for weather forecast
-#define MAX_N_ISOC            (10 * 24*MAX_N_DAYS_WEATHER+1) // max number of isochrones in isocArray
-#define MAX_SIZE_ISOC         25000            // max number of point in an isochrone
+#define MAX_SIZE_ISOC         20000            // max number of point in an isochrone
 #define MAX_N_POL_MAT_COLS    64
 #define MAX_N_POL_MAT_LINES   64
 #define MAX_SIZE_LINE         256		         // max size of pLine in text files
@@ -83,7 +82,7 @@
 #define N_WEB_SERVICES        2                 // for service Tab size (NOAA and ECMWF)
 #define MAX_INDEX_ENTITY      512               // for shp. Index.
 #define MAX_N_COMPETITORS     16                // Number max of competitors
-#define MAX_SIZE_SHIP_NAME    21                // see AIS specificatin
+#define MAX_SIZE_SHIP_NAME    21                // see AIS specificatiions
 
 enum {NOAA_WIND, ECMWF_WIND, MAIL, MAIL_SAILDOCS_CURRENT}; // NOAA or ECMWF for web download or MAIL. Specific for current
 enum {GPS_INDEX, AIS_INDEX};                    // for NMEA USB serial port reading
@@ -357,14 +356,14 @@ typedef struct {
    double maxWave;                          // max wave of the route
    double maxSog;                           // max Speed Over Ground
    int    competitorIndex;                  // index of competitor. See CompetitorsList.
-   SailPoint t [MAX_N_ISOC + 1];
+   SailPoint *t;                            // array of points (maxNIsoc + 1)
 } SailRoute;
 
 /*! History Route description  */
 typedef struct {
    int n;
    SailRoute *r;
-} HistoryRoute;
+} HistoryRouteList;
 
 /*! Parameters */
 typedef struct {

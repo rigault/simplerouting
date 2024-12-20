@@ -201,6 +201,31 @@ bool isEmpty (const char *str) {
    return true;
 }
 
+/*! format big number with thousand sep. Example 1000000 formated as 1 000 000 */
+char *formatThousandSep (char *buffer, size_t maxLen, long value) {
+   char str [MAX_SIZE_LINE];
+   snprintf (str, MAX_SIZE_LINE, "%ld", value);
+   int length = strlen (str);
+   int nSep = length / 3;
+   int mod = length % 3;
+   int i = 0, j = 0;
+   for (i = 0; i < mod; i++)
+      buffer [j++] = str [i];
+   if ((nSep > 0) && (mod > 0)) buffer [j++] = ' '; 
+   for (int k = 0; k < nSep; k++) {
+      buffer [j++] = str [i++];
+      buffer [j++] = str [i++];
+      buffer [j++] = str [i++];
+      buffer [j++] = ' ';
+      if (j >= (int) maxLen) {
+         j = maxLen - 1;
+         break;
+      }
+   }
+   buffer [j] = '\0';
+   return buffer;
+}
+
 /*! build entities based on .shp file */
 bool initSHP (const char* nameFile) {
    int nEntities = 0;         // number of entities in current shp file
@@ -318,30 +343,6 @@ static bool mostRecentFile (const char *directory, const char *pattern, char *na
    return (latestTime > 0);
 }
 
-/*! format big number with thousand sep. Example 1000000 formated as 1 000 000 */
-char *formatThousandSep (char *buffer, size_t maxLen, long value) {
-   char str [MAX_SIZE_LINE];
-   snprintf (str, MAX_SIZE_LINE, "%ld", value);
-   int length = strlen (str);
-   int nSep = length / 3;
-   int mod = length % 3;
-   int i = 0, j = 0;
-   for (i = 0; i < mod; i++)
-      buffer [j++] = str [i];
-   if ((nSep > 0) && (mod > 0)) buffer [j++] = ' '; 
-   for (int k = 0; k < nSep; k++) {
-      buffer [j++] = str [i++];
-      buffer [j++] = str [i++];
-      buffer [j++] = str [i++];
-      buffer [j++] = ' ';
-      if (j >= (int) maxLen) {
-         j = maxLen - 1;
-         break;
-      }
-   }
-   buffer [j] = '\0';
-   return buffer;
-}
 
 /*! true if name contains a number */
 bool isNumber (const char *name) {
@@ -1953,10 +1954,13 @@ void updateIsSeaWithForbiddenAreas (void) {
 static void forbidZoneAdd (char *line, int n) {
    char *latToken, *lonToken;
    printf ("Forbid Zone    : %d\n", n);
-   if ((forbidZones [n].points = (Point *) realloc (forbidZones [n].points, MAX_SIZE_FORBID_ZONE * sizeof(Point))) == NULL) {
+
+   Point *temp = (Point *) realloc (forbidZones [n].points, MAX_SIZE_FORBID_ZONE * sizeof(Point));
+   if (temp == NULL) {
       fprintf (stderr, "Error in forbidZoneAdd: realloc with n = %d\n", n);
       return;
    }
+   forbidZones [n].points = temp;
 
    if (((latToken = strtok (line, ",")) != NULL) && \
       ((lonToken = strtok (NULL, ";")) != NULL)) { // first point

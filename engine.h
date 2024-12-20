@@ -3,7 +3,7 @@ extern IsoDesc   *isoDesc;                      // one dimension array for isoch
 extern int       nIsoc;                         // number of isochrones calculated  by routing
 extern Pp        lastClosest;                   // closest point to destination in last isocgrone computed
 extern ChooseDeparture chooseDeparture;         // for choice of departure time
-extern HistoryRoute historyRoute;               // history of calculated routes
+extern HistoryRouteList historyRoute;           // history of calculated routes
 extern SailRoute route;                         // current route
 
 extern double  distSegment (double latX, double lonX, double latA, double lonA, double latB, double lonB);
@@ -18,8 +18,3 @@ extern void    *bestTimeDeparture ();
 extern void    *allCompetitors ();
 extern void    freeHistoryRoute ();
 extern void    competitorsToStr (char *buffer, size_t maxLen);
-
-
-
-
-
