@@ -75,8 +75,7 @@ FlowP *tGribData [2]= {NULL, NULL};  // wind, current
 Poi tPoi [MAX_N_POI];
 int nPoi = 0;
 
-int readGribRet = -1;               // to check if readGrib is terminated
-int readCurrentGribRet = -1;        // to check if readCurrentGrib is terminated
+int readGribRet = GRIB_RUNNING;     // to check if readGrib is terminated
 
 /*! for shp file */
 int  nTotEntities = 0;              // cumulated number of entities
@@ -109,6 +108,33 @@ int mainCompetitor () {
          return i;
    }
    return 0;
+}
+
+/*!remove all .tmp file with prefix */
+void removeAllTmpFilesWithPrefix (const char *prefix) {
+   gchar *directory = g_path_get_dirname (prefix); 
+   gchar *base_prefix = g_path_get_basename (prefix);
+
+   GDir *dir = g_dir_open (directory, 0, NULL);
+   if (!dir) {
+      fprintf (stderr, "In removeAllTmpFilesWithPrefix: Fail opening directory: %s", directory);
+      g_free (directory);
+      g_free (base_prefix);
+      return;
+   }
+
+   const gchar *filename = NULL;
+   while ((filename = g_dir_read_name(dir))) {
+      if (g_str_has_prefix (filename, base_prefix) && g_str_has_suffix(filename, ".tmp")) {
+         gchar *filepath = g_build_filename (directory, filename, NULL);
+         remove (filepath);
+         g_free (filepath);
+     }
+   }
+
+   g_dir_close(dir);
+   g_free(directory);
+   g_free(base_prefix);
 }
 
 /*! launch system command in a thread */
@@ -161,7 +187,7 @@ bool compact (bool full, const char *dir, const char *inFile, const char *shortN
       return true;
    }
 }
-   
+
 /*! concat all files prefixed by prefix and suffixed 0..max (with step) in fileRes */
 bool concat (const char *prefix, const char *suffix, int step, int max, const char *fileRes) {
    FILE *fRes = NULL;
@@ -171,15 +197,16 @@ bool concat (const char *prefix, const char *suffix, int step, int max, const ch
    }
    for (int i = 0; i <= max; i += step) {
       char fileName [MAX_SIZE_FILE_NAME];
-      snprintf (fileName, sizeof(fileName), "%s%03d%s", prefix, i, suffix);
-      FILE *f = fopen(fileName, "rb");
+      snprintf (fileName, sizeof (fileName), "%s%03d%s", prefix, i, suffix);
+      FILE *f = fopen (fileName, "rb");
       if (f == NULL) {
          fprintf (stderr, "Error in concat: opening impossible %s\n", fileName);
+         fclose (fRes);
          return false;
       }
-      char buffer[MAX_SIZE_LINE];
+      char buffer [MAX_SIZE_STD];
       size_t n;
-      while ((n = fread(buffer, 1, sizeof(buffer), f)) > 0) {
+      while ((n = fread (buffer, 1, sizeof(buffer), f)) > 0) {
          fwrite (buffer, 1, n, fRes);
       }
       fclose(f);
@@ -1490,6 +1517,7 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
    size_t lenName;
    const long GUST_GFS = 180;
    long timeInterval = 0;
+   //static int count;
    memset (zone, 0,  sizeof (Zone));
    zone->wellDefined = false;
 
@@ -1536,6 +1564,7 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
    // Loop on all the messages in a file
    while ((h = codes_handle_new_from_file(0, f, PRODUCT_GRIB, &err)) != NULL) {
       if (err != CODES_SUCCESS) CODES_CHECK (err, 0);
+      //printf ("count ReadGribAll: %d\n", count++);
 
       // Check if a bitmap applies
       CODES_CHECK(codes_get_long(h, "bitmapPresent", &bitmapPresent), 0);
@@ -1622,16 +1651,10 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
 /*! launch readGribAll wih Wind or current  parameters */   
 void *readGrib (void *data) {
    int *iFlow = (int *) (data);
-   if ((*iFlow == WIND) && (par.gribFileName [0] != '\0')) {
-      if (readGribAll (par.gribFileName, &zone, WIND))
-         readGribRet = 1;
-      else readGribRet = 0;
-   }
-   else if ((*iFlow == CURRENT) && (par.currentGribFileName [0] != '\0')) {
-      if (readGribAll (par.currentGribFileName, &currentZone, CURRENT))
-         readCurrentGribRet = 1;
-      else readCurrentGribRet = 0;
-   }
+   if ((*iFlow == WIND) && (par.gribFileName [0] != '\0'))
+      readGribRet = readGribAll (par.gribFileName, &zone, WIND);
+   else if ((*iFlow == CURRENT) && (par.currentGribFileName [0] != '\0'))
+      readGribRet = readGribAll (par.currentGribFileName, &currentZone, CURRENT);
    return NULL;
 }
 
@@ -2093,6 +2116,7 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "CLI_HELP:%255s", str) > 0)
          buildRootName (str, par.cliHelpFileName, sizeof (par.cliHelpFileName));
       else if (sscanf (pLine, "HELP:%255s", par.helpFileName) > 0); // full link required
+      else if (sscanf (pLine, "CURL_SYS:%d", &par.curlSys) > 0);
       else if (sscanf (pLine, "PYTHON:%d", &par.python) > 0);
       else if (sscanf (pLine, "SMTP_SCRIPT:%255[^\n]s", par.smtpScript) > 0)
          g_strstrip (par.smtpScript);
@@ -2295,6 +2319,7 @@ bool writeParam (const char *fileName, bool header, bool password) {
    fprintf (f, "K_FACTOR:        %d\n", par.kFactor);
    fprintf (f, "N_SECTORS:       %d\n", par.nSectors);
    fprintf (f, "PYTHON:          %d\n", par.python);
+   fprintf (f, "CURL_SYS:        %d\n", par.curlSys);
    fprintf (f, "SMTP_SCRIPT:     %s\n", par.smtpScript);
    fprintf (f, "IMAP_TO_SEEN:    %s\n", par.imapToSeen);
    fprintf (f, "IMAP_SCRIPT:     %s\n", par.imapScript);
@@ -2381,42 +2406,81 @@ int buildGribUrl (int typeWeb, int topLat, int leftLon, int bottomLat, int right
    return hh;
 }
 
-/*! call back for curlGet */
-static size_t WriteCallback (const void* contents, size_t size, size_t nmemb, const void* userp) {
-   FILE* f = (FILE*)userp;
-   return fwrite (contents, size, nmemb, f);
+/*! curGet download URL and save the content in outputFile using system command */
+bool curlGetSys(const char *url, const char *outputFile, char *errMessage, size_t maxLen) {
+   char command [MAX_SIZE_STD];
+   if (snprintf(command, sizeof(command), "curl -L --fail -o %s \"%s\" 2>/dev/null", outputFile, url) >= (int)sizeof(command)) {
+      snprintf(errMessage, maxLen, "Command too long");
+      return false;
+   }
+   int ret = system (command); // execute the commande
+   if (ret == -1) {
+      snprintf (errMessage, maxLen, "In curlGetSys: System call failed: %s", strerror(errno));
+      return false;
+   }
+
+   if (WIFEXITED(ret) && WEXITSTATUS(ret) == 0) { // Check the return value of the curl command
+      return true;
+   } else {
+      if (WIFEXITED(ret)) {
+         snprintf (errMessage, maxLen, "In curlGetSys: Curl failed with exit code: %d", WEXITSTATUS(ret));
+      } else {
+         snprintf (errMessage, maxLen, "In curlGetSys: Curl terminated abnormally");
+      }
+      return false;
+   }
+   printf ("File downloaded with system curl: %s\n", outputFile);
 }
 
-/*! return true if URL has been downloaded */
+/*! curGet download URL and save the content in outputFile */
 bool curlGet (const char *url, const char *outputFile, char *errMessage, size_t maxLen) {
-   long http_code;
-   CURL* curl = curl_easy_init();
-   if (curl == NULL) {
-      g_strlcpy (errMessage, "Impossible to initialize curl", maxLen);
+   if (par.curlSys)
+      return curlGetSys (url, outputFile, errMessage, maxLen);
+
+   if (url == NULL || outputFile == NULL || errMessage == NULL || maxLen == 0) {
+      g_strlcpy (errMessage, "Invalid arguments", maxLen);
       return false;
    }
-   FILE* f = fopen (outputFile, "wb");
+   long http_code = 0;
+   CURL *curl = curl_easy_init();
+   if (curl == NULL) {
+      return false;
+   }
+   curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);
+   curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 2L); // Temps min. en secondes avant un timeout
+   curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, 102400L); // Par exemple 100 KB
+
+   // curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L); // Verbose activated
+
+   FILE *f = fopen(outputFile, "wb");
    if (f == NULL) {
-      snprintf (errMessage, maxLen, "Error opening outputFile: %s", outputFile);
+      snprintf(errMessage, maxLen, "Error opening file: %s", outputFile);
+      curl_easy_cleanup(curl);
       return false;
    }
 
-   curl_easy_setopt(curl, CURLOPT_URL, url);
-   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
-   curl_easy_setopt(curl, CURLOPT_WRITEDATA, f);
+   curl_easy_setopt (curl, CURLOPT_URL, url);
+   curl_easy_setopt (curl, CURLOPT_WRITEDATA, f); // no explicit WRITEFUNCTION 
+
+   // blocking mode activated
+   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+   curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
 
    CURLcode res = curl_easy_perform(curl);
-   
+   fflush(f); // Assure
+   fclose(f);
+
    if (res != CURLE_OK) {
-      snprintf (errMessage, maxLen, "Error Downloading: %s\n", curl_easy_strerror(res));
-      fclose (f);
+      snprintf(errMessage, maxLen, "Curl error: %s", curl_easy_strerror(res));
+      curl_easy_cleanup(curl);
       return false;
    }
+
    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-   curl_easy_cleanup(curl);
-   fclose(f);
-   if (http_code >= 400 || res != CURLE_OK) {
-      snprintf (errMessage, maxLen, "Error HTTP response code: %ld\n", http_code);
+   curl_easy_cleanup (curl);
+
+   if (http_code >= 400) {
+      snprintf(errMessage, maxLen, "HTTP error: %ld", http_code);
       return false;
    }
    return true;
@@ -2558,7 +2622,6 @@ bool isServerAccessible (const char *url) {
     CURL *curl;
     CURLcode res;
 
-    curl_global_init (CURL_GLOBAL_DEFAULT);
     curl = curl_easy_init ();
 
     if (curl) {
@@ -2568,7 +2631,6 @@ bool isServerAccessible (const char *url) {
         if (res != CURLE_OK) {
             fprintf (stderr, "Error in isServerAccessible: Curl request: %s\n", curl_easy_strerror(res));
             curl_easy_cleanup (curl);
-            curl_global_cleanup ();
             return false; // server not accessible request error
         }
 
@@ -2578,16 +2640,13 @@ bool isServerAccessible (const char *url) {
         // 2xx means server accessible
         if (http_code >= 200 && http_code < 300) {
             curl_easy_cleanup(curl);
-            curl_global_cleanup();
             return true;
         } else {
             curl_easy_cleanup(curl);
-            curl_global_cleanup();
             return false; 
         }
     } else {
         fprintf (stderr, "Error in isServerAccessible: Init curl.\n");
-        curl_global_cleanup();
         return false;
     }
 }
@@ -2658,13 +2717,6 @@ void initWithMostRecentGrib (void) {
       if ((strlen (par.gribFileName) + strlen (fileName))  < sizeof (par.gribFileName))
          g_strlcat (par.gribFileName, fileName, sizeof (par.gribFileName));
    }
-}
-
-/*! swap values */
-void swap (double *a, double *b) {
-   double temp = *a;
-   *a = *b;
-   *b = temp;
 }
 
 /*! build object and body of grib mail */

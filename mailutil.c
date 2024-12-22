@@ -401,7 +401,7 @@ static int imapGetUnseenPython (const char *path, char *gribFileName, size_t max
    snprintf (command, sizeof (command), "%s %s %s", par.imapScript, path, newPw); 
    if ((fp = popen (command, "r")) == NULL) {
       fprintf (stderr, "Error in mailGribReadPython. popen command: %s\n", command);
-      return -1;
+      return 0;
    }
    while ((fgets (line, sizeof(line)-1, fp) != NULL) && (n < MAX_LINES)) {
       n += 1;
@@ -422,18 +422,18 @@ static int imapGetUnseenPython (const char *path, char *gribFileName, size_t max
             *(end) = '\0';
          printf ("fileName found:%s\n", fileName);
          g_strlcpy (gribFileName, fileName, maxLen);
-         return 1;
+         return 1; // OK mail found
       }
       else {
-         return -1;
+         return 0;
       }
    }
-   else return 0;
+   else return -1; // Still running, no error bu no mail
 }
 
 /*! read mailbox, check unseen message. If exist, the grib file is decoded and saved in directory path 
-   return -1 : error
-   return 0 : normal but no unseen message found
+   return 0 : error
+   return -1 : normal but no unseen message found
    return 1 : unseen message found and decoded 
    name of grib file found returned in gribFileName */
 int imapGetUnseen (const char* imapServer, const char *username, 
@@ -447,7 +447,7 @@ int imapGetUnseen (const char* imapServer, const char *username,
    snprintf (tempFileName, sizeof (tempFileName), "%s/%s", path, TEMP_FETCH);
    //printf ("tempFileName: %s\n", tempFileName);
    int res = imapRead (imapServer, username, password, mailbox, tempFileName);
-   if (res < 1) return 0; // normal return. No error but no message found
+   if (res < 1) return -1; // normal return. No error but no message found
 
    // Step2: extract file name from temporary file
    char *extractedName = extractFilename (tempFileName);
@@ -456,7 +456,7 @@ int imapGetUnseen (const char* imapServer, const char *username,
    }
    else {
       writeErrorMessage (tempFileName, MAX_N_ERROR_MESSAGE);
-      return -1;          // Error: Message found with no gribfile name inside
+      return 0;          // Error: Message found with no gribfile name inside
    }
    snprintf (gribFileName, maxLen, "%s/%s", path, extractedName);
    // printf("Total Grib File Name: %s\n", gribFileName);
@@ -467,7 +467,7 @@ int imapGetUnseen (const char* imapServer, const char *username,
       writeErrorMessage (tempFileName, MAX_N_ERROR_MESSAGE);
       fprintf (stderr, "Impossible to extract encoded content.\n");
       g_free (extractedName);
-      return -1;          // Error: Message found but not decodable
+      return 0;          // Error: Message found but not decodable
    }
 
    // Step 4: Decode Base64 content
@@ -478,7 +478,7 @@ int imapGetUnseen (const char* imapServer, const char *username,
    if (!decoded_data) {
       fprintf (stderr, "Error decoding Base64.\n");
       g_free (extractedName);
-      return -1;           // Error
+      return 0;           // Error
    }
 
    // Step 5: Write decoded data in file
@@ -487,7 +487,7 @@ int imapGetUnseen (const char* imapServer, const char *username,
       fprintf (stderr, "Error creating output grib file: %s\n", gribFileName);
       g_free (decoded_data);
       g_free (extractedName);
-      return -1;            // Error
+      return 0;            // Error
    }
 
    fwrite (decoded_data, 1, decoded_length, gribFile);

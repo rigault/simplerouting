@@ -47,10 +47,12 @@
 #define MILLION               1000000
 #define NIL                   (-100000)
 #define MAX_N_DAYS_WEATHER    16               // Max number od days for weather forecast
-#define MAX_SIZE_ISOC         20000            // max number of point in an isochrone
+#define MAX_SIZE_ISOC         50000            // max number of point in an isochrone
+#define MAX_N_ISOC            (384 + 1) * 4    // Max Hours in 16 days * 4 times per hours max (tSep = 15 mn) required for STATIC way
 #define MAX_N_POL_MAT_COLS    64
 #define MAX_N_POL_MAT_LINES   64
 #define MAX_SIZE_LINE         256		         // max size of pLine in text files
+#define MAX_SIZE_STD          1024		         // max size of lines standard
 #define MAX_SIZE_LINE_BASE64  1024              // max size of line in base64 mail file
 #define MAX_SIZE_TEXT         2048		         // max size of text
 #define MAX_SIZE_MESSAGE      2048		         // max size of a mail message
@@ -81,7 +83,7 @@
 #define N_MAIL_SERVICES       9                 // for mailServiceTab size
 #define N_WEB_SERVICES        2                 // for service Tab size (NOAA and ECMWF)
 #define MAX_INDEX_ENTITY      512               // for shp. Index.
-#define MAX_N_COMPETITORS     16                // Number max of competitors
+#define MAX_N_COMPETITORS     10                // Number max of competitors
 #define MAX_SIZE_SHIP_NAME    21                // see AIS specificatiions
 
 enum {NOAA_WIND, ECMWF_WIND, MAIL, MAIL_SAILDOCS_CURRENT}; // NOAA or ECMWF for web download or MAIL. Specific for current
@@ -95,7 +97,8 @@ enum {NO_COLOR, B_W, COLOR};                    // wind representation
 enum {NONE, ARROW, BARBULE};                    // wind representation 
 enum {NOTHING, JUST_POINT, SEGMENT, BEZIER};    // bezier or segment representation
 enum {UNVISIBLE, NORMAL, CAT, PORT, NEW};       // for POI point of interest
-enum {RUNNING, STOPPED, NO_SOLUTION, EXIST_SOLUTION}; // for chooseDeparture.ret values and allCompetitors check
+enum {RUNNING, STOPPED, NO_SOLUTION, EXIST_SOLUTION};          // for chooseDeparture.ret values and allCompetitors check
+enum {GRIB_STOPPED = -2, GRIB_RUNNING = -1, GRIB_ERROR = 0, GRIB_OK = 1, GRIB_UNCOMPLETE = 2};   // for readGribCheck and readCurentGribCheck
 enum {NO_ANIMATION, PLAY, LOOP};                // for animationActive status
 enum {WIND_DISP, GUST_DISP, WAVE_DISP, RAIN_DISP, PRESSURE_DISP}; // for display
 
@@ -357,6 +360,7 @@ typedef struct {
    double maxSog;                           // max Speed Over Ground
    int    competitorIndex;                  // index of competitor. See CompetitorsList.
    SailPoint *t;                            // array of points (maxNIsoc + 1)
+   //SailPoint t [MAX_N_ISOC + 1];            // idem STATIC
 } SailRoute;
 
 /*! History Route description  */
@@ -438,7 +442,8 @@ typedef struct {
    char editor [MAX_SIZE_NAME];              // name of text file editor
    char webkit [MAX_SIZE_NAME];              // name of webkit application
    char spreadsheet [MAX_SIZE_NAME];         // name of spreadshhet application
-   int  python;                              // true if python script use for mail grib request
+   int  curlSys;                             // true if curl wuth system
+   int  python;                              // true if python script used for mail grib request
    char smtpServer [MAX_SIZE_NAME];          // SMTP server name
    char smtpUserName [MAX_SIZE_NAME];        // SMTP user name
    char imapServer [MAX_SIZE_NAME];          // IMAP server name

@@ -55,6 +55,11 @@ void optionManage (char option) {
    char errMessage [MAX_SIZE_TEXT] = "";
    char str [MAX_SIZE_LINE] = "";
    switch (option) {
+   case 'a':
+      snprintf (str, sizeof (str), "%sgrib/inter-", par.workingDir);
+      removeAllTmpFilesWithPrefix (str); // we suppress the temp files in order to get clean
+      printf ("All .tmp files with prefix:%s are removed\n", str); 
+      break;
    case 'c': // cap
       printf ("Lon1 = ");
       if (scanf ("%lf", &lon) < 1) break;

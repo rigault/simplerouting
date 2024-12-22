@@ -21,6 +21,8 @@ static inline double lonCanonize (double lon) {
 
 /*! true if P (lat, lon) is within the zone */
 static inline bool isInZone (double lat, double lon, Zone *zone) {
+   if (! zone->anteMeridian)
+      lon = lonCanonize (lon);
    return (lat >= zone->latMin) && (lat <= zone->latMax) && (lon >= zone->lonLeft) && (lon <= zone->lonRight);
 }
 
