@@ -70,7 +70,6 @@ extern char   *gribDateTimeToStr (long date, long time, char *str, size_t len);
 extern double zoneTimeDiff (const Zone *zone1, const Zone *zone0);
 extern bool   readPolar (const char *fileName, PolMat *mat, char *errMessage, size_t maxLen);
 extern char   *polToStr (const PolMat *mat, char *str, size_t maxLen);
-extern void   *readGrib (void *data);
 extern bool   readGribAll (const char *fileName, Zone *zone, int iFlow);
 extern void   findWindGrib (double lat, double lon, double t, double *u, double *v, double *gust, double *w, double *twd, double *tws );
 extern double findRainGrib (double lat, double lon, double t);

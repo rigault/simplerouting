@@ -626,45 +626,16 @@ bool writePoi (const char *fileName) {
    return true;
 }
 
-int oldfindPoiByName (const char *name, double *lat, double *lon) {
-   const size_t MIN_NAME_LENGTH = 3;
-   int i;
-   char *upperPoi = NULL;;
-   if (!name || !lat || !lon) {
-      return -1; // Invalid arguments
-   }
-   char *upperName = g_utf8_strup (name, MAX_SIZE_NAME);
-
-   g_strstrip (upperName);
-   if (strlen (upperName) <= MIN_NAME_LENGTH) {
-      free (upperPoi);
-      free (upperName);
-      return -1;
-   }
-   for (i = 0; i < nPoi; i++) {
-      upperPoi = g_utf8_strup (tPoi [i].name, MAX_SIZE_NAME);
-      if (strstr (upperPoi, upperName) != NULL) {
-         *lat = tPoi [i].lat;
-         *lon = tPoi [i].lon;
-         break;
-      }
-      free (upperPoi);
-   }
-   free (upperPoi);
-   free (upperName);
-   return (i < nPoi) ? i : -1;
-}
-
 /*! give the point refered by its name. return index found, -1 if not found */
-int findPoiByName(const char *name, double *lat, double *lon) {
+int findPoiByName (const char *name, double *lat, double *lon) {
     const size_t MIN_NAME_LENGTH = 3;
     if (!name || !lat || !lon) {
         return -1; // Invalid arguments
     }
 
     // Normalize the input name for case-insensitive comparison
-    char *normalized_name = g_utf8_casefold(name, -1);
-    g_strstrip(normalized_name);
+    char *normalized_name = g_utf8_casefold (name, -1);
+    g_strstrip (normalized_name);
 
     if (strlen(normalized_name) < MIN_NAME_LENGTH) {
         g_free(normalized_name);
@@ -673,10 +644,10 @@ int findPoiByName(const char *name, double *lat, double *lon) {
 
     for (int i = 0; i < nPoi; i++) {
         // Normalize the POI name
-        char *normalized_poi = g_utf8_casefold(tPoi[i].name, -1);
+        char *normalized_poi = g_utf8_casefold (tPoi[i].name, -1);
 
         // Check if the input name is a substring of the POI name (case-insensitive)
-        if (g_strstr_len(normalized_poi, -1, normalized_name)) {
+        if (g_strstr_len (normalized_poi, -1, normalized_name)) {
             *lat = tPoi[i].lat;
             *lon = tPoi[i].lon;
             g_free(normalized_poi);
@@ -1648,16 +1619,6 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
    return true;
 }
 
-/*! launch readGribAll wih Wind or current  parameters */   
-void *readGrib (void *data) {
-   int *iFlow = (int *) (data);
-   if ((*iFlow == WIND) && (par.gribFileName [0] != '\0'))
-      readGribRet = readGribAll (par.gribFileName, &zone, WIND);
-   else if ((*iFlow == CURRENT) && (par.currentGribFileName [0] != '\0'))
-      readGribRet = readGribAll (par.currentGribFileName, &currentZone, CURRENT);
-   return NULL;
-}
-
 /*! write Grib information in string */
 char *gribToStr (const Zone *zone, char *str, size_t maxLen) {
    char line [MAX_SIZE_LINE] = "";
@@ -2201,7 +2162,11 @@ bool readParam (const char *fileName) {
    if (par.mailPw [0] != '\0') {
       par.storeMailPw = true;
    }
-   if (competitors.n > 0) competitors.t[0].main = true; // default main competitor is 0
+   if (competitors.n > 0) {
+      competitors.t[0].main = true; // default main competitor is 0
+      par.pOr.lat = competitors.t [0].lat;
+      par.pOr.lon = competitors.t [0].lon;
+   }
    if (par.constWindTws != 0) initZone (&zone);
    fclose (f);
    return true;

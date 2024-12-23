@@ -19,10 +19,16 @@ static inline double lonCanonize (double lon) {
    return lon;
 } 
 
+/*! if antemeridian -180 < lon < 360. Normal case : -180 < lon <= 180 */
+static inline double lonNormalize (double lon, bool anteMeridian) {
+   lonCanonize (lon);
+   if (anteMeridian && lon < 0)
+      lon += 360;
+   return lon;
+}
+
 /*! true if P (lat, lon) is within the zone */
 static inline bool isInZone (double lat, double lon, Zone *zone) {
-   if (! zone->anteMeridian)
-      lon = lonCanonize (lon);
    return (lat >= zone->latMin) && (lat <= zone->latMax) && (lon >= zone->lonLeft) && (lon <= zone->lonRight);
 }
 

@@ -13,10 +13,8 @@
 static void initScenarioOption (void) {
    char str [MAX_SIZE_LINE];
    char errMessage [MAX_SIZE_TEXT] = "";
-   int iFlow;
    if (par.gribFileName [0] != '\0') {
-      iFlow = WIND;
-      readGrib (&iFlow);
+      readGribRet = readGribAll (par.gribFileName, &zone, WIND);
       if (readGribRet == 0) {
          fprintf (stderr, "Error in initScenario: Unable to read grib file: %s\n ", par.gribFileName);
          return;
@@ -26,8 +24,7 @@ static void initScenarioOption (void) {
    }
 
    if (par.currentGribFileName [0] != '\0') {
-      iFlow = CURRENT;
-      readGrib (&iFlow);
+      readGribRet = readGribAll (par.currentGribFileName, &zone, WIND);
       printf ("Cur grib loaded: %s\n", par.currentGribFileName);
       printf ("Grib DateTime0 : %s\n", gribDateTimeToStr (currentZone.dataDate [0], currentZone.dataTime [0], str, sizeof (str)));
    }
@@ -190,8 +187,7 @@ void optionManage (char option) {
          if (scanf ("%lf", &lon1) < 1) break;
          printf ("Lon2 = ");
          if (scanf ("%lf", &lon2) < 1) break;
-         normalizeLon (&lon1, &lon2);
-         printf ("Normalized: lon1 = %.2lf, lon2 = %.2lf\n", lon1, lon2);
+         etc
       }
       break;*/
    case 'T': // test
