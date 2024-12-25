@@ -267,7 +267,7 @@ static int buildNextIsochrone (const Pp *pOr, const Pp *pDest, const Pp *isoList
                newList [lenNewL++] = newPt;                      // new point added to the isochrone
             }
             else {
-               fprintf (stderr, "Error in buildNextIsochrone: Limit of MAX_SIZE_ISOC reached: %d\n", MAX_SIZE_ISOC);
+               fprintf (stderr, "In buildNextIsochrone, Error Limit of MAX_SIZE_ISOC reached: %d\n", MAX_SIZE_ISOC);
                return -1;
             }
             pId += 1;
@@ -283,7 +283,7 @@ static int findFather (int ptId, int i, int lIsoc) {
       if (isocArray [i * MAX_SIZE_ISOC + k].id == ptId)
          return k;
    }
-   fprintf (stderr, "Error in father: ptId not found: %d, Isoc No:%d, Isoc Len: %d\n", ptId, i, lIsoc);
+   fprintf (stderr, "In findFather, Error ptId not found: %d, Isoc No:%d, Isoc Len: %d\n", ptId, i, lIsoc);
    return -1;
 }
 
@@ -340,7 +340,7 @@ bool dumpAllIsoc (const char *fileName) {
    FILE *f;
    Pp pt;
    if ((f = fopen (fileName, "w")) == NULL) {
-      fprintf (stderr, "Error in dumpAllIsoc: Cannot write isoc: %s\n", fileName);
+      fprintf (stderr, "In dumpAllIsoc, Error cannot write isoc: %s\n", fileName);
       return false;
    }
    fprintf (f, "n;     Lat;   Lon;      Id; Father;  Amure;  Motor\n");
@@ -363,7 +363,7 @@ bool dumpRoute (const char *fileName, Pp dest) {
    int dep = (dest.id == 0) ? nIsoc : nIsoc - 1;
    Pp pt = dest;
    if ((f = fopen (fileName, "w")) == NULL) {
-      fprintf (stderr, "Error in dumpRoute: Cannot write route: %s\n", fileName);
+      fprintf (stderr, "In dumpRoute, Error cannot write route: %s\n", fileName);
       return false;
    }
    fprintf (f, "%4d; %06.2f; %06.2f; %4d; %4d\n", dep, pt.lat, pt.lon, pt.id, pt.father);
@@ -384,7 +384,7 @@ static void saveRoute (SailRoute *route) {
    // allocate or rallocate space for routes
    SailRoute *newRoutes = realloc (historyRoute.r, (historyRoute.n + 1) * sizeof(SailRoute));
    if (newRoutes == NULL) {
-      fprintf (stderr, "Error in saveRoute: Memory allocation failed\n");
+      fprintf (stderr, "In saveRoute, Error: Memory allocation failed\n");
       return;
    }
    historyRoute.r = newRoutes;
@@ -394,7 +394,7 @@ static void saveRoute (SailRoute *route) {
    size_t pointsSize = (route->nIsoc + 1) * sizeof (SailPoint);
    historyRoute.r[historyRoute.n].t = malloc (pointsSize);
    if (! historyRoute.r[historyRoute.n].t) {
-      fprintf (stderr, "Error in saveRoute: Memory allocation for SailPoint array failed\n");
+      fprintf (stderr, "In saveRoute, Error: Memory allocation for SailPoint array failed\n");
       return;
    }
    memcpy (historyRoute.r[historyRoute.n].t, route->t, pointsSize); // deep copy of points
@@ -672,7 +672,6 @@ static inline bool goal (Pp *pDest, int nIsoc, const Pp *isoList, int len, doubl
       if (par.allwaysSea || isSea (tIsSea, isoList [k].lat, isoList [k].lon)) { 
          if (goalP (&isoList [k-1], &isoList [k], pDest, t, dt, &time, &distance, motor, amure)) {
             destinationReached = true;
-            printf ("Destination reached point: %d\n", k);
          }
          if (time < bestTime) {
             bestTime = time;
@@ -753,13 +752,13 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
    }
 
    if ((tempList = malloc (MAX_SIZE_ISOC * sizeof(Pp))) == NULL) {
-      fprintf (stderr, "in Routing: error in memory templIst allocation\n");
+      fprintf (stderr, "in routing: error in memory templIst allocation\n");
       return -1;
    }
 
    maxNIsoc = (int) ((1 + zone.timeStamp [zone.nTimeStamp - 1]) / dt);
    if (maxNIsoc > MAX_N_ISOC) {
-      fprintf (stderr, "in Routing maxNIsoc exeed MAX_N_ISOC\n");
+      fprintf (stderr, "in routing maxNIsoc exeed MAX_N_ISOC\n");
       free (tempList);
       return -1;
    } 
@@ -767,7 +766,7 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
 
    Pp *tempIsocArray = (Pp*) realloc (isocArray, maxNIsoc * MAX_SIZE_ISOC * sizeof(Pp));
    if (tempIsocArray == NULL) {
-      fprintf (stderr, "in Routing: realloc error for isocArray\n");
+      fprintf (stderr, "in routing: realloc error for isocArray\n");
       free (tempList);
       return -1;
    }
@@ -775,7 +774,7 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
    
    IsoDesc *tempIsoDesc = (IsoDesc *) realloc (isoDesc, maxNIsoc * sizeof (IsoDesc));
    if (tempIsoDesc == NULL) {
-      fprintf (stderr, "in Routing: realloc for IsoDesc failed\n");
+      fprintf (stderr, "in routing: realloc for IsoDesc failed\n");
       free (isocArray);
       free (tempList);
       return -1;
@@ -784,7 +783,7 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
     
    SailPoint *tempSailPoint = (SailPoint *) realloc (route.t, (maxNIsoc + 1) * sizeof(SailPoint));
    if (tempSailPoint  == NULL) {
-      fprintf (stderr, "in Routing: realloc for route.t failed\n");
+      fprintf (stderr, "in routing: realloc for route.t failed\n");
       free (isoDesc);
       free (isocArray);
       free (tempList);
@@ -800,7 +799,7 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
    lastBestVmg = 0;
    tempList [0] = *pOr;             // list with just one elemnet;
    initSector (nIsoc % 2, par.nSectors); 
-   
+
    if (goalP (pOr, pOr, pDest, t, dt, &timeToReach, &distance, &motor, &amure)) {
       pDest->father = pOr->id;
       pDest->motor = motor;
@@ -829,10 +828,10 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
    
    nIsoc += 1;
    //printf ("Routing t = %.2lf, zone: %.2ld\n", t, zone.timeStamp [zone.nTimeStamp-1]);
-   while (t < (zone.timeStamp [zone.nTimeStamp - 1]/* + par.tStep*/) && (nIsoc < maxNIsoc)) {
-      if (route.ret == -2) {
+   while (t < (zone.timeStamp [zone.nTimeStamp - 1]/* + par.tStep*/) && (nIsoc < maxNIsoc)) { // ATT
+      if (route.ret == ROUTING_STOPPED) { // -2
          free (tempList);
-         return -2; // stopped by user in another thread !!!
+         return ROUTING_STOPPED; // stopped by user in another thread !!!
       }
       t += dt;
       // printf ("nIsoc = %d\n", nIsoc);
@@ -847,7 +846,7 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
          isoDesc [nIsoc].closest = index; 
          isoDesc [nIsoc].toIndexWp = toIndexWp; 
          *lastStepDuration = timeLastStep;
-         // printf ("destination reached\n");
+         printf ("In routing, Destination reached to WP: %d\n", toIndexWp);
          free (tempList);
          return nIsoc + 1;
       }
@@ -855,6 +854,7 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
       lTempList = buildNextIsochrone (pOr, pDest, &isocArray [(nIsoc -1) * MAX_SIZE_ISOC], isoDesc [nIsoc - 1].size, t, dt, tempList, &theBestVmg);
       if (lTempList == -1) {
          free (tempList);
+         fprintf (stderr, "In routing: buildNextIsochrone return: -1 value\n");
          return -1;
       }
       lastBestVmg = theBestVmg;
@@ -872,7 +872,7 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
       char strDist [MAX_SIZE_NAME];
       if ((nIsoc > 2) && (isoDesc [nIsoc-1].distance > isoDesc [nIsoc-2].distance)) {
          snprintf (strDist, sizeof (strDist), "%.2lf", isoDesc [nIsoc-1].distance);  
-         fprintf (stderr, "Distance to destination is raising, nIsoc: %d, distance: %s previous distance: %.2lf\n", 
+         fprintf (stderr, "In routing, Distance to destination is raising, nIsoc: %d, distance: %s previous distance: %.2lf\n", 
             nIsoc - 1, (isoDesc [nIsoc -1].distance == DBL_MAX) ? "INFINITY" : strDist, isoDesc [nIsoc - 2].distance);
          break;
       }*/
@@ -894,6 +894,7 @@ static void initRouting (void) {
    par.pDest.father = 0;
    pId = 1;
    route.n = 0;
+   route.ret = ROUTING_RUNNING;
    route.destinationReached = false;
    for (int i = 0; i < maxNIsoc; i++) {
       isoDesc [i].size = 0;
@@ -911,6 +912,7 @@ void *routingLaunch () {
    Pp pNext;
    initRouting ();
    route.competitorIndex = competitors.runIndex;
+   int ret = -1;
 
    gettimeofday (&t0, NULL);
    ut0 = t0.tv_sec * MILLION + t0.tv_usec;
@@ -918,18 +920,18 @@ void *routingLaunch () {
 
    //Launch routing
    if (wayPoints.n == 0)
-      route.ret = routing (&par.pOr, &par.pDest, -1, wayPointStartTime, par.tStep, &lastStepDuration);
+      ret = routing (&par.pOr, &par.pDest, -1, wayPointStartTime, par.tStep, &lastStepDuration);
    else {
       for (int i = 0; i < wayPoints.n; i ++) {
          pNext.lat = wayPoints.t[i].lat;
          pNext.lon = wayPoints.t[i].lon;
          pNext.id = 0;
          if (i == 0) {
-            route.ret = routing (&par.pOr, &pNext, i, wayPointStartTime, par.tStep, &lastStepDuration);
+            ret = routing (&par.pOr, &pNext, i, wayPointStartTime, par.tStep, &lastStepDuration);
          }
          else
-            route.ret = routing (&isocArray [(nIsoc-1) * MAX_SIZE_ISOC + 0], &pNext, i, wayPointStartTime, par.tStep, &lastStepDuration);
-         if (route.ret > 0) {
+            ret = routing (&isocArray [(nIsoc-1) * MAX_SIZE_ISOC + 0], &pNext, i, wayPointStartTime, par.tStep, &lastStepDuration);
+         if (ret > 0) {
             wayPointStartTime = par.startTimeInHours + (nIsoc * par.tStep) + lastStepDuration;
             isocArray [nIsoc * MAX_SIZE_ISOC + 0].lat = wayPoints.t[i].lat;
             isocArray [nIsoc * MAX_SIZE_ISOC + 0].lon = wayPoints.t[i].lon;
@@ -940,20 +942,24 @@ void *routingLaunch () {
          }
          else break;
       }
-      if (route.ret > 0)
-         route.ret = routing (&isocArray [(nIsoc-1) * MAX_SIZE_ISOC + 0], &par.pDest, -1, wayPointStartTime, par.tStep, &lastStepDuration);
+      if (ret > 0) {
+         ret = routing (&isocArray [(nIsoc-1) * MAX_SIZE_ISOC + 0], &par.pDest, -1, wayPointStartTime, par.tStep, &lastStepDuration);
+      } 
    }
-   if (route.ret == -1)
+   if (ret == -1) {
+      route.ret = ROUTING_ERROR; // -1
       return NULL;
+   }
 
    gettimeofday (&t1, NULL);
    ut1 = t1.tv_sec * MILLION + t1.tv_usec;
    route.calculationTime = (double) ((ut1-ut0)/MILLION);
-   route.destinationReached = (route.ret > 0);
+   route.destinationReached = (ret > 0);
    storeRoute (&route, &par.pOr, &lastClosest, lastStepDuration);
 
    if (strlen (par.dumpRFileName) > 0) dumpRoute (par.dumpRFileName, lastClosest);
    if (strlen (par.dumpIFileName) > 0) dumpAllIsoc (par.dumpIFileName);
+   route.ret = ret; // route.ret is positionned just before ending. rouye.ret is shared between threads !
    return NULL;
 }
 
@@ -967,7 +973,6 @@ void *bestTimeDeparture () {
    for (int t = chooseDeparture.tBegin; t < chooseDeparture.tEnd; t += chooseDeparture.tStep) {
       //initRouting ();
       par.startTimeInHours = t;
-      route.ret = 0;
       routingLaunch ();
       if (route.ret > 0) {
          chooseDeparture.t [t] = route.duration;
@@ -992,7 +997,6 @@ void *bestTimeDeparture () {
       printf ("Solution exist: best startTime: %.2lf\n", par.startTimeInHours);
       chooseDeparture.minDuration = minDuration;
       chooseDeparture.maxDuration = maxDuration;
-      route.ret = 0;
       routingLaunch ();
       chooseDeparture.ret = EXIST_SOLUTION;
    }  
@@ -1031,11 +1035,10 @@ void *allCompetitors () {
       competitors.runIndex = i;
       par.pOr.lat = competitors.t [i].lat;
       par.pOr.lon = competitors.t [i].lon;
-      route.ret = 0;
       routingLaunch ();
       if (route.ret < 0) {
          competitors.ret = NO_SOLUTION;
-         fprintf (stderr, "No solution for competitor: %s with return: %d\n", competitors.t[i].name, route.ret);
+         fprintf (stderr, "In allCompetitors, No solution for competitor: %s with return: %d\n", competitors.t[i].name, route.ret);
          return NULL;
       }
       updateCompetitorsDashboard (i, route.duration); // set eta(s) and dist

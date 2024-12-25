@@ -36,7 +36,6 @@
 #include "rutil.h"
 #include "option.h"
 
-
 char parameterFileName [MAX_SIZE_FILE_NAME];
 
 /*! make initializations and call opionManage () */
@@ -44,7 +43,7 @@ int main (int argc, char *argv[]) {
    bool ret = true;
 
    if (setlocale (LC_ALL, "C") == NULL) {              // very important for scanf decimal numbers
-      fprintf (stderr, "Error in main: setlocale failed");
+      fprintf (stderr, "In main, Error: setlocale failed");
       return EXIT_FAILURE;
    }
 

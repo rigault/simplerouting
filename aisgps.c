@@ -167,7 +167,7 @@ static void freeAisSgpt (gpointer data) {
 /*! AIS hash table init */
 bool aisTableInit (void) {
    if ((aisTable = g_hash_table_new_full (mmsiHash, mmsiEqual, NULL, freeAisSgpt)) == NULL) {
-      fprintf (stderr, "Error: Init Hash table for AIS \n");
+      fprintf (stderr, "In aisTableInit, Error: Init Hash table for AIS \n");
       return false;
    }
    else
@@ -178,7 +178,7 @@ bool aisTableInit (void) {
 bool testAisTable () {
    AisRecord *ship = calloc (1, sizeof(AisRecord));
    if (!ship) {
-      fprintf (stderr, "Erreur d'allocation mémoire pour ship1\n");
+      fprintf (stderr, "In testAisTable, Erreur d'allocation mémoire pour ship1\n");
       return false;
    }
     
@@ -333,7 +333,7 @@ static AisRecord *getRecord (int mmsi) {
    AisRecord *ship = g_hash_table_lookup (aisTable, GINT_TO_POINTER (mmsi));
    if (ship == NULL) { // ship does not exist
       if ((ship = calloc (1, sizeof (AisRecord))) == NULL) {
-         fprintf (stderr, "Error in getRecord Calloc Ais recod fail\n");
+         fprintf (stderr, "In getRecord, Error in getRecord Calloc Ais recod fail\n");
          return NULL;
       }
       ship->mmsi = mmsi; // new mmsi because ship does not exist

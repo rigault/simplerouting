@@ -42,8 +42,9 @@ const struct MailService mailServiceTab [N_MAIL_SERVICES] = {
 };
 
 const struct GribService serviceTab [N_WEB_SERVICES] = {
-   {6, "Time Step 1 hours requires 0.25 Resolution with 5 days max forecast. Time step 3 hours allows max 8 days forecast. Timestep 6 hours for 16 days forecast."},
-   {3, "Resolution allways 0.25. Time Step min 3 hours with 6 days max forecast. Time step 6 hours and above allow 10 days forecast."}
+   {6, "Time Step 1 hours requires 0.25 Resolution with 5 days max forecast. Time step 3 hours allows max 8 days forecast. Timestep 6 hours for 16 days forecast."}, // NOAA
+   {3, "Resolution allways 0.25. Time Step min 3 hours with 6 days max forecast. Time step 6 hours and above allow 10 days forecast."}, // ECMWF
+   {3, "Resolution allways 0.25. Time Step allways 3 hours. 5 days max => 4.25 days (102 hours) max."} // ARPEGE
 };
 
 /*! list of wayPoint */
@@ -143,7 +144,7 @@ void *commandRun (void *data) {
    char *line = (char *) data;
    // printf ("commandRun Line: %s\n", line);
    if ((fs = popen (line, "r")) == NULL)
-      fprintf (stderr, "Error in commandRun: popen call: %s\n", line);
+      fprintf (stderr, "In commandRun, Error popen call: %s\n", line);
    else
       pclose (fs);
    free (line); 
@@ -155,32 +156,32 @@ void *commandRun (void *data) {
 bool compact (bool full, const char *dir, const char *inFile, const char *shortNames, double lonLeft, double lonRight, double latMin, double latMax, const char *outFile) {
    FILE *fs;
    char command [MAX_SIZE_LINE];
+   char fullFileName [MAX_SIZE_LINE];
    snprintf (command, MAX_SIZE_LINE, "grib_copy -w shortName=%s %s %s%s", shortNames, inFile, dir, "inter0.tmp");
    if ((fs = popen (command, "r")) == NULL) {
-      fprintf (stderr, "Error in compact: popen call: %s\n", command);
+      fprintf (stderr, "In compact, Error popen call: %s\n", command);
       return false;
    }
    pclose (fs);
+
+   snprintf (fullFileName, MAX_SIZE_LINE, "%s%s", dir, "inter0.tmp");
+   if (access (fullFileName, F_OK) != 0) {
+      fprintf (stderr, "In compact, Error: file does no exist: %s\n", fullFileName);
+      return false;
+   }
+
    if (! full) {
-      snprintf (command, MAX_SIZE_LINE, "%s%s", dir, "inter0.tmp");
-      if (rename (command, outFile) != 0) {
-         fprintf (stderr, "Error in compact: rename to: %s\n", outFile);
+      if (rename (fullFileName, outFile) != 0) {
+         fprintf (stderr, "In compact, Error rename to: %s\n", outFile);
          return false;
       }
-      else
-         return true;
-
+      return true;
    }
    else {
-      snprintf (command, MAX_SIZE_LINE, "cdo -sellonlatbox,%.2lf,%.2lf,%.2lf,%.2lf %s%s %s%s", lonLeft, lonRight, latMin, latMax, dir, "inter0.tmp", dir, "inter1.tmp");
+      snprintf (command, MAX_SIZE_LINE, "wgrib2 %s%s -small_grib %.0lf:%.0lf %.0lf:%.0lf %s >/dev/null", 
+         dir, "inter0.tmp", lonLeft, lonRight, latMin, latMax, outFile);
       if ((fs = popen (command, "r")) == NULL) {
-         fprintf (stderr, "Error in compact: popen call: %s\n", command);
-         return false;
-      }
-      pclose (fs);
-      snprintf (command, MAX_SIZE_LINE, "cdo -invertlat %s%s %s", dir, "inter1.tmp", outFile);
-      if ((fs = popen (command, "r")) == NULL) {
-         fprintf (stderr, "Error in compact: popen call: %s\n", command);
+         fprintf (stderr, "In compact, Error popen call: %s\n", command);
          return false;
       }
       pclose (fs);
@@ -192,7 +193,7 @@ bool compact (bool full, const char *dir, const char *inFile, const char *shortN
 bool concat (const char *prefix, const char *suffix, int step, int max, const char *fileRes) {
    FILE *fRes = NULL;
    if ((fRes = fopen (fileRes, "w")) == NULL) {
-      fprintf (stderr, "Error in concat: Cannot write: %s\n", fileRes);
+      fprintf (stderr, "In concat, Error Cannot write: %s\n", fileRes);
       return false;
    }
    for (int i = 0; i <= max; i += step) {
@@ -200,7 +201,7 @@ bool concat (const char *prefix, const char *suffix, int step, int max, const ch
       snprintf (fileName, sizeof (fileName), "%s%03d%s", prefix, i, suffix);
       FILE *f = fopen (fileName, "rb");
       if (f == NULL) {
-         fprintf (stderr, "Error in concat: opening impossible %s\n", fileName);
+         fprintf (stderr, "In concat, Error opening impossible %s\n", fileName);
          fclose (fRes);
          return false;
       }
@@ -209,9 +210,9 @@ bool concat (const char *prefix, const char *suffix, int step, int max, const ch
       while ((n = fread (buffer, 1, sizeof(buffer), f)) > 0) {
          fwrite (buffer, 1, n, fRes);
       }
-      fclose(f);
+      fclose (f);
    }
-   fclose(fRes);
+   fclose (fRes);
    return true;
 }
 
@@ -262,7 +263,7 @@ bool initSHP (const char* nameFile) {
    double minBound[4], maxBound[4];
    SHPHandle hSHP = SHPOpen (nameFile, "rb");
    if (hSHP == NULL) {
-      fprintf (stderr, "Error in InitSHP: Cannot open Shapefile: %s\n", nameFile);
+      fprintf (stderr, "In InitSHP, Error: Cannot open Shapefile: %s\n", nameFile);
       return false;
    }
 
@@ -272,7 +273,7 @@ bool initSHP (const char* nameFile) {
 
    Entity *temp = (Entity *) realloc (entities, sizeof(Entity) * (nEntities + nTotEntities));
    if (temp == NULL) {
-      fprintf(stderr, "Error in initSHP: realloc failed\n");
+      fprintf (stderr, "In initSHP, Error realloc failed\n");
       free (entities); // Optionnal if entities is NULL at beginning, but sure..
       return false;
    } else {
@@ -282,7 +283,7 @@ bool initSHP (const char* nameFile) {
    for (int i = 0; i < nEntities; i++) {
       SHPObject *psShape = SHPReadObject(hSHP, i);
       if (psShape == NULL) {
-         fprintf (stderr, "Error in initShp: Reading entity: %d\n", i);
+         fprintf (stderr, "In initSHP, Error Reading entity: %d\n", i);
          continue;
       }
       k = nTotEntities + i;
@@ -299,7 +300,7 @@ bool initSHP (const char* nameFile) {
 
       // printf ("Bornes: %d, LatMin: %.2lf, LatMax: %.2lf, LonMin: %.2lf, LonMax: %.2lf\n", k, entities [i].latMin, entities [i].latMax, entities [i].lonMin, entities [i].lonMax);
       if ((entities[k].points = malloc (sizeof(Point) * entities[k].numPoints)) == NULL) {
-         fprintf (stderr, "Error in initSHP: malloc entity [k].numPoints failed with k = %d\n", k);
+         fprintf (stderr, "In initSHP, Error: malloc entity [k].numPoints failed with k = %d\n", k);
          free (entities);
          return false;
       }
@@ -307,7 +308,7 @@ bool initSHP (const char* nameFile) {
          if (j < MAX_INDEX_ENTITY)
             entities[k].index [j] = psShape->panPartStart[j];
          else {
-            fprintf (stderr, "Error in InitSHP: MAX_INDEX_ENTITY reached: %d\n", j);
+            fprintf (stderr, "In InitSHP, Error MAX_INDEX_ENTITY reached: %d\n", j);
             break;
          } 
       }
@@ -342,7 +343,7 @@ void freeSHP (void) {
 static bool mostRecentFile (const char *directory, const char *pattern, char *name, size_t maxLen) {
    DIR *dir = opendir(directory);
    if (dir == NULL) {
-      fprintf (stderr, "Error in mostRecentFile: opening: %s\n", directory);
+      fprintf (stderr, "In mostRecentFile, Error opening: %s\n", directory);
       return false;
    }
 
@@ -360,7 +361,7 @@ static bool mostRecentFile (const char *directory, const char *pattern, char *na
          if (strlen (entry->d_name) < maxLen)
             g_strlcpy (name, entry->d_name, maxLen);
          else {
-            fprintf (stderr, "Error in mostRecentFile: File name size is: %zu and exceed Max Size: %zu\n", \
+            fprintf (stderr, "In mostRecentFile, Error File name size is: %zu and exceed Max Size: %zu\n", \
                strlen (entry->d_name), maxLen);
             break;
          }
@@ -470,7 +471,7 @@ long getFileSize (const char *fileName) {
     if (stat(fileName, &st) == 0) {
         return st.st_size;
     } else {
-        fprintf (stderr, "Error in getFileSize: %s\n", fileName);
+        fprintf (stderr, "In getFileSize, Error: %s\n", fileName);
         return -1;
     }
 }
@@ -575,7 +576,7 @@ int readPoi (const char *fileName) {
    int i = nPoi;
 
 	if ((f = fopen (fileName, "r")) == NULL) {
-		fprintf (stderr, "Error in readPoi: impossible to read: %s\n", fileName);
+		fprintf (stderr, "In readPoi, Error impossible to read: %s\n", fileName);
 		return 0;
 	}
    while ((fgets (pLine, MAX_SIZE_LINE, f) != NULL )) {
@@ -600,7 +601,7 @@ int readPoi (const char *fileName) {
       }
       i += 1;
       if (i >= MAX_N_POI) {
-         fprintf (stderr, "Error in readPoi: Exceed MAX_N_POI : %d\n", i);
+         fprintf (stderr, "In readPoi, Error Exceed MAX_N_POI : %d\n", i);
 	      fclose (f);
          return 0;
       }
@@ -614,7 +615,7 @@ int readPoi (const char *fileName) {
 bool writePoi (const char *fileName) {
    FILE *f = NULL;
    if ((f = fopen (fileName, "w")) == NULL) {
-      fprintf (stderr, "Error in writePoi: cannot write: %s\n", fileName);
+      fprintf (stderr, "In writePoi, Error cannot write: %s\n", fileName);
       return false;
    }
    fprintf (f, "LATITUDE; LONGITUDE; Type; Level; PORT_NAME\n");
@@ -713,7 +714,7 @@ char *nearestPort (double lat, double lon, const char *fileName, char *res, size
       return res;
 
    if ((f = fopen (fileName, "r")) == NULL) {
-      fprintf (stderr, "Error in nearestPort: cannot open: %s\n", fileName);
+      fprintf (stderr, "In nearestPort, Error cannot open: %s\n", fileName);
       return res;
    }
    while (fgets (str, MAX_SIZE_LINE, f) != NULL ) {
@@ -736,11 +737,11 @@ bool readIsSea (const char *fileName) {
    char c;
    int nSea = 0;
    if ((f = fopen (fileName, "r")) == NULL) {
-      fprintf (stderr, "Error in readIsSea: cannot open: %s\n", fileName);
+      fprintf (stderr, "In readIsSea, Error cannot open: %s\n", fileName);
       return false;
    }
 	if ((tIsSea = (char *) malloc (SIZE_T_IS_SEA + 1)) == NULL) {
-		fprintf (stderr, "Error in readIsSea: Malloc");
+		fprintf (stderr, "In readIsSea, error Malloc");
       fclose (f);
 		return false;
 	}
@@ -1370,7 +1371,7 @@ static bool readGribLists (const char *fileName, Zone *zone) {
    codes_handle* h = NULL;
 
    if ((f = fopen (fileName, "rb")) == NULL) {
-       fprintf (stderr, "Error in readGribAll: Unable to open file %s\n", fileName);
+       fprintf (stderr, "In readGribLists, ErrorUnable to open file %s\n", fileName);
        return false;
    }
 
@@ -1418,13 +1419,13 @@ static bool readGribParameters (const char *fileName, Zone *zone) {
    codes_handle *h = NULL;
  
    if ((f = fopen (fileName, "rb")) == NULL) {
-       fprintf (stderr, "Error in readGribParameters: unable to open file %s\n",fileName);
+       fprintf (stderr, "In readGribParameters, Error unable to open file %s\n",fileName);
        return false;
    }
  
    // create new handle from the first message in the file
    if ((h = codes_handle_new_from_file(0, f, PRODUCT_GRIB, &err)) == NULL) {
-       fprintf (stderr, "Error in readGribParameters: code handle from file : %s Code error: %s\n",\
+       fprintf (stderr, "In readGribParameters, Error code handle from file : %s Code error: %s\n",\
          fileName, codes_get_error_message(err)); 
        fclose (f);
        return false;
@@ -1470,7 +1471,7 @@ static inline int indexOf (int timeStep, double lat, double lon, const Zone *zon
          break;
    }
    if (iT == -1) {
-      fprintf (stderr, "Error in indexOf: Cannot find index of time: %d\n", timeStep);
+      fprintf (stderr, "In indexOf, Error Cannot find index of time: %d\n", timeStep);
       return -1;
    }
    //printf ("iT: %d iLon :%d iLat: %d\n", iT, iLon, iLat); 
@@ -1488,6 +1489,7 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
    size_t lenName;
    const long GUST_GFS = 180;
    long timeInterval = 0;
+   char str [MAX_SIZE_LINE];
    //static int count;
    memset (zone, 0,  sizeof (Zone));
    zone->wellDefined = false;
@@ -1498,24 +1500,31 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
    if (! readGribParameters (fileName, zone)) {
       return false;
    }
+   if (zone -> nDataDate > 1) {
+      fprintf (stderr, "In readGribAll, Error Grib file with more than 1 dataDate not supported nDataDate: %zu\n", 
+         zone -> nDataDate);
+      return false;
+   }
    if (zone->nTimeStamp > 1) {
       timeInterval = zone->timeStamp [1] - zone->timeStamp [0]; 
    }
    else {
       timeInterval = 3;
-      fprintf (stderr, "Error in readGribAll: nTimeStamp = %zu\n", zone->nTimeStamp);
+      fprintf (stderr, "In readGribAll, Error nTimeStamp = %zu\n", zone->nTimeStamp);
       //return false;
    }
+
 
    if (tGribData [iFlow] != NULL) {
       free (tGribData [iFlow]); 
       tGribData [iFlow] = NULL;
    }
    if ((tGribData [iFlow] = calloc ((zone->nTimeStamp + 1) * zone->nbLat * zone->nbLon, sizeof (FlowP))) == NULL) { // nTimeStamp + 1
-      fprintf (stderr, "Error in readGribAll: calloc tGribData [iFlow]\n");
+      fprintf (stderr, "In readGribAll, Errorcalloc tGribData [iFlow]\n");
       return false;
    }
-   printf ("In readGribAll : %zu allocated\n", sizeof(FlowP) * (zone->nTimeStamp + 1) * zone->nbLat * zone->nbLon);
+   printf ("In readGribAll : %s allocated\n", 
+      formatThousandSep (str, sizeof (str), sizeof(FlowP) * (zone->nTimeStamp + 1) * zone->nbLat * zone->nbLon));
    
    // Message handle. Required in all the ecCodes calls acting on a message.
    codes_handle* h = NULL;
@@ -1524,7 +1533,7 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
    if ((f = fopen (fileName, "rb")) == NULL) {
       free (tGribData [iFlow]); 
       tGribData [iFlow] = NULL;
-      fprintf (stderr, "Error in readGribAll: Unable to open file %s\n", fileName);
+      fprintf (stderr, "In readGribAll, Error Unable to open file %s\n", fileName);
       return false;
    }
    zone->nMessage = 0;
@@ -1941,7 +1950,7 @@ static void forbidZoneAdd (char *line, int n) {
 
    Point *temp = (Point *) realloc (forbidZones [n].points, MAX_SIZE_FORBID_ZONE * sizeof(Point));
    if (temp == NULL) {
-      fprintf (stderr, "Error in forbidZoneAdd: realloc with n = %d\n", n);
+      fprintf (stderr, "In forbidZoneAdd, Error realloc with n = %d\n", n);
       return;
    }
    forbidZones [n].points = temp;
@@ -1995,7 +2004,7 @@ bool readParam (const char *fileName) {
    competitors.runIndex = -1;
    
    if ((f = fopen (fileName, "r")) == NULL) {
-      fprintf (stderr, "Error in readParam: Cannot open: %s\n", fileName);
+      fprintf (stderr, "In readParam, Error Cannot open: %s\n", fileName);
       return false;
    }
 
@@ -2028,7 +2037,7 @@ bool readParam (const char *fileName) {
       }
       else if (strstr (pLine, "WP:") != NULL) {
          if (wayPoints.n > MAX_N_WAY_POINT)
-            fprintf (stderr, "Error in readParam: number of wayPoints exceeded; %d\n", MAX_N_WAY_POINT);
+            fprintf (stderr, "In readParam, Error: number of wayPoints exceeded; %d\n", MAX_N_WAY_POINT);
          else {
             if (analyseCoord (strchr (pLine, ':') + 1, &wayPoints.t [wayPoints.n].lat, &wayPoints.t [wayPoints.n].lon))
                wayPoints.n += 1;
@@ -2036,7 +2045,7 @@ bool readParam (const char *fileName) {
       }
       else if (strstr (pLine, "COMPETITOR:") != NULL) {
          if (competitors.n > MAX_N_COMPETITORS)
-            fprintf (stderr, "Error in readParam: number of competitors exceeded; %d\n", MAX_N_COMPETITORS);
+            fprintf (stderr, "In readParam, Error number of competitors exceeded; %d\n", MAX_N_COMPETITORS);
          else {
             competitors.t [competitors.n].name [0] = '\0';
             if (((pt = strrchr (pLine, ';')) != NULL) && (sscanf (pt + 1, "%64s", competitors.t [competitors.n].name) > 0)) {
@@ -2089,7 +2098,7 @@ bool readParam (const char *fileName) {
          buildRootName (str, par.shpFileName [par.nShpFiles], sizeof (par.shpFileName [0]));
          par.nShpFiles += 1;
          if (par.nShpFiles >= MAX_N_SHP_FILES) 
-            fprintf (stderr, "Error in readParam: Number max of SHP files reached: %d\n", par.nShpFiles);
+            fprintf (stderr, "In readParam, Error Number max of SHP files reached: %d\n", par.nShpFiles);
       }
       else if (sscanf (pLine, "MOST_RECENT_GRIB:%d", &par.mostRecentGrib) > 0);
       else if (sscanf (pLine, "START_TIME:%lf", &par.startTimeInHours) > 0);
@@ -2157,7 +2166,7 @@ bool readParam (const char *fileName) {
               (sscanf (pLine, "NMEA:%255s %d", par.nmea [par.nNmea].portName, &par.nmea [par.nNmea].speed) > 0)) {
          par.nNmea += 1;
       }
-      else fprintf (stderr, "Error in readParam: Cannot interpret: %s\n", pLine);
+      else fprintf (stderr, "In readParam, Error Cannot interpret: %s\n", pLine);
    }
    if (par.mailPw [0] != '\0') {
       par.storeMailPw = true;
@@ -2179,7 +2188,7 @@ bool writeParam (const char *fileName, bool header, bool password) {
    char strLon [MAX_SIZE_NAME] = "";
    FILE *f = NULL;
    if ((f = fopen (fileName, "w")) == NULL) {
-      fprintf (stderr, "Error in writeParam: Cannot write: %s\n", fileName);
+      fprintf (stderr, "In writeParam, Error Cannot write: %s\n", fileName);
       return false;
    }
    if (header) 
@@ -2333,8 +2342,8 @@ int buildMeteoConsultUrl (int type, int i, int delay, char *url, size_t maxLen) 
 }
 
 /*! URL for NOAA Wind or ECMWF delay hours before now at closest time run 0Z, 6Z, 12Z, or 18Z 
-   return time run */
-int buildGribUrl (int typeWeb, int topLat, int leftLon, int bottomLat, int rightLon, int step, char *url, size_t maxLen) {
+   return time run or -1 if error*/
+int buildGribUrl (int typeWeb, int topLat, int leftLon, int bottomLat, int rightLon, int step, int step2, char *url, size_t maxLen) {
    char fileName [MAX_SIZE_FILE_NAME];
    time_t meteoTime = time (NULL) - (3600 * ((typeWeb == NOAA_WIND) ? NOAA_DELAY: ECMWF_DELAY));
    struct tm * timeInfos = gmtime (&meteoTime);  // time x hours ago
@@ -2344,11 +2353,12 @@ int buildGribUrl (int typeWeb, int topLat, int leftLon, int bottomLat, int right
    int dd = timeInfos->tm_mday;
    int hh;
    char startUrl [MAX_SIZE_LINE];
-   const int resolution = (par.gribResolution == 0.25) ? 25 : 50; // 25 mean 0.25 degree, 50 for 0.5 degree
+   const int resolution = (par.gribResolution == 0.25 || typeWeb == ARPEGE_WIND) ? 25 : 50; // 25 mean 0.25 degree, 50 for 0.5 degree
 
    int rightLonNew = ((leftLon > 0) && (rightLon < 0)) ? rightLon + 360 : rightLon;
 
-   if (typeWeb == NOAA_WIND) {
+   switch (typeWeb) {
+   case NOAA_WIND:
       hh = (timeInfos->tm_hour / 6) * 6;    // select 0 or 6 or 12 or 18
       snprintf (startUrl, sizeof (startUrl), "%sfilter_gfs_0p%d.pl?", NOAA_ROOT_GRIB_URL, resolution);
 
@@ -2360,13 +2370,23 @@ int buildGribUrl (int typeWeb, int topLat, int leftLon, int bottomLat, int right
       snprintf (url, maxLen, "%sdir=/gfs.%4d%02d%02d/%02d/atmos&file=%s&%s&subregion=&toplat=%d&leftlon=%d&rightlon=%d&bottomlat=%d", 
             startUrl, yy, mm, dd, hh, fileName, NOAA_GENERAL_PARAM_GRIB_URL, topLat, 
             leftLon, rightLonNew, bottomLat);
-   }
-   else { // ECMWF
+      break;
+   case ECMWF_WIND:
       hh = (timeInfos->tm_hour / 12) * 12;    // select 0 or 12
       // example of directory; https://data.ecmwf.int/forecasts/20240806/00z/ifs/0p25/oper/
       // example of filename : 20240806000000-102h-oper-fc.grib2
       snprintf (url, maxLen, "%s%4d%02d%02d/%02dz/ifs/0p25/oper/%4d%02d%02d%02d0000-%dh-oper-fc.grib2",\
           ECMWF_ROOT_GRIB_URL, yy, mm, dd, hh, yy, mm, dd, hh, step); 
+      break;
+   case ARPEGE_WIND:
+      hh = (timeInfos->tm_hour / 6) * 6;    // select 0 or 6 or 12 or 18
+      // "https://object.data.gouv.fr/meteofrance-pnt/pnt/2024-12-24T12:00:00Z/arpege/025/SP1/arpege__025__SP1__000H024H__2024-12-24T12:00:00Z.grib2"
+      snprintf (fileName, sizeof (fileName), "arpege__0%d__SP1__%03dH%03dH__%4d-%02d-%02dT%02d:00:00Z.grib2", resolution, step, step2, yy, mm, dd, hh);
+      snprintf (url, maxLen, "%s%4d-%02d-%02dT%02d:00:00Z/arpege/0%d/SP1/%s", ARPEGE_ROOT_GRIB_URL, yy, mm, dd, hh, resolution, fileName);
+      break;
+   default:
+      fprintf (stderr, "In buildGribUrl Error typeWeb not found: %d\n", typeWeb);
+      return -1;
    }
    return hh;
 }
@@ -2460,7 +2480,7 @@ bool addTraceGPS (const char *fileName) {
    if (my_gps_data.lon == 0 && my_gps_data.lat == 0)
       return false;
    if ((f = fopen (fileName, "a")) == NULL) {
-      fprintf (stderr, "Error in addTracePoint: cannot write: %s\n", fileName);
+      fprintf (stderr, "In addTraceGPS, Error cannot write: %s\n", fileName);
       return false;
    }
    fprintf (f, "%7.2lf; %7.2lf; %10ld; %15s; %4.0lf; %6.2lf\n", my_gps_data.lat, my_gps_data.lon, \
@@ -2476,7 +2496,7 @@ bool addTracePt (const char *fileName, double lat, double lon) {
    char str [MAX_SIZE_LINE];
    time_t t = time (NULL);
    if ((f = fopen (fileName, "a")) == NULL) {
-      fprintf (stderr, "Error in addTrace: cannot write: %s\n", fileName);
+      fprintf (stderr, "In addTracePt: cannot write: %s\n", fileName);
       return false;
    }
    fprintf (f, "%7.2lf; %7.2lf; %10ld; %15s;\n", lat, lon, (long int) t, epochToStr (t, true, str, sizeof (str)));
@@ -2490,7 +2510,7 @@ bool findLastTracePoint (const char *fileName, double *lat, double *lon, double 
    char line [MAX_SIZE_LINE];
    char lastLine [MAX_SIZE_LINE];
    if ((f = fopen (fileName, "r")) == NULL) {
-      fprintf (stderr, "Error in findLastTracePoint: cannot read: %s\n", fileName);
+      fprintf (stderr, "In findLastTracePoint, Error cannot read: %s\n", fileName);
       return false;
    }
    while (fgets (line, MAX_SIZE_LINE, f) != NULL ) {
@@ -2511,11 +2531,11 @@ bool distanceTraceDone (const char *fileName, double *od, double *ld, double *rd
    *od = 0.0, *ld = 0.0, *rd = 0.0;
    
    if ((f = fopen (fileName, "r")) == NULL) {
-      fprintf (stderr, "Error in distanceTraceDone: cannot read: %s\n", fileName);
+      fprintf (stderr, "In distanceTraceDone, Error cannot read: %s\n", fileName);
       return false;
    }
    if (fgets (line, MAX_SIZE_LINE, f) == NULL) { // head line contain libelles and is ignored
-      fprintf (stderr, "Error in distanceTraceDone: no header: %s\n", fileName);
+      fprintf (stderr, "In distanceTraceDone, Error no header: %s\n", fileName);
       fclose (f);
       return false;
    }
@@ -2550,7 +2570,7 @@ bool infoDigest (const char *fileName, double *od, double *ld, double *rd, doubl
    *rd = 0.0;
    
    if ((f = fopen (fileName, "r")) == NULL) {
-      fprintf (stderr, "Error in distanceTraceDone: cannot read: %s\n", fileName);
+      fprintf (stderr, "In infoDigest, Error cannot read: %s\n", fileName);
       return false;
    }
    while (fgets (line, MAX_SIZE_LINE, f) != NULL ) {
@@ -2594,7 +2614,7 @@ bool isServerAccessible (const char *url) {
         curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
         res = curl_easy_perform (curl);
         if (res != CURLE_OK) {
-            fprintf (stderr, "Error in isServerAccessible: Curl request: %s\n", curl_easy_strerror(res));
+            fprintf (stderr, "In isServerAccessible, Error Curl request: %s\n", curl_easy_strerror(res));
             curl_easy_cleanup (curl);
             return false; // server not accessible request error
         }
@@ -2611,7 +2631,7 @@ bool isServerAccessible (const char *url) {
             return false; 
         }
     } else {
-        fprintf (stderr, "Error in isServerAccessible: Init curl.\n");
+        fprintf (stderr, "In isServerAccessible, Error Init curl.\n");
         return false;
     }
 }
@@ -2695,11 +2715,11 @@ bool buildGribMail (int type, double lat1, double lon1, double lat2, double lon2
    lon2 = ceil (lonCanonize (lon2));
    
    if ((lon1 > 0) && (lon2 < 0)) { // zone crossing antimeridien
-      fprintf (stderr, "In buildGribMail: Tentative to cross antemeridian !\n");
+      printf ("In buildGribMail: Tentative to cross antemeridian !\n");
       // lon2 = 179.0;
    }
    if (setlocale (LC_ALL, "C") == NULL) {                // very important for printf decimal numbers
-      fprintf (stderr, "Error in main: setlocale failed");
+      fprintf (stderr, "In buildGribMail, Error: setlocale failed");
       return false;
    }
    

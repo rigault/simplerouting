@@ -120,7 +120,7 @@ typedef struct {
    GtkWidget     *dropDownMail;
    GtkWidget     *warning;
    GtkWidget     *sizeEval; 
-   int typeWeb;  // NOAA_WIND or ECMWF_WIND or MAIL 
+   int typeWeb;  // NOAA_WIND or ECMWF_WIND or ARPEGE_WIND or MAIL 
    int hhZ;      // Grib time run; 007, 06Z, ...
    int mailService;
    int latMax;
@@ -284,7 +284,7 @@ static void popoverFinish (GtkWidget *pop) {
 /*! destroy spînner window */
 static void stopSpinner () {
    printf ("stopSpinner\n");
-   route.ret = -2;                           // for route calculation stop
+   //route.ret = ROUTING_STOPPED;              // for route calculation stop BUG
    chooseDeparture.ret = STOPPED;            // to force stop of choose departure
    competitors.ret = STOPPED;                // to force stop when all competitors run
    gloStatusMailRequest = GRIB_STOPPED;      // for mailGribCheck force stop
@@ -313,8 +313,8 @@ static void spinner (const char *title, const char* str) {
    gtk_window_set_default_size(GTK_WINDOW(spinnerWindow), 300, 100);
    gtk_window_set_transient_for(GTK_WINDOW(spinnerWindow), GTK_WINDOW(window)); // Ensure it's above parent window
    gtk_window_set_modal(GTK_WINDOW(spinnerWindow), TRUE); // Modal is a good idea to prevent interaction with the parent window
-   g_signal_connect(spinnerWindow, "destroy", G_CALLBACK(stopSpinner), NULL);
-   g_signal_connect(window, "destroy", G_CALLBACK(onParentDestroy), spinnerWindow);
+   g_signal_connect (spinnerWindow, "destroy", G_CALLBACK (stopSpinner), NULL);
+   g_signal_connect (window, "destroy", G_CALLBACK (onParentDestroy), spinnerWindow);
 
    GtkWidget *vBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
    gtk_window_set_child(GTK_WINDOW(spinnerWindow), vBox);
@@ -476,7 +476,7 @@ static void windy (GSimpleAction *action, GVariant *parameter, gpointer *data) {
    const int zoom = 8; // CLAMP (9 - log2 (diffLat), 2, 19);
    char *command = NULL;
    if ((command = malloc (MAX_SIZE_LINE)) == NULL) {
-      fprintf(stderr, "Error in Windy Malloc: %d\n", MAX_SIZE_LINE);
+      fprintf (stderr, "In Windy Malloc: %d\n", MAX_SIZE_LINE);
       return;
    }   
    snprintf (command, MAX_SIZE_LINE, "%s %s?%.2lf%%2C%.2lf%%2C%d%%2Cd:picker", \
@@ -490,7 +490,7 @@ static void shomResponse (GtkWidget *widget, gpointer entryWindow) {
    const char *SHOM_URL = "https://maree.shom.fr/harbor/";
    char *command = NULL;
    if ((command = malloc (MAX_SIZE_LINE)) == NULL) {
-      fprintf(stderr, "Error in Shom Malloc: %d\n", MAX_SIZE_LINE);
+      fprintf (stderr, "In Shom Malloc: %d\n", MAX_SIZE_LINE);
       return;
    }
 
@@ -530,7 +530,7 @@ static void openMap (GSimpleAction *action, GVariant *parameter, gpointer *data)
    //printf ("diffLat : %.2lf zoom:%.2lf\n", diffLat, zoom);
    char *command = NULL;
    if ((command = malloc (MAX_SIZE_LINE)) == NULL) {
-      fprintf(stderr, "Error in openMap Malloc: %d\n", MAX_SIZE_LINE);
+      fprintf (stderr, "In openMap Malloc: %d\n", MAX_SIZE_LINE);
       return;
    }   
    if (comportement == 0)
@@ -654,12 +654,12 @@ void onPasteButtonClicked (GtkButton *button, gpointer user_data) {
 static void displayText (guint width, guint height, const char *text, size_t maxLen, const char *title) {
    char *ptSecondLine = extractFirstLine (text, strFirstLine);
    if (ptSecondLine == NULL) {
-      fprintf (stderr, "Error in displayText: no first line\n");
+      fprintf (stderr, "In displayText: no first line\n");
       return;
    }
    char *tempBuffer = realloc (gloBuffer, maxLen);
    if (tempBuffer == NULL) {
-      fprintf (stderr, "Error in displayText: realloc: %d\n", MAX_SIZE_BUFFER);
+      fprintf (stderr, "In displayText: realloc: %d\n", MAX_SIZE_BUFFER);
       return;
    }
    else gloBuffer = tempBuffer;
@@ -733,7 +733,7 @@ static void displayFile (const char *fileName, const char *title) {
       g_free (content);
    }
    else {
-      fprintf (stderr, "Error in displayFile reading: %s, %s\n", fileName, error->message); 
+      fprintf (stderr, "In displayFile reading: %s, %s\n", fileName, error->message); 
       g_clear_error(&error);
    }
 }
@@ -1365,7 +1365,7 @@ static gboolean drawAllIsochrones (cairo_t *cr, int style) {
    if (style == JUST_POINT) return drawAllIsochrones0 (cr);
 
    if ((newIsoc = malloc (MAX_SIZE_ISOC * sizeof(Pp))) == NULL) {
-      fprintf (stderr, "in drawAllIsocgrones: error in memory newIsoc allocation\n");
+      fprintf (stderr, "In drawAllIsocgrones: error in memory newIsoc allocation\n");
       return -1;
    }
    
@@ -1724,7 +1724,7 @@ static gboolean drawShpMap (cairo_t *cr) {
          break;
       case SHPT_NULL: // empty
          break;
-      default: fprintf (stderr, "Error in drawShpMap: SHPtype unknown: %d\n", entities [i].nSHPType); 
+      default: fprintf (stderr, "In drawShpMap: SHPtype unknown: %d\n", entities [i].nSHPType); 
       }
    }
    return FALSE;
@@ -1969,7 +1969,7 @@ static void drawInfo (cairo_t *cr) {
    if (infoDigest (fileName, &od, &ld, &rd, &sog)) {
       snprintf (str, MAX_SIZE_LINE, "Miles from Origin...: %8.2lf, Real Dist.......: %.2lf", od, rd);
    }
-   else fprintf (stderr, "Error in distance trace calculation");
+   else fprintf (stderr, "In drawInfo, In distance trace calculation");
    cairo_move_to (cr, INFO_X, INFO_Y);
    cairo_show_text (cr, str);
    
@@ -2439,13 +2439,13 @@ void* editPolarRun (void *data) {
    snprintf (line, sizeof (line), "%s %s \n", par.spreadsheet, fileName);
    printf ("editPolarRun: %s\n", line);
    if ((fs = popen (line, "r")) == NULL)
-      fprintf (stderr, "Error in editPolarRun: popen call: %s\n", line);
+      fprintf (stderr, "In editPolarRun: popen call: %s\n", line);
    else {
       pclose (fs);
       if (readPolar (fileName, (polarType == WAVE_POLAR) ? &wavePolMat : &polMat, errMessage, sizeof (errMessage)))
          gtk_widget_queue_draw (polarDrawingArea);
       else {
-         fprintf (stderr, "Error loading polar: %s : %s\n", fileName, errMessage);
+         fprintf (stderr, "In editPolarRun, Error loading polar: %s : %s\n", fileName, errMessage);
          infoMessage (errMessage, GTK_MESSAGE_ERROR);
          statusErrorMessage (statusbar, errMessage);
       }
@@ -2528,7 +2528,7 @@ static void polarDraw () {
    // GtkScale widget creation
    int maxScale = ptMat->t[0][ptMat->nCol-1];      // max value of wind or waves
    if (maxScale < 1) {
-      fprintf (stderr, "Strange maxScale: %d\n", maxScale);
+      fprintf (stderr, "In polarDrow, Strange maxScale: %d\n", maxScale);
    }
    GtkWidget *scale = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL, 0, MAX (1, maxScale), 1);
    gtk_scale_set_value_pos(GTK_SCALE(scale), GTK_POS_TOP);
@@ -2608,7 +2608,7 @@ static gboolean allCompetitorsCheck (gpointer data) {
          //snprintf (str, MAX_SIZE_LINE, "See result in competitor dashboard");
       break;
    default: 
-      snprintf (str, MAX_SIZE_LINE, "Error in allCompetitorsCheck: Unknown compretitors.ret: %d\n", competitors.ret);
+      snprintf (str, MAX_SIZE_LINE, "In allCompetitorsCheck: Unknown compretitors.ret: %d\n", competitors.ret);
       break;
    }
    g_source_remove (routingTimeout); // timer stopped
@@ -2632,11 +2632,11 @@ static void onOkButtonCalClicked (GtkWidget *widget, gpointer window) {
       return;
    }
    
-   if (! isInZone (par.pOr.lat, par.pOr.lon, &zone) && (par.constWindTws == 0)) {   // ATT
+   if (! isInZone (par.pOr.lat, par.pOr.lon, &zone) && (par.constWindTws == 0)) { 
       infoMessage ("Origin point not in wind zone", GTK_MESSAGE_WARNING);
       return;
    }
-   if (! isInZone (par.pDest.lat, par.pDest.lon, &zone) && (par.constWindTws == 0)) {  // ATT
+   if (! isInZone (par.pDest.lat, par.pDest.lon, &zone) && (par.constWindTws == 0)) {
       infoMessage ("Destination point not in wind zone", GTK_MESSAGE_WARNING);
       return;
    }
@@ -2649,7 +2649,6 @@ static void onOkButtonCalClicked (GtkWidget *widget, gpointer window) {
       routingTimeout = g_timeout_add (ROUTING_TIME_OUT, allCompetitorsCheck, NULL);
    }
    else {
-      route.ret = 0;             // mean routing not terminated
       spinner ("Isochrone building", " ");
       gloThread = g_thread_new ("routingLaunch", routingLaunch, NULL); // launch routing gloThread is global
       routingTimeout = g_timeout_add (ROUTING_TIME_OUT, routingCheck, NULL);
@@ -3027,11 +3026,11 @@ static gboolean routingCheck (gpointer data) {
    char str [MAX_SIZE_LINE] = "";
    gtk_widget_queue_draw (drawing_area); // affiche le tout
    switch (route.ret) {
-   case 0: // not terminated
+   case ROUTING_RUNNING: // not terminated
       return TRUE;
-   case -2: // stopped by user
+   case ROUTING_STOPPED: // stopped by user
       break;
-   case -1: // error
+   case ROUTING_ERROR: // error
       snprintf (str, MAX_SIZE_LINE, "Check logs");
       break;
    default: // route ret contains number of steps to reach pDest or NIL if unreached
@@ -3107,7 +3106,7 @@ static gboolean bestDepartureCheck (gpointer data) {
       gtk_widget_queue_draw (drawing_area);
       break;
    default: 
-      snprintf (str, MAX_SIZE_LINE, "Error in bestDepartureCheck: Unknown chooseDeparture.ret: %d\n", chooseDeparture.ret);
+      snprintf (str, MAX_SIZE_LINE, "In bestDepartureCheck: Unknown chooseDeparture.ret: %d\n", chooseDeparture.ret);
       break;
    }
    g_source_remove (routingTimeout); // timer stopped
@@ -3307,8 +3306,8 @@ static void onNowButtonClicked (GtkWidget *widget, gpointer data) {
    //theTime += zone.timeStamp [1]-zone.timeStamp [0];
    theTime = diffTimeBetweenNowAndGribOrigin (zone.dataDate [0], zone.dataTime [0]/100);
    if (theTime < 0) {
-      infoMessage ("Error in time calculation", GTK_MESSAGE_ERROR);
-      statusErrorMessage (statusbar, "Error in time calculation");
+      infoMessage ("In time calculation", GTK_MESSAGE_ERROR);
+      statusErrorMessage (statusbar, "In time calculation");
       return;
    }
    if (theTime > zone.timeStamp [zone.nTimeStamp - 1])
@@ -3392,7 +3391,7 @@ static void newTrace () {
 static void editTrace () {
    char *command = NULL;
    if ((command = malloc (MAX_SIZE_LINE)) == NULL) {
-      fprintf(stderr, "Error in Windy Malloc: %d\n", MAX_SIZE_LINE);
+      fprintf (stderr, "In ediTrace, Error Malloc: %d\n", MAX_SIZE_LINE);
       return;
    }   
    snprintf (command, MAX_SIZE_LINE, "%s %s\n", par.editor, par.traceFileName);
@@ -3433,7 +3432,7 @@ static void traceReport () {
 
    buildRootName (par.traceFileName, fileName, sizeof (fileName));
    if (! distanceTraceDone (fileName, &od, &ld, &rd, &sog)) {
-      infoMessage ("Error in distance trace calculation", GTK_MESSAGE_ERROR);
+      infoMessage ("In distance trace calculation", GTK_MESSAGE_ERROR);
       return;
    }
    lineReport (grid, 0, "media-floppy-symbolic", "Name", fileName);
@@ -3493,7 +3492,7 @@ static void poiDump () {
    char *buffer = NULL;
 
    if ((buffer = (char *) malloc (MAX_SIZE_BUFFER)) == NULL) {
-      fprintf (stderr, "Error in poiDump ; Malloc %d\n", MAX_SIZE_BUFFER); 
+      fprintf (stderr, "In poiDump, Error Malloc %d\n", MAX_SIZE_BUFFER); 
       infoMessage ("Memory allocation issue", GTK_MESSAGE_ERROR);
       return;
    }
@@ -3510,7 +3509,7 @@ static void polygonDump () {
       return;
    }
    if ((buffer = (char *) malloc (MAX_SIZE_BUFFER)) == NULL) {
-      fprintf (stderr, "Error in polygonDump ; Malloc %d\n", MAX_SIZE_BUFFER); 
+      fprintf (stderr, "In polygonDump, Error Malloc %d\n", MAX_SIZE_BUFFER); 
       infoMessage ("Memory allocation issue", GTK_MESSAGE_ERROR);
       return;
    }
@@ -3529,7 +3528,7 @@ static void competitorsDump() {
       return;
    }
    if ((buffer = (char *) malloc (MAX_SIZE_BUFFER)) == NULL) {
-      fprintf (stderr, "Error in competitorDump: Malloc %d\n", MAX_SIZE_BUFFER); 
+      fprintf (stderr, "In competitorDump: Malloc %d\n", MAX_SIZE_BUFFER); 
       infoMessage ("Memory allocation issue", GTK_MESSAGE_ERROR);
       return;
    }
@@ -3549,7 +3548,7 @@ static void historyRteDump (gpointer user_data) {
       return;
    }
    if ((buffer = (char *) malloc (MAX_SIZE_BUFFER)) == NULL) {
-      fprintf (stderr, "Error in historyRteDump: Malloc %d\n", MAX_SIZE_BUFFER); 
+      fprintf (stderr, "In historyRteDump: Malloc %d\n", MAX_SIZE_BUFFER); 
       infoMessage ("Memory allocation issue", GTK_MESSAGE_ERROR);
       return;
    }
@@ -3607,7 +3606,7 @@ static void cbSimulationReport (GtkDrawingArea *area, cairo_t *cr,
    cairo_set_line_width (cr, 1);
 
    if ((chooseDeparture.tStop - chooseDeparture.tBegin == 0) || ((int) chooseDeparture.maxDuration == 0)) {
-      fprintf (stderr, "in cbSimukationReport: unapropriate values for chooseDeparture\n");
+      fprintf (stderr, "In cbSimukationReport: unapropriate values for chooseDeparture\n");
       return;
    }
    
@@ -3725,7 +3724,7 @@ static void onRoutegramEvent (GtkDrawingArea *area, cairo_t *cr, \
    const int DAY_LG = 10;
 
    if ((route.duration + par.tStep) == 0) {
-      fprintf (stderr, "in onRouteGramEvent: unapropriate values for route.duration. par.tStep\n");
+      fprintf (stderr, "In onRouteGramEvent: unapropriate values for route.duration. par.tStep\n");
       return;
    }
    
@@ -3818,7 +3817,7 @@ static void onRoutegramEvent (GtkDrawingArea *area, cairo_t *cr, \
    const double step = 5;
    double maxMax = MAX (MS_TO_KN * route.maxGust, route.maxTws);
    if (maxMax <= 0) {
-      fprintf (stderr, "in onRoutegramEvent: maxMax should be strictly positive\n");
+      fprintf (stderr, "In onRoutegramEvent: maxMax should be strictly positive\n");
       return;
    }
    const int YK = (Y_BOTTOM - Y_TOP) / maxMax;
@@ -3947,7 +3946,7 @@ static void routeDump () {
       return;
    }
    if ((buffer = (char *) malloc (MAX_SIZE_BUFFER)) == NULL) {
-      fprintf (stderr, "Error in routeDump ; Malloc %d\n", MAX_SIZE_BUFFER); 
+      fprintf (stderr, "In routeDump, Error Malloc %d\n", MAX_SIZE_BUFFER); 
       infoMessage ("Memory allocation issue", GTK_MESSAGE_ERROR);
       return;
    }
@@ -3972,7 +3971,7 @@ void *poiEditRun (void *data) {
    char line [MAX_SIZE_LINE] = "";
    snprintf (line, sizeof (line), "%s %s\n", par.spreadsheet, (comportement == POI_SEL) ? par.poiFileName: par.portFileName);
    if ((fs = popen (line, "r")) == NULL) {
-      fprintf (stderr, "Error in poiEditRun: system call: %s\n", line);
+      fprintf (stderr, "In poiEditRun: system call: %s\n", line);
    }
    else {
       pclose (fs);
@@ -4301,7 +4300,7 @@ static void nmeaInit (GtkWidget *widget, gpointer theWindow) {
    char *command = NULL;
    char str [MAX_SIZE_LINE];
    if ((command = malloc (MAX_SIZE_LINE * par.nNmea)) == NULL) {
-      fprintf (stderr, "Error in help Malloc: %d\n", MAX_SIZE_LINE);
+      fprintf (stderr, "In nmeaInit, Error Malloc: %d\n", MAX_SIZE_LINE);
       return;
    }
    command [0] = '\0';
@@ -4373,7 +4372,7 @@ static void aisDump () {
    }
    char *buffer = NULL;
    if ((buffer = (char *) malloc (MAX_SIZE_BUFFER)) == NULL) {
-      fprintf (stderr, "Error in aisDump: Malloc %d\n", MAX_SIZE_BUFFER); 
+      fprintf (stderr, "In aisDump: Malloc %d\n", MAX_SIZE_BUFFER); 
       infoMessage ("Memory allocation issue", GTK_MESSAGE_ERROR);
       return;
    }
@@ -4443,7 +4442,7 @@ static void helpParam () {
 static void help () {
    char *command = NULL;
    if ((command = malloc (MAX_SIZE_LINE)) == NULL) {
-      fprintf(stderr, "Error in help Malloc: %d\n", MAX_SIZE_LINE);
+      fprintf (stderr, "In help, Error Malloc: %d\n", MAX_SIZE_LINE);
       return;
    }   
    snprintf (command, MAX_SIZE_LINE, "%s %s", par.webkit, par.helpFileName);
@@ -4460,7 +4459,6 @@ static void helpInfo () {
       ECCODES version from ECMWF: %s\n Curl version: %s\n Shapefil version: %s\n Compilation date: %s\n", 
       PROG_VERSION,
       gtk_get_major_version(), gtk_get_minor_version(), gtk_get_micro_version(),
-      // webkit_get_major_version (), webkit_get_minor_version (),webkit_get_micro_version (), // ATT GTK4 CHANGE
       GLIB_MAJOR_VERSION, GLIB_MINOR_VERSION, GLIB_MICRO_VERSION,
       CAIRO_VERSION_STRING, 
       ECCODES_VERSION_STR, LIBCURL_VERSION, "1.56", 
@@ -4473,10 +4471,10 @@ static void helpInfo () {
    gtk_about_dialog_set_website (GTK_ABOUT_DIALOG (p_about_dialog), PROG_WEB_SITE);
    GdkPixbuf *p_logo = gdk_pixbuf_new_from_file (buildRootName (PROG_LOGO, str, sizeof (str)), NULL);
    GdkTexture *texture_logo = gdk_texture_new_for_pixbuf (p_logo);
-   gtk_about_dialog_set_logo (GTK_ABOUT_DIALOG (p_about_dialog), (GdkPaintable *) texture_logo); // ATT GTK4 CHANGE
+   gtk_about_dialog_set_logo (GTK_ABOUT_DIALOG (p_about_dialog), (GdkPaintable *) texture_logo);
    gtk_about_dialog_set_comments(GTK_ABOUT_DIALOG (p_about_dialog), DESCRIPTION);
-   gtk_window_set_modal (GTK_WINDOW(p_about_dialog), true); // ATT GTK4 CHANGE
-   gtk_window_present (GTK_WINDOW (p_about_dialog)); // ATT GTK4 CHANGE
+   gtk_window_set_modal (GTK_WINDOW(p_about_dialog), true);
+   gtk_window_present (GTK_WINDOW (p_about_dialog));
 }
 
 /*! check if readGrib is terminated (wind) */
@@ -4489,7 +4487,7 @@ static gboolean readGribCheck (gpointer data) {
       return TRUE;
    case GRIB_ERROR: // error
       initScenario ();
-      snprintf (str, MAX_SIZE_LINE, "Error in readGribCheck (wind)");
+      snprintf (str, MAX_SIZE_LINE, "In readGribCheck (wind)");
       break;
    case GRIB_STOPPED: case GRIB_OK: case GRIB_UNCOMPLETE: // -2 stopped, 1 normal, 2 uncomplete
       theTime = 0.0;
@@ -4523,7 +4521,7 @@ static gboolean readCurrentGribCheck (gpointer data) {
       updateSpinnerMessage (spinnerUpdateData.message, spinnerUpdateData.fraction);
       return TRUE;
    case GRIB_ERROR:
-      snprintf (str, MAX_SIZE_LINE, "Error in readCurrentGribCheck (current)");
+      snprintf (str, MAX_SIZE_LINE, "In readCurrentGribCheck (current)");
       break;
    case GRIB_STOPPED: case GRIB_OK: case GRIB_UNCOMPLETE: // either -2 stopped, 1 normal
       break;
@@ -4594,7 +4592,7 @@ void *getMeteoConsult (void *data) {
 /*! Download all NOOA or ECMWF files, concat them in a bigFile and load it */
 static void *getGribWebAll (void *user_data) {
    const int SLEEP_BETWEEN_DOWNLOAD = 100000; //100 ms
-   const char *providerID [2] = {"NOAA", "ECMWF"};
+   const char *providerID [3] = {"NOAA", "ECMWF", "ARPEGE"};
    char directory [MAX_SIZE_DIR_NAME];
    GribRequestData *data = (GribRequestData *)user_data;
    time_t now = time (NULL);
@@ -4605,37 +4603,64 @@ static void *getGribWebAll (void *user_data) {
    char strObject [MAX_SIZE_TEXT];
    int timeMax = data->timeMax * 24;
    int lastTimeStep = timeMax;   
-   int i;
+   int i = 0;
+   const int MAX_I_ARPEGE = 4;
+   const int arpegeStepMin [] = {0, 25, 49, 73};
+   const int arpegeStepMax [] = {24, 48, 72, 102};
+   const int maxI = MIN (MAX_I_ARPEGE, data->timeMax); // 4 days max. In fact 102 hours....
 
    strftime (strDate, MAX_SIZE_DATE, "%Y-%m-%d", pTime); 
    snprintf (directory, sizeof (directory), "%sgrib/", par.workingDir);
    snprintf (prefix, sizeof (prefix), "%sgrib/inter-", par.workingDir);
-   
    removeAllTmpFilesWithPrefix (prefix); // we suppress the temp files in order to get clean
-   
-   for (i = 0; i <= timeMax; i += (data->timeStep)) {
-      if (readGribRet == GRIB_STOPPED) return NULL; // stopped by user
-      data->hhZ = buildGribUrl (data->typeWeb, data->latMax, data->lonLeft, data->latMin, data->lonRight, i, data->url, sizeof (data->url));
-      // printf ("URL is: %s\n", data->url);
-      snprintf (fileName, sizeof (fileName), "%s%03d.tmp", prefix, i);
 
-      strCpyMaxWidth (data->url, MAX_WIDTH_INFO, strObject, sizeof (strObject));
- 
-      snprintf (spinnerUpdateData.message, sizeof (spinnerUpdateData.message), 
-         "Time Step: %d/%d\nTime  Run: %02dZ\n%s", i, timeMax, data->hhZ, strObject);
-      spinnerUpdateData.fraction = (double) i / (double) (timeMax * 1.1);
-      
-      if (! curlGet (data->url, fileName, errMessage, sizeof (errMessage))) {
-         fprintf (stderr, "In getGribWebAll: Grib could be uncomplete: %s\n", errMessage); 
-         statusErrorMessage (statusbar, g_strstrip (errMessage));
-         lastTimeStep = i - data->timeStep;
-         break;
-      }
-      g_usleep (SLEEP_BETWEEN_DOWNLOAD) ;
+   if (data->typeWeb == ARPEGE_WIND) {
+      for (i = 0; i < maxI; i+=1) {
+         data->hhZ = buildGribUrl (data->typeWeb, data->latMax, data->lonLeft, data->latMin, data->lonRight, 
+            arpegeStepMin [i], arpegeStepMax [i], data->url, sizeof (data->url));
 
-      if (data->typeWeb == ECMWF_WIND)
+         snprintf (fileName, sizeof (fileName), "%s%03d.tmp", prefix, i);
+         strCpyMaxWidth (data->url, MAX_WIDTH_INFO, strObject, sizeof (strObject));
+         snprintf (spinnerUpdateData.message, sizeof (spinnerUpdateData.message), 
+            "Time Max: %d\nTime  Run: %02dZ\n%s", timeMax, data->hhZ, strObject);
+         spinnerUpdateData.fraction =  (double) i / (double) (maxI * 1.1);
+
+         if (! curlGet (data->url, fileName, errMessage, sizeof (errMessage))) {
+            statusErrorMessage (statusbar, g_strstrip (errMessage));
+            fprintf (stderr, "In getGribWebAll, Error: No file downloaded, %s\n", errMessage);
+            readGribRet = 0;
+            return NULL;
+         }
+         g_usleep (SLEEP_BETWEEN_DOWNLOAD) ;
          compact (true, directory, fileName,\
-        "10u/10v/gust/msl/prmsl/prate", data->lonLeft, data->lonRight, data->latMin, data->latMax, fileName);
+            "10u/10v/prmsl", data->lonLeft, data->lonRight, data->latMin, data->latMax, fileName);
+      }
+      lastTimeStep = arpegeStepMax [maxI - 1];
+      data->timeStep = 3;
+   }
+   else {
+      for (i = 0; i <= timeMax; i += (data->timeStep)) {
+         if (readGribRet == GRIB_STOPPED) return NULL; // stopped by user
+         data->hhZ = buildGribUrl (data->typeWeb, data->latMax, data->lonLeft, data->latMin, data->lonRight, i, -1, data->url, sizeof (data->url));
+         // printf ("URL is: %s\n", data->url);
+         snprintf (fileName, sizeof (fileName), "%s%03d.tmp", prefix, i);
+         strCpyMaxWidth (data->url, MAX_WIDTH_INFO, strObject, sizeof (strObject));
+         snprintf (spinnerUpdateData.message, sizeof (spinnerUpdateData.message), 
+         "Time Step: %d/%d\nTime  Run: %02dZ\n%s", i, timeMax, data->hhZ, strObject);
+         spinnerUpdateData.fraction = (double) i / (double) (timeMax * 1.1);
+      
+         if (! curlGet (data->url, fileName, errMessage, sizeof (errMessage))) {
+            fprintf (stderr, "In getGribWebAll: Grib could be uncomplete: %s\n", errMessage); 
+            statusErrorMessage (statusbar, g_strstrip (errMessage));
+            lastTimeStep = i - data->timeStep;
+            break;
+         }
+         g_usleep (SLEEP_BETWEEN_DOWNLOAD) ;
+
+         if (data->typeWeb == ECMWF_WIND)
+            compact (true, directory, fileName,\
+            "10u/10v/gust/msl/prmsl/prate", data->lonLeft, data->lonRight, data->latMin, data->latMax, fileName);
+      }
    }
    g_usleep (SLEEP_BETWEEN_DOWNLOAD);
 
@@ -4643,19 +4668,21 @@ static void *getGribWebAll (void *user_data) {
    spinnerUpdateData.fraction = 0.95;
    
    if (lastTimeStep <= 0) {
-      fprintf (stderr, "No file downloaded\n");
+      fprintf (stderr, "In getGribWebAll, Error: No file downloaded\n");
       readGribRet = 0;
       return NULL;
    }
    
    snprintf (bigFile, sizeof (bigFile), \
-      "%sgrib/%s-%s-%02dZ-%02d-%03d.grb", par.workingDir, providerID [data->typeWeb],strDate, data->hhZ, data->timeStep, lastTimeStep);
+      "%sgrib/%s-%s-%02dZ-%02d-%03d.grb", par.workingDir, providerID [data->typeWeb], strDate, data->hhZ, data->timeStep, lastTimeStep);
 
-   if (concat (prefix, ".tmp", data->timeStep, lastTimeStep, bigFile)) {
+
+   int concatStep = (data->typeWeb == ARPEGE_WIND) ? 1 : data->timeStep;
+   int concatLast = (data->typeWeb == ARPEGE_WIND) ? maxI - 1 : lastTimeStep;
+   if (concat (prefix, ".tmp", concatStep, concatLast, bigFile)) {
       printf ("bigFile: %s\n", bigFile);
       g_strlcpy (par.gribFileName, bigFile, MAX_SIZE_FILE_NAME);
       readGribRet = readGribAll (par.gribFileName, &zone, WIND);
-      printf ("readGribAll done, readGribRet: %d\n", readGribRet);
       if (readGribRet && (lastTimeStep < timeMax))
          readGribRet = GRIB_UNCOMPLETE;
    }
@@ -4684,7 +4711,7 @@ static void onOkButtonGribRequestClicked (GtkWidget *widget, gpointer theWindow)
 /*! return warning message based on timeStep and resolution */
 static char *warningMessage (int service, int mailService, char *warning, size_t maxLen) {
    switch (service) {
-   case  NOAA_WIND: case ECMWF_WIND:
+   case  NOAA_WIND: case ECMWF_WIND: case ARPEGE_WIND:
       snprintf (warning, maxLen, "%s", serviceTab [service].warning);
       break;
    case MAIL:
@@ -4703,6 +4730,8 @@ static int maxTimeRange (int service, int mailService) {
       return (par.gribTimeStep == 1) ? 24 : (par.gribTimeStep < 6) ? 192 : 384;
    case ECMWF_WIND:
       return (par.gribTimeStep < 6) ? 144 : 240;
+   case ARPEGE_WIND:
+      return 102;
    case MAIL:
       switch (mailService) {
       case SAILDOCS_GFS:
@@ -4722,11 +4751,11 @@ static int maxTimeRange (int service, int mailService) {
       case NOT_MAIL:
          return 0;
       default:
-         fprintf (stderr, "Error in maxTimeRange: provider not supported: %d\n", mailService);
+         fprintf (stderr, "In maxTimeRange: provider not supported: %d\n", mailService);
          return 120;
      }
    default:
-      fprintf (stderr, "Error in maxTimeRange: service not supported: %d\n", service);
+      fprintf (stderr, "In maxTimeRange: service not supported: %d\n", service);
       return 120;
    }
 }
@@ -4740,7 +4769,7 @@ static int howManyShortnames (int service, int mailService) {
    of grib file size in bytes */
 static int evalSize (int nShortName) {
    if ((par.gribResolution == 0  || (par.gribTimeStep == 0))) {
-      fprintf (stderr, "in evalSize: par.gribResolution and par.gribTimeStep should be strictly positive\n");
+      fprintf (stderr, "In evalSize: par.gribResolution and par.gribTimeStep should be strictly positive\n");
       return 0;
    }
    int newLonRight = ((gribRequestData.lonLeft > 0) && (gribRequestData.lonRight < 0)) ? gribRequestData.lonRight + 360 : gribRequestData.lonRight;
@@ -4756,8 +4785,8 @@ static int evalSize (int nShortName) {
 /*! updtate text fields in grib dialog box */
 static void updateTextField (GribRequestData *data) {
    char str [MAX_SIZE_TEXT] = "";
-   if ((data->typeWeb == NOAA_WIND) || (data->typeWeb == ECMWF_WIND)) {
-      data->hhZ = buildGribUrl (data->typeWeb, data->latMax, data->lonLeft, data->latMin, data->lonRight, 0, data->url, MAX_SIZE_URL);
+   if ((data->typeWeb == NOAA_WIND) || (data->typeWeb == ECMWF_WIND) || (data->typeWeb == ARPEGE_WIND)) {
+      data->hhZ = buildGribUrl (data->typeWeb, data->latMax, data->lonLeft, data->latMin, data->lonRight, 0, -1, data->url, MAX_SIZE_URL);
       formatThousandSep (str, sizeof (str), evalSize (howManyShortnames (data->typeWeb, data->mailService)));
    }
    else {
@@ -4794,6 +4823,7 @@ static void cbDropDownServ (GObject *dropDown, GParamSpec *pspec, gpointer user_
    char strWarning [MAX_SIZE_LINE];
    GribRequestData *data = (GribRequestData *)user_data;
    data->typeWeb = gtk_drop_down_get_selected (GTK_DROP_DOWN (dropDown));
+   printf ("typeWeb Selected: %d\n", data -> typeWeb);
    par.gribTimeMax = maxTimeRange (data->typeWeb, data->mailService);
    gtk_spin_button_set_value (GTK_SPIN_BUTTON(data->timeMaxSpin), par.gribTimeMax / 24);
 
@@ -4874,7 +4904,7 @@ static void gribRequestBox () {
 
    GtkWidget *grid = gtk_grid_new();
 
-   data->hhZ = buildGribUrl (data->typeWeb, data->latMax, data->lonLeft, data->latMin, data->lonRight, 0, data->url, sizeof (data->url));
+   data->hhZ = buildGribUrl (data->typeWeb, data->latMax, data->lonLeft, data->latMin, data->lonRight, 0, -1, data->url, sizeof (data->url));
 
    gtk_grid_set_column_spacing(GTK_GRID (grid), 10);
    gtk_grid_set_row_spacing(GTK_GRID (grid), 5);
@@ -4884,7 +4914,7 @@ static void gribRequestBox () {
    // Create combo box for NOAA WIND Selection
    label = gtk_label_new ("Web or Mail service");
    gtk_grid_attach (GTK_GRID(grid), label, 0, 0, 1, 1);
-   const char *arrayServ [] = {"NOAA", "ECMWF", "MAIL", NULL};
+   const char *arrayServ [] = {"NOAA", "ECMWF", "ARPEGE", "MAIL", NULL};
    data->dropDownServ = gtk_drop_down_new_from_strings (arrayServ);
    gtk_drop_down_set_selected ((GtkDropDown *) data->dropDownServ, data->typeWeb);
    gtk_grid_attach (GTK_GRID(grid), data->dropDownServ, 1, 0, 1, 1);
@@ -5101,8 +5131,8 @@ void cbOpenPolar (GObject* source_object, GAsyncResult* res, gpointer data) {
                   polarDraw ();
             }
             else {
-               fprintf (stderr, "Error loading polar file: %s: %s\n", fileName, errMessage);
-               g_free(fileName);
+               fprintf (stderr, "In cbOpenPolar, Error loading polar file: %s: %s\n", fileName, errMessage);
+               g_free (fileName);
                infoMessage (errMessage, GTK_MESSAGE_ERROR);
             } 
          }
@@ -5117,7 +5147,7 @@ void cbOpenPolar (GObject* source_object, GAsyncResult* res, gpointer data) {
                   polarDraw ();
             } 
             else {
-               fprintf (stderr, "Error loading iwave polar file: %s: %s\n", fileName, errMessage);
+               fprintf (stderr, "In cbOpenPolar, Error loading wave polar file: %s: %s\n", fileName, errMessage);
                g_free(fileName);
                infoMessage (errMessage, GTK_MESSAGE_ERROR);
             } 
@@ -5165,7 +5195,7 @@ static void initScenario () {
    if (par.gribFileName [0] != '\0') {
       readGribRet = readGribAll (par.gribFileName, &zone, WIND);
       if (readGribRet == 0) {
-         fprintf (stderr, "Error in initScenario: Unable to read grib file: %s\n ", par.gribFileName);
+         fprintf (stderr, "In initScenario: Unable to read grib file: %s\n ", par.gribFileName);
       }
       else {
          printf ("Grib loaded    : %s\n", par.gribFileName);
@@ -5186,12 +5216,12 @@ static void initScenario () {
    if (readPolar (par.polarFileName, &polMat, errMessage, sizeof (errMessage)))
       printf ("Polar loaded   : %s\n", par.polarFileName);
    else
-      fprintf (stderr, "Error loading polar file: %s : %s\n", par.polarFileName, errMessage);
+      fprintf (stderr, "In iniScenario, Error loading polar file: %s : %s\n", par.polarFileName, errMessage);
       
    if (readPolar (par.wavePolFileName, &wavePolMat, errMessage, sizeof (errMessage)))
       printf ("Polar loaded   : %s\n", par.wavePolFileName);
    else
-      fprintf (stderr, "Error loading wave polar file: %s : %s\n", par.wavePolFileName, errMessage);
+      fprintf (stderr, "In initScenario, Error loading wave polar file: %s : %s\n", par.wavePolFileName, errMessage);
    
    nPoi = 0;
    if (par.poiFileName [0] != '\0')
@@ -5220,7 +5250,7 @@ void* scenarioEditRun (void *data) {
    char line [MAX_SIZE_LINE] = "";
    snprintf (line, sizeof (line), "%s %s\n", par.editor, parameterFileName);
    if ((fs = popen (line, "r")) == NULL) {
-      fprintf (stderr, "Error in scenarioEditRun: system call: %s\n", line);
+      fprintf (stderr, "In scenarioEditRun: system call: %s\n", line);
    }
    else {
       pclose (fs);
@@ -5229,7 +5259,7 @@ void* scenarioEditRun (void *data) {
          initWithMostRecentGrib ();
       initScenario ();
       if (readGribRet == 0) {
-         infoMessage ("Error in readgrib", GTK_MESSAGE_ERROR);
+         infoMessage ("In readgrib", GTK_MESSAGE_ERROR);
       }
       destroySurface ();
       gtk_widget_queue_draw (drawing_area);
@@ -5252,7 +5282,7 @@ void cbOpenScenario (GObject* source_object, GAsyncResult* res, gpointer data) {
          readParam (fileName);
          initScenario ();
          if (readGribRet == 0)
-            infoMessage ("Error in readgrib", GTK_MESSAGE_ERROR);
+            infoMessage ("In readgrib", GTK_MESSAGE_ERROR);
          g_free(fileName);
          gtk_widget_queue_draw (drawing_area);
       }
@@ -5501,7 +5531,7 @@ static void *mailGribRequest (void *data) {
 static void checkGribDump () {
    char *buffer = NULL;
    if ((buffer = (char *) malloc (MAX_SIZE_BUFFER)) == NULL) {
-      fprintf (stderr, "Error in checkGribDump: Malloc %d\n", MAX_SIZE_BUFFER); 
+      fprintf (stderr, "In checkGribDump, Error malloc %d\n", MAX_SIZE_BUFFER); 
       infoMessage ("Memory allocation issue", GTK_MESSAGE_ERROR);
       return;
    }
@@ -5515,7 +5545,7 @@ static void checkGribDump () {
 
 /*! For testing */
 static void testFunction () {
-   char str [MAX_SIZE_TEXT];
+   /*char str [MAX_SIZE_TEXT];
 
    snprintf (str, sizeof (str), 
       "\nZone: latmin: %.2lf, latMax: %.2lf, lonLeft: %.2lf, lonRight: %.2lf\n\nDispZone: xL: %u, xR: %u, yB: %u, yT: %u\nlatMin: %.2lf, latMax: %.2lf, lonLeft: %.2lf, lonRight: %.2lf\nzoom: %.2lf\nAntemeridian: %d\n", 
@@ -5527,11 +5557,10 @@ static void testFunction () {
 
    infoMessage (str, GTK_MESSAGE_INFO);
    printf ("%s", str);
-
-/*   par.special = 1;
+   */
+   par.special = 1;
    onOkButtonCalClickedBis (NULL);
    g_timeout_add (EXEC_TIME_OUT, onOkButtonCalClickedBis, NULL);
-*/
 }
 
 /*! Display label in col c and line l of tab */
@@ -6232,7 +6261,7 @@ static void destinationSelected () {
 static void startPolygonSelected () {
    if (menuWindow != NULL) popoverFinish (menuWindow);
    if ((forbidZones [par.nForbidZone].points = (Point *) malloc (MAX_SIZE_FORBID_ZONE * sizeof(Point))) == NULL) {
-      fprintf (stderr, "Error in on_popup_menu_selection: malloc forbidZones with k = %d\n", par.nForbidZone);
+      fprintf (stderr, "In startPolygonSelected, Error malloc forbidZones with k = %d\n", par.nForbidZone);
       infoMessage ("in on_popup_menu_selection Error malloc forbidZones", GTK_MESSAGE_ERROR);
       return;
    } 
@@ -6570,7 +6599,7 @@ static void onMeteogramEvent (GtkDrawingArea *area, cairo_t *cr, int width, \
    double uCurr, vCurr, currTwd, currTws, maxCurrTws = 0; // current
    long tMax = zone.timeStamp [zone.nTimeStamp -1];
    if (tMax <= 0) {
-      fprintf (stderr, "in onMeteogramEvent: tMax should be strictly posditive\n");
+      fprintf (stderr, "In onMeteogramEvent: tMax should be strictly posditive\n");
       return;
    }
    double tDeltaCurrent = zoneTimeDiff (&currentZone, &zone);
@@ -6679,7 +6708,7 @@ static void onMeteogramEvent (GtkDrawingArea *area, cairo_t *cr, int width, \
    cairo_stroke(cr);
 
    if (maxMax <= 0) {
-      fprintf (stderr, "in onMeteogramEvent: maxMax should be strictly posditive\n");
+      fprintf (stderr, "In onMeteogramEvent: maxMax should be strictly posditive\n");
       return;
    }
    const int YK = (Y_BOTTOM - Y_TOP) / maxMax;
@@ -7125,7 +7154,7 @@ static void createActionWithParam (const char *actionName, void *callBack, int p
 /*! Menu set up */
 static void appStartup (GApplication *application) {
    if (setlocale (LC_ALL, "C") == NULL) {
-      fprintf (stderr, "Error in ap_startup: setlocale failed");
+      fprintf (stderr, "In appStartup: setlocale failed");
       return;
    }
    GtkApplication *app = GTK_APPLICATION (application);
@@ -7352,7 +7381,7 @@ int main (int argc, char *argv[]) {
    bool ret = true;
 
    if (curl_global_init (CURL_GLOBAL_DEFAULT) != 0) {
-      fprintf (stderr, "Error in main: failed to initialize cURL.\n");
+      fprintf (stderr, "In main, Error failed to initialize cURL.\n");
       return EXIT_FAILURE;
    }
    
@@ -7361,7 +7390,7 @@ int main (int argc, char *argv[]) {
    printf ("LocalTime - UTC: %.0lf hours\n", vOffsetLocalUTC / 3600.0);
 
    if (setlocale (LC_ALL, "C") == NULL) {              // very important for scanf decimal numbers
-      fprintf (stderr, "Error in main: setlocale failed");
+      fprintf (stderr, "In main, Error setlocale failed");
       return EXIT_FAILURE;
    }
 

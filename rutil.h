@@ -108,5 +108,5 @@ extern bool   isDayLight (double t, double lat, double lon);
 extern void   initWayPoints (void);
 extern void   initWithMostRecentGrib (void);
 extern int    buildMeteoConsultUrl (int type, int i, int delay, char *url, size_t maxLen);
-extern int    buildGribUrl (int typeWeb, int topLat, int leftLon, int bottomLat, int rightLon, int step, char *url, size_t maxLen);
+extern int    buildGribUrl (int typeWeb, int topLat, int leftLon, int bottomLat, int rightLon, int step, int step2, char *url, size_t maxLen);
 extern bool   buildGribMail (int type, double lat1, double lon1, double lat2, double lon2, char *object, char *command, size_t maxLen);

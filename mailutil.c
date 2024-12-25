@@ -46,7 +46,7 @@ bool smtpSendPython (const char *toAddress, const char *object, const char *mess
       par.smtpScript, toAddress, object, message, newPw);
    
    if (system (commandLine) != 0) {
-      fprintf (stderr, "Error in smtpGribRquest: system call %s\n", commandLine);
+      fprintf (stderr, "In smtpSendPython: system call Error: %s\n", commandLine);
       return false;
    }
 
@@ -133,7 +133,7 @@ static bool markAsReadPython () {
    dollarSubstitute (par.mailPw, newPw, MAX_SIZE_NAME);
    snprintf (command, sizeof (command), "%s %s", par.imapToSeen, newPw);
    if (system (command) != 0) {
-      fprintf (stderr, "in markAsReadPython. Error in system command: %s\n", command);
+      fprintf (stderr, "In markAsReadPython. Error in system command: %s\n", command);
       return false;
    }
    return true;
@@ -150,7 +150,7 @@ bool markAsRead (const char *imapServer, const char *username, const char *passw
 
    curl = curl_easy_init();
    if (! curl) {
-      fprintf (stderr, "in markAsRead. Error in curl initcurl\n");
+      fprintf (stderr, "In markAsRead. Error in curl initcurl\n");
       return false;
    }
 
@@ -232,7 +232,7 @@ static char* extractFilename (const char *filename) {
 static char *extractBase64Content (const char *filename) {
    FILE *file = fopen(filename, "r");
    if (file == NULL) {
-      fprintf (stderr, "in ExtractBase64Content: Error opening file: %s", filename);
+      fprintf (stderr, "In ExtractBase64Content: Error opening file: %s", filename);
       return NULL;
    }
 
@@ -263,7 +263,7 @@ static char *extractBase64Content (const char *filename) {
    fclose(file);
 
    if (contentBuffer->len == 0) {
-      fprintf (stderr, "in extractBase64Content: no data found in file: %s\n", filename);
+      fprintf (stderr, "In extractBase64Content: no data found in file: %s\n", filename);
       g_string_free (contentBuffer, TRUE);
       return NULL;
    }
@@ -305,7 +305,7 @@ static int imapRead (const char* imapServer, const char *username, const char *p
    char url [MAX_SIZE_URL];
    FILE *fileFetch = fopen (tempFileName, "w");
    if (fileFetch == NULL) {
-      fprintf (stderr, "Error creating file: %s\n", tempFileName);
+      fprintf (stderr, "In imapRead, Error creating file: %s\n", tempFileName);
       return -1;
    }
 
@@ -316,7 +316,7 @@ static int imapRead (const char* imapServer, const char *username, const char *p
    curl = curl_easy_init();
 
    if (!curl) {
-      fprintf (stderr, "Failed to initialize libcurl\n");
+      fprintf (stderr, "In imapRead, Failed to initialize libcurl\n");
       fclose (fileFetch);
       return -1;
    }
@@ -339,7 +339,7 @@ static int imapRead (const char* imapServer, const char *username, const char *p
    fclose (memfile);
 
    if (res != CURLE_OK) {
-      fprintf (stderr, "search unseen; curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+      fprintf (stderr, "In imapRead, search unseen; curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
    } else {
       // Check if unread messages exist
       // printf ("In lastMessageUnseen: %s\n", response);
@@ -362,7 +362,7 @@ static int imapRead (const char* imapServer, const char *username, const char *p
    curl_global_init (CURL_GLOBAL_DEFAULT);
    curl = curl_easy_init();
    if (!curl) {
-      fprintf (stderr, "Failed to initialize libcurl\n");
+      fprintf (stderr, "In imapRead, failed to initialize libcurl\n");
       fclose (fileFetch);
       return -1;
    }
@@ -376,7 +376,7 @@ static int imapRead (const char* imapServer, const char *username, const char *p
    res = curl_easy_perform (curl);
 
    if (res != CURLE_OK)
-     fprintf (stderr, "fetching: curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+     fprintf (stderr, "In imapRead, fetching: curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
    //else printf ("OK\n");
 
    fclose (fileFetch);
@@ -400,7 +400,7 @@ static int imapGetUnseenPython (const char *path, char *gribFileName, size_t max
    dollarSubstitute (par.mailPw, newPw, MAX_SIZE_NAME);
    snprintf (command, sizeof (command), "%s %s %s", par.imapScript, path, newPw); 
    if ((fp = popen (command, "r")) == NULL) {
-      fprintf (stderr, "Error in mailGribReadPython. popen command: %s\n", command);
+      fprintf (stderr, "In imapGetUnseenPython, Error popen command: %s\n", command);
       return 0;
    }
    while ((fgets (line, sizeof(line)-1, fp) != NULL) && (n < MAX_LINES)) {
@@ -465,7 +465,7 @@ int imapGetUnseen (const char* imapServer, const char *username,
    char *base64_content = extractBase64Content (tempFileName);
    if (!base64_content) {
       writeErrorMessage (tempFileName, MAX_N_ERROR_MESSAGE);
-      fprintf (stderr, "Impossible to extract encoded content.\n");
+      fprintf (stderr, "In imapGetUnseen, impossible to extract encoded content.\n");
       g_free (extractedName);
       return 0;          // Error: Message found but not decodable
    }
@@ -476,7 +476,7 @@ int imapGetUnseen (const char* imapServer, const char *username,
    g_free (base64_content);
 
    if (!decoded_data) {
-      fprintf (stderr, "Error decoding Base64.\n");
+      fprintf (stderr, "In impapGetUnseen, error decoding Base64.\n");
       g_free (extractedName);
       return 0;           // Error
    }
@@ -484,7 +484,7 @@ int imapGetUnseen (const char* imapServer, const char *username,
    // Step 5: Write decoded data in file
    FILE *gribFile = fopen (gribFileName, "wb");
    if (gribFile == NULL) {
-      fprintf (stderr, "Error creating output grib file: %s\n", gribFileName);
+      fprintf (stderr, "In impaGetUnseen, error creating output grib file: %s\n", gribFileName);
       g_free (decoded_data);
       g_free (extractedName);
       return 0;            // Error

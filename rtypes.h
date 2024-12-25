@@ -9,11 +9,11 @@
 #define METEO_CONSULT_CURRENT_DELAY 12
 #define NOAA_DELAY                  5
 #define ECMWF_DELAY                 8
-#define METEO_CONSULT_ROOT_GRIB_URL "https://static1.mclcm.net/mc2020/int/cartes/marine/grib/" // Meteoconsult
+#define METEO_CONSULT_ROOT_GRIB_URL "https://static1.mclcm.net/mc2020/int/cartes/marine/grib/"
 #define NOAA_ROOT_GRIB_URL          "https://nomads.ncep.noaa.gov/cgi-bin/"
 #define NOAA_GENERAL_PARAM_GRIB_URL "var_GUST=on&var_PRMSL=on&var_PRATE=on&var_UGRD=on&var_VGRD=on&lev_10_m_above_ground=on&lev_surface=on&lev_mean_sea_level=on"
 #define ECMWF_ROOT_GRIB_URL         "https://data.ecmwf.int/forecasts/"
-
+#define ARPEGE_ROOT_GRIB_URL        "https://object.data.gouv.fr/meteofrance-pnt/pnt/"
 #define N_MAX_NMEA_PORTS      3
 #define CSV_SEP               ",;\t"            // general separators for CSV files
 #define CSV_SEP_POLAR         ";\t"             // for polar no comma because decimal separator may be comma 
@@ -81,12 +81,12 @@
 #define MAX_N_FORBID_ZONE     10                // max nummber of forbidden zones
 #define N_METEO_ADMIN         4                 // administration: Weather Service US, DWD, etc
 #define N_MAIL_SERVICES       9                 // for mailServiceTab size
-#define N_WEB_SERVICES        2                 // for service Tab size (NOAA and ECMWF)
+#define N_WEB_SERVICES        3                 // for service Tab size (NOAA and ECMWF and ARPEGE)
 #define MAX_INDEX_ENTITY      512               // for shp. Index.
 #define MAX_N_COMPETITORS     10                // Number max of competitors
 #define MAX_SIZE_SHIP_NAME    21                // see AIS specificatiions
 
-enum {NOAA_WIND, ECMWF_WIND, MAIL, MAIL_SAILDOCS_CURRENT}; // NOAA or ECMWF for web download or MAIL. Specific for current
+enum {NOAA_WIND, ECMWF_WIND, ARPEGE_WIND, MAIL, MAIL_SAILDOCS_CURRENT}; // NOAA or ECMWF for web download or MAIL. Specific for current
 enum {GPS_INDEX, AIS_INDEX};                    // for NMEA USB serial port reading
 enum {WIND, CURRENT};                           // for grib information, either WIND or CURRENT
 enum {POLAR, WAVE_POLAR};                       // for polar information, either POLAR or WAVE
@@ -99,6 +99,7 @@ enum {NOTHING, JUST_POINT, SEGMENT, BEZIER};    // bezier or segment representat
 enum {UNVISIBLE, NORMAL, CAT, PORT, NEW};       // for POI point of interest
 enum {RUNNING, STOPPED, NO_SOLUTION, EXIST_SOLUTION};          // for chooseDeparture.ret values and allCompetitors check
 enum {GRIB_STOPPED = -2, GRIB_RUNNING = -1, GRIB_ERROR = 0, GRIB_OK = 1, GRIB_UNCOMPLETE = 2};   // for readGribCheck and readCurentGribCheck
+enum {ROUTING_STOPPED = -2, ROUTING_ERROR = -1, ROUTING_RUNNING = 0};   // for routingLaunch
 enum {NO_ANIMATION, PLAY, LOOP};                // for animationActive status
 enum {WIND_DISP, GUST_DISP, WAVE_DISP, RAIN_DISP, PRESSURE_DISP}; // for display
 
@@ -111,7 +112,7 @@ struct MeteoElmt {
    char name [MAX_SIZE_NAME];
 };
 
-struct GribService { // NOAA_WIND, ECMWF_WIND
+struct GribService { // NOAA_WIND, ECMWF_WIND, ARPEGE_WIND
    int  nShortNames;
    char warning [MAX_SIZE_LINE];
 };

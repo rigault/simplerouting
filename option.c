@@ -16,7 +16,7 @@ static void initScenarioOption (void) {
    if (par.gribFileName [0] != '\0') {
       readGribRet = readGribAll (par.gribFileName, &zone, WIND);
       if (readGribRet == 0) {
-         fprintf (stderr, "Error in initScenario: Unable to read grib file: %s\n ", par.gribFileName);
+         fprintf (stderr, "In initScenarioOption, Error: Unable to read grib file: %s\n ", par.gribFileName);
          return;
       }
       printf ("Grib loaded    : %s\n", par.gribFileName);
@@ -31,12 +31,12 @@ static void initScenarioOption (void) {
    if (readPolar (par.polarFileName, &polMat, errMessage, sizeof (errMessage)))
       printf ("Polar loaded   : %s\n", par.polarFileName);
    else
-      fprintf (stderr, "Error in readPolar: %s\n", errMessage);
+      fprintf (stderr, "In initScenarioOption, Error readPolar: %s\n", errMessage);
       
    if (readPolar (par.wavePolFileName, &wavePolMat, errMessage, sizeof (errMessage)))
       printf ("Polar loaded   : %s\n", par.wavePolFileName);
    else
-      fprintf (stderr, "Error in readPolar: %s\n", errMessage);
+      fprintf (stderr, "In initScenatioOption, Error readPolar: %s\n", errMessage);
    
    nIsoc = 0;
    route.n = 0;
@@ -112,7 +112,7 @@ void optionManage (char option) {
       break;
    case 'h': // help
 	   if ((f = fopen (par.cliHelpFileName, "r")) == NULL) {
-		   fprintf (stderr, "Error in option help: Impossible to read: %s\n", par.cliHelpFileName);
+		   fprintf (stderr, "In optionManage, Error help: Impossible to read: %s\n", par.cliHelpFileName);
 		   break;
 	   }
       while ((fgets (str, MAX_SIZE_LINE, f) != NULL ))
