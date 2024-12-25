@@ -110,7 +110,8 @@ table, tr {
 }
 
 th, td {
-   padding: 20px;
+   font-size: 12px;
+   padding: 6px;
 }
 
 caption {

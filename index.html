@@ -5,6 +5,7 @@
 <title>RCube</title>
 <link rel="icon" type="image/ico" href="favicon.ico">
 <link rel="stylesheet" type="text/css" href="index.css">
+<script src="marine.js"></script>
 </head>
 <body>
 <header> 
@@ -35,7 +36,7 @@
    <a href="#chap7">7. Usage (interface graphique)</a>
    <a href="#chap8">8. Trigonométrie</a>
    <a href="#chap0">9. Algorithmes et concepts</a>
-   <a href="#chap10">10. Récupérer des fichiers Grib</a>
+   <a href="#chap10">10. Récupérer des fichiers Grib et les informations météorologiques</a>
    <a href="#chap11">11. ECCODES</a>
    <a href="#chap12">12. Trouver ou générer des polaires</a>
    <a href="#chap13">13. Données géographiques</a>
@@ -207,6 +208,16 @@
 		<p>Les fichiers Grib donnent les vitesses en mètres/seconde.</p>
 
 <h1 id="chap2">2. Procédure d'installation </h1>
+
+      <p> Il peut être intéressant de disposer dans son environnement de : </p>
+
+      <p> Python : non obligatoire. Lorsque le paramètre PYTHON est à la valeur 0, RCube utilise l'API curl pour la réception de fichiers Grib par mail.
+      Lorsque le paramètre a la valeur 1, alors 3 scripts python sont utlisés. Ceici peut être pratique pour s'adapter à l'environnement de l'ultisateur pour
+      la messagerie. </p>
+
+      <p> wgrib2 : cet utilitaire permet notamment d'extraire un sous ensemble d'un fichier Grib. Il est utilisé dans le cas des téléchargement web 
+      sur les sites open data de l'ECMWF et de Météo France. Si non installé, le logiciel fonctionne soit avec la NOAA pour le téléchagement direct, soit via la maessagerie.</p>
+
       <h2>2.1. Installation des librairies et environnement système </h2>
 
 		<h3>Environnement Debian Ubuntu  </h3>
@@ -221,7 +232,7 @@ sudo apt install gcc
 		<p>Installez les paquets nécessaires pour GTK4, curl, shapelib, eccodes&nbsp;:</p>
 <pre>
 <code>
-sudo apt install libgtk-4-dev
+sudo apt-get install libgtk-4-dev
 sudo apt-get install libwebkit2gtk-4.1-dev
 sudo apt-get install -y libcurl4 libcurl4-openssl-dev 
 sudo apt-get install libshp-dev
@@ -373,14 +384,16 @@ engine.c
 option.c
 rutil.c
 aisgps.c
+mailutil.c
 show4.c
 
-engine.h
-option.h
 rtypes.h
 inline.h
+engine.h
+option.h
 rutil.h
 aisgps.h
+mailutil.h
 </pre>
 Ainsi que les fichiers&nbsp;:
 <pre>
@@ -781,12 +794,19 @@ NMEA: COM4 38400
 
 		<p>En interne, les angles (TWD, TWA, COG, HDG, AWA..) sont exprimés en degrés décimaux soit sur l’intervalle [-180, 180] soit sur l’intervalle [0, 360[&nbsp;.</p>
 
-		<p>Les longitudes sont également exprimées en interne en degrés décimaux sur
-		l’intervalle [-180, + 180], soit sur l’intervalle [0, 360].</p>
+      <img src="images/longitudeLatitude.gif" alt="Longitude Latitudee" width="300" height="300">
+
+      <p>Les longitudes sont également exprimées en interne en degrés décimaux:
+		
+      <ul>
+         <li> sur l’intervalle [-180, + 180] dans le cas général,</li>
+         <li> sur l’intervalle [0, 360] lorque le Grib utilisé traverse l'antémeridien (dans le pacifique&nbsp;: 180°).</li>
+      </ul>
 
 		<p>Les latitudes sont en degrés décimaux sur l’intervalle [-90, + 90]</p>
 
-      <p>Lors de l'affichage, l'expression des latitudes et des longitudes est piloté par le paramètre <samp>DMS_DISP</samp> du fichier "routing.par".<p>
+      <p>Lors de l'affichage, l'expression des latitudes et des longitudes est piloté par le paramètre <samp>DMS_DISP</samp> du fichier "routing.par",
+      également modifiable dans la boite de dialogue setting, onglet "display".<p>
       <table>
          <caption>DMS&nbsp;: Degrés Minutes Seconds</caption>
          <thead>
@@ -1020,8 +1040,10 @@ NMEA: COM4 38400
 		rayon croise les côtés du polygone. Si le nombre de croisements
 		est impair, le point est à l'intérieur du polygone.</p>
 
-<h1 id="chap10">10. Récupérer des fichiers Grib</h1>
+<h1 id="chap10">10. Récupérer des fichiers Grib et les informations météorologiques</h1>
 		<h2>10.1. XyGrib</h2>
+
+      xyGrib est le successeur de zyGrib et est soutenu par <a href = "https://opengribs.org/fr"> opengribs.org </a>
 
 		<p>Télécharger Xygrib. </p>
 		<p><a href="https://opengribs.org/fr/xygrib-fr">https://opengribs.org/fr/xygrib-fr</a></p>
@@ -1042,29 +1064,55 @@ NMEA: COM4 38400
 		associé à un seul "time step". Le programme concaténe donc n
 		fichiers Grib dans un seul pour avoir un fichier Grib global.</p>
 
-      <p>Exemple d'accès à un fichier&nbsp;:</p>
+      <p>Le type préféré est&nbsp;: GFS 0.25 degree</p>
 
-      https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p50.pl?dir=/gfs.20240813/06/atmos&<br>
-         var_UGRD=on&var_VGRD=on&subregion=&toplat=50&leftlon=-15&<br>
-         rightlon=0&bottomlat=43&file=gfs.t06z.pgrb2full.0p50.f000		
+      <p>Exemple d'accès à un fichier&nbsp;:</p>
+      <p>Ici : timestep 21.
+
+      <p>https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl?dir=/gfs.20241124/00/atmos&file=gfs.t00z.pgrb2.0p25.f021&var_GUST=on&var_PRMSL=on&var_PRATE=on&var_UGRD=on&var_VGRD=on&lev_10_m_above_ground=on&lev_surface=on&lev_mean_sea_level=on&subregion=&toplat=-5&leftlon=-40&rightlon=24&bottomlat=-44
+
 
       <h2>10.3. ECMWF</h2>
    
       <p>Le site européen propose des données en open data. </p>
 
-      <p><a href="https://data.ecmwf.int/forecasts">https://data.ecmwf.int/forecasts</a></p>
+      <p><a href="https://data.ecmwf.int/">https://data.ecmwf.int/</a></p>
 
       <p>Le logiciel télécharge les fichiers Grib de l'ECMWF.</p>
 
 		<p>Comme pour la NOAA, chaque téléchargement correspond à un fichier Grib
-		associé à un seul "time step". La particularité est que le fichier est unique et mondial et contient de 
+		associé à un seul "time step". Le fichier est unique et mondial et contient de 
       nombreux indicateurs non pertinents pour RCube. Le programme filtre donc chaque fichier pour n'extraire que les "shortname" pertinents,
       découpe la région spécifiée, puis concatène les n fichiers Grib dans un seul pour avoir un fichier Grib global.</p>
 
       <p>Exemple d'accès à un fichier&nbsp;:</p>
       https://data.ecmwf.int/forecasts/20240813/00z/ifs/0p25/oper/20240813000000-0h-oper-fc.grib2
 
-		<h2>10.4. Meteoconsult</h2>
+		<h2>10.4. Meteo France</h2>
+
+      <p>Météo France propose des données en open data. </p>
+
+      <p><a href="https://meteo.data.gouv.fr/">Fichiers Grib Météo France</a></p>
+
+      <p>Le logiciel télécharge les fichiers Grib de Météo France.</p>
+
+      <p>Les données sélectionnées par le logiciel ont une résolution de 0.25°<p> 
+      <p>Le seul time step disponible est de 3 heures.<p>
+      <p>La prévision est au maximum de 102 heures (4 jours et 6 heures) <p>
+
+      <p> Pour la prévision maximale à 102 heures, RCube télécharge 4 fichiers et les concatène.<p>
+      <p> L'exemple qui suit indique la structure pour les 4 fichiers</p>
+
+<pre>
+https://object.data.gouv.fr/meteofrance-pnt/pnt/2024-12-24T12:00:00Z/arpege/025/SP1/arpege__025__SP1__000H024H__2024-12-24T12:00:00Z.grib2
+https://object.data.gouv.fr/meteofrance-pnt/pnt/2024-12-24T12:00:00Z/arpege/025/SP1/arpege__025__SP1__025H048H__2024-12-24T12:00:00Z.grib2
+https://object.data.gouv.fr/meteofrance-pnt/pnt/2024-12-24T12:00:00Z/arpege/025/SP1/arpege__025__SP1__049H072H__2024-12-24T12:00:00Z.grib2
+https://object.data.gouv.fr/meteofrance-pnt/pnt/2024-12-24T12:00:00Z/arpege/025/SP1/arpege__025__SP1__073H102H__2024-12-24T12:00:00Z.grib2
+</pre>
+      <p> Comme pour l'ECMWF, RCube applique un filtrage sur les indicateurs pertinents ("shortnames") et sur la zone géographique pour chaque fichier
+ avant concaténation. </p>
+
+		<h2>10.5. Meteoconsult</h2>
 
 		<p>La récupération des fichiers Meteoconsult est également automatisée dans le logiciel.</p>
       <p>Les informations Meteconsult sont disponibles sur&nbsp;:
@@ -1100,7 +1148,7 @@ NMEA: COM4 38400
 		<p>00Z correspond à minuit UTC, 06Z à 6 heures UTC, 12Z à midi
 		UTC et 18Z à 18 heures UTC.</p>
 
-		<h2>10.5. saildocs</h2>
+		<h2>10.6. saildocs</h2>
 
 		<p>Automatisé dans le logiciel.</p>
 		<p>Voir <a href="http://www.saildocs.com/gribinfo">http://www.saildocs.com/gribinfo</a></p>
@@ -1108,20 +1156,32 @@ NMEA: COM4 38400
 		<p>Les fichiers Grib reçu ont un nom de la forme&nbsp;:</p>
 		<p>gfsyyyymmddhhmmssxxx.grb</p>
 
-		<h2>10.6. mailASail</h2>
+		<h2>10.7. mailASail</h2>
 
 		<p>Automatisé dans le logiciel.</p>
 		<p>Adresse mail&nbsp;: <a href="mailto:weather@mailasail.com">weather@mailasail.com</a></p>
 		<p>Les fichiers Grib reçu ont un nom de la forme&nbsp;:</p>
 		<p>grib_yymmdd_hhmmss_gfs.grb</p>
 
-		<h2>10.7. Globalmarinenet</h2>
+		<h2>10.8. Globalmarinenet</h2>
 
 		<p>Adresse mail&nbsp;:
 		<a href="mailto:gmngrib@globalmarinenet.net">gmngrib@globalmarinenet.net</a>.</p>
 		<p class=warning>A éviter. Ne fonctionne pas bien.</p>
 
+   <h2> Cartes isobariques et bulletins </h2>
+
+   Le serveur de la NOAA contient un répertoire de cartes générales.
+   <a href = "https://tgftp.nws.noaa.gov/fax/"> cartes générales NOAA </a>
+   <p>On s'intéressera en particulier au fichier PYAA01.gif. <a href = "https://tgftp.nws.noaa.gov/fax/PYAA01.gif"> carte atlantique Nord NOAA </a>
+
+   Voir le site Méteo France pour la situation générale :
+   <a href = "https://meteofrance.com/isofronts"> carte atlantique Nord Méteo France</a>
+
 <h1 id="chap11">11. ECCODES</h1>
+
+   <p>L'ECMWF (CEP) propose un package qui inclut des API et un ensemble d'outils autour des fichiers GRIB&nbsp;: 
+   <a href="https://confluence.ecmwf.int/display/ECC">Page d'acceuil eCodes</a></p>
 
 		<p>ECCODES est une bibliothèque pour la manipulation de données
 		Grib en météorologie. Elle est développée par le Centre
@@ -1216,21 +1276,33 @@ grib_get_data -L &quot;%.2lf %.2lf&quot; -F &quot;%.2lf&quot; -m -999999 -w shor
       <code>grib_copy -w shortName=10u/10v ecmwf.grib2 ecmwf2.grib</code>
 
    <h2>CDO</h2>
+
+   <p> Note : inutilisé dans la nouvelle version et remplacé par wgrib2 </p>
    
    <p>CDO pour "Climate Data Operators" <a href="https://code.mpimet.mpg.de/projects/cdo">CDO Web Site</a> est un ensemble
    d'opérateurs en ligne de commande permettant de manipuler des modèles météorologiques ou climatologique. Les formats de fichiers
    supportés sont entre autres&nbsp;: GRIB 1/2. Il y a plus de 600 opérateurs disponibles.</p>
 
-   <p>RCube utilise CDO au travers de deux opérateurs.<p>
+   <p>RCube utilisait CDO au travers de deux opérateurs.<p>
    <ul>
       <li><code>-sellonlatbox</code> pour extraire une région</li>
       <li><code>-invertlat</code> pour inverser les latitudes</li>
    </ul>
    <p>Exemple&nbsp;</p>
-
 <pre><code>
    cdo -sellonlatbox,-25.0,-1.0,20.0,50.0 interECMWF-000 extract.grib
    cdo -invertlat extract.grib extract0.grib
+</code></pre>
+
+
+   <h2>wgrib2</h2>
+   <p>RCube utilise maintenant wgrib2 au travers de la commande extrayant une région.<p>
+   <p> Si grib2 n'est pas installé, le téléchargement direct des fichiers ECMWF et ARPEGE n'est pas possible </p>
+
+<pre><code>
+   wgrib2 input.grib -small_grib lonLeft:lonRight latMin:latMax output.grib
+
+   wgrib2 /home/rr/routing/grib/inter0.tmp -small_grib -13:-1 43:48 /home/rr/routing/grib/inter1.tmp
 </code></pre>
 
 <h1 id="chap12">12. Trouver ou générer des polaires</h1>
@@ -1378,20 +1450,15 @@ grib_get_data -L &quot;%.2lf %.2lf&quot; -F &quot;%.2lf&quot; -m -999999 -w shor
       toujours juste. Certaines parties terrestres sont en dessous du niveau de la mer…</p>
 
 <h1 id="chap14">14. Les logiciels du marché </h1>
+
 		<ul>
 			<li>La rolls des logiciels de
 			routage qui propose aussi la version Octopus pour la croisière
 			<a href="https://www.adrena.fr/">Adrena</a>.</li>
-		</ul>
-		<ul>
 			<li>L'entreprise Maxsea propose son
 			produit <a href="https://mytimezero.com/fr">TimeZero</a>.</li>
-		</ul>
-		<ul>
 			<li>Weather4D pro pour iPad et
 			iPhone propose un module de routage <a href="https://www.weather4d.com/fr/">Weather4D</a>.</li>
-		</ul>
-		<ul>
 			<li>Sailgrib Weather Routing pour Android propose aussi un
 			module de routage <a href="https://www.sailgrib.com/">SailGrib</a>.</li>
 			<li>Expedition&nbsp;:</li>
@@ -1405,6 +1472,7 @@ grib_get_data -L &quot;%.2lf %.2lf&quot; -F &quot;%.2lf&quot; -m -999999 -w shor
 			et offre des fonctionnalités pour le calcul d'isochrones. Site
 			Web&nbsp;: SeaWeather on GitHub. 
 			</li>
+         <li>Voir aussi <a href="https://www.scannav.com/GB/home.php">SCANNAV</a></li>
 		</ul>
 
 <h1 id="chap15">15. Approches en open source </h1>
@@ -1419,6 +1487,11 @@ grib_get_data -L &quot;%.2lf %.2lf&quot; -F &quot;%.2lf&quot; -m -999999 -w shor
 		<p>Site Web&nbsp;: <a href="https://opencpn.org/index.html">openCPN</a>.</p>
 
 		<p>Installation sous Ubuntu&nbsp;: <code>sudo apt-get install opencpn</code></p>
+
+      <p>Les cartes marines du NOAA (US...) sont gratuites</p>
+      <p>Pour la France, la recommandation est d'installer le plugin o-charts
+      et d'aller sur le site o-charts <a href="https://o-charts.org/"> o_charts </a> pour faire 
+      l'acquisition à prix modique de l'ensemble des cartes atlantiques.</p>
 
 		<h2>QtVlm</h2>
 
@@ -1476,9 +1549,17 @@ grib_get_data -L &quot;%.2lf %.2lf&quot; -F &quot;%.2lf&quot; -m -999999 -w shor
 		<p>Par contre, il est ignoré entre le dernier isochrone et la
 		destination (fonction GoalP).</p>
 
+		<h2>16.2. Antemeridian</h2>
+      Lorque le Grib est à cheval sur l'antéméridien (180°), le comportement du logiciel peut ne pas être approprié.
+      Notamment en ce qui concerne la visualisation.
+
+      <h2>16.3. Téléchargements NOAA ou ECMWF</h2>
+      Suite à des téléchargements volumineux, des cas de plantage sont observés. Le téléchargement se fait. Mais il peut être nécessaire de relancer
+      le logiciel. Le nouveau Grib sera bien pris en compte.
+
 <h1 id="chap17">17. Éléments bibliographiques </h1>
 
-		<p>Livres&nbsp;:</p>
+		<h2>Livres</h2>
 
 		<p>&quot;Weather Routing: A Guide to Modern Meteorological
 		Techniques&quot; par David Burch Ce livre se concentre sur le
@@ -1496,7 +1577,7 @@ grib_get_data -L &quot;%.2lf %.2lf&quot; -F &quot;%.2lf&quot; -m -999999 -w shor
 		Burch Un guide complet sur la météorologie maritime, couvrant
 		également les technologies modernes telles que les fichiers Grib.</p>
 
-		<p>Articles et Ressources en Ligne&nbsp;: </p>
+		<h2>Articles et Ressources en Lignes</h2>
 
 		<p>&quot;The Art and Science of Racing Sailboats&quot; par Steve
 		Colgate et Daniela Pegna Cet article explore les aspects techniques
@@ -1517,14 +1598,22 @@ grib_get_data -L &quot;%.2lf %.2lf&quot; -F &quot;%.2lf&quot; -m -999999 -w shor
 		article pratique sur les principes et les méthodes du routage
 		météorologique en voile.</p>
 
-		<p>Thèse</p>
+   <h2> Thèses </h2>
 		<p><a href="http://homepages.engineering.auckland.a/">http://homepages.engineering.auckland.a</a></p>
+
+   <h2> Liens académiques </h2>
+   <ul>
+      <li> <a href = "https://orsnz.org.nz/conf35/papers/AndrewMasonAndy.pdf"> Optimal Sailing Routes witd Uncertain Weatder, Allsop Philpott Mason, Department of Engineering Science, University of Auckland, New Zealand, 2000</a></li>
+
+      <li> <a href = "https://www.researchgate.net/publication/255596181_Optimising_Yacht_Routes_under_Uncertainty">Optimising Yacht Routes under Uncertainty by Andy Philpott, Yacht Research Unit,University of Auckland, New Zealand Andrew Mason, Department of Engineering Science, University of Auckland, New Zealand, 2001</a></li>
+   </ul>
 
 <h1 id="chap18">18. Programmation</h1>
 	<h2>18.1. Principes généraux </h2>
 
    <p> Le logiciel Rcube est écrit en langage C. La version c11 est utilisée. Il existe 3 petits scripts python 
-      dans le répertoire py, nécessaires pour le chargement des fichiers Grib par mail.</p>
+      dans le répertoire py, utilisables pour le chargement des fichiers Grib par mail. On peut se passer de ces scripts car l
+      l'équivalent a été développé en langage C. Pour éviter les scripts python, parametre PYTHON:0</p>
 
    <p>Le graphisme est géré en langage C avec GTK4 avec une version supérieure à:&nbsp;4.1</p>
 
@@ -1538,7 +1627,7 @@ grib_get_data -L &quot;%.2lf %.2lf&quot; -F &quot;%.2lf&quot; -m -999999 -w shor
       <li>Les librairies liées à  GTK4, et notamment la Glib,</li>
       <li>shapelib (pour la représentation des fonds de carte),</li>
       <li>eccodes (pour le décodage des fichiers Grib,</li>
-      <li>curl (pour le téléchargement de fichiers Grib.</li>
+      <li>curl (pour le téléchargement de fichiers Grib).</li>
    </ul>
 
    <p>Le répertoire csource4 contient le code C.</p>
@@ -1578,6 +1667,11 @@ grib_get_data -L &quot;%.2lf %.2lf&quot; -F &quot;%.2lf&quot; -m -999999 -w shor
          </tr>
          <tr>
             <td>rutil.h</td><td>Interface de rutil (prototypes des fonctions externes).</td>
+         <tr>
+            <td>mailutil.c</td><td>Interface pour la gestion mail.</td>
+         </tr>
+         <tr>
+            <td>mailutil.h</td><td>Interface de mailutil (prototypes des fonctions externes).</td>
          </tr>
          <tr>
             <td>show4.c</td><td>Le main et les interfaces graphiques s'appuyant sur GTK4.</td>
@@ -1606,7 +1700,9 @@ grib_get_data -L &quot;%.2lf %.2lf&quot; -F &quot;%.2lf&quot; -m -999999 -w shor
 <code>const int X_TOP = 1;</code>
 </pre>
 
-		<p>Les noms des variables et fonction sont en minuscules.</p>
+		<p>Les noms des variables et fonction sont en minuscules, en utilidant la notation camel.</p>
+      
+      <p>Exemple : ceciEstConformeNotationCamel</p>
 
 		<p>Les nom des définitions de types commencent par une majuscule, le
 		reste est en majuscule.</p>
@@ -1674,39 +1770,81 @@ G_PI
 MAX
 MIN
 CLAMP
+G_APPROX_VALUE
 GPOINTER_TO_INT
 GINT_TO_POINTER
 </pre>
 <h3>Fonctions</h3>
+
+<p>String</p>
 <pre>
+g_ascii_isspace
 g_strlcat
 g_strlcpy
 g_utf8_strup
+g_utf8_casefold
+g_strdelimit
 g_strstrip
+g_str_has_prefix
+g_str_has_suffix
 g_strdup_printf
 g_markup_printf_escaped
+g_strstr_len
 g_strnfill
 g_strsplit
 g_strfreev
-g_free
-g_file_get_contents
-g_thread_new
+g_ascii_strdown
+g_string_new
+g_string_append
+g_string_free
+</pre>
+
+<p>Time</p>
+<pre>
 g_timeout_add
 g_timeout_add_seconds
 g_date_time_get_day_of_month
 g_date_time_get_month
 g_date_time_get_year
-g_locale_to_utf8
-g_clear_error
+g_date_time_new_utc
+g_date_time_unref
+</pre>
+
+<p>Regex </p>
+<pre>
 g_regex_new
 g_regex_match
 g_regex_unref
+</pre>
+
+<p>Hash Table </p>
+<pre>
 g_hash_table_new_full
 g_hash_table_insert
 g_hash_table_iter_init
 g_hash_table_iter_next
 g_hash_table_iter_remove
 g_hash_table_lookup
+g_hash_table_destroy
+</pre>
+
+<p>File</p>
+<pre>
+g_path_get_dirname
+g_path_get_basename
+g_file_get_contents
+g_file_get_path
+g_build_filename
+g_dir_open
+g_dir_close
+</pre>
+
+<p>misc</p>
+<pre>
+g_free
+g_locale_to_utf8
+g_clear_error
+g_thread_new
 </pre>
 
 		<h2>18.6. Lecture des données NMEA</h2>
@@ -1809,13 +1947,159 @@ SMTP_SCRIPT:     python3 /home/rr/routing/py/smtp.py  #script python pour l'envo
 </div>
 <div class="notes">
 
-<h2>Notes et liens </h2>
+<h2>Liens </h2>
 
 <p><a href= "../csources4/html/index.html">Doxygen</a></p>
 <p><a href= "docpar.txt">Documentation sur les paramètres</a></p>
 <p><a href= "clihelp.txt">Help pour le mode CLI (Command Line Interface)</a></p>
 <p><a href="https://saildocs.com/gribmodels">Informations sur les Grib models de Saildoc</a></p>
+<p><a href="https://nomads.ncep.noaa.gov/">Fichiers Grib NOAA</a></p>
+<p><a href="https://data.ecmwf.int/">Fichiers Grib ECMWF</a></p>
+<p><a href="https://meteo.data.gouv.fr/">Fichiers Grib Météo France</a></p>
+<p><a href="https://marine.meteoconsult.fr/services-marine/fichiers-grib">Fichiers Grib Meteo consult</a></p>
+
+<h2>Météo locale </h2>
+<table>
+   <tr>   
+      <td>Météo</td><td><div id = "meteo"></div></td>
+   </tr>
+   <tr>
+      <td>Température</td><td><div id = "temp"></div></td>
+   </tr>
+   <tr>
+      <td>Humidité</td><td><div id = "humide"></div></td>
+   </tr>
+   <tr>
+      <td>Vent</td><td><div id = "vent"></div></td>
+   </tr>
+   <tr>
+      <td>Pression</td><td><div id = "pression"></div></td>
+   </tr>
+</table>
+<p></p>
+
+<table>
+  <caption>Echelle Beaufort</caption>
+   <thead>
+   <tr>   
+      <th>Beaufort</th>
+      <th>Termes</th>
+      <th>Noeuds</th>
+      <th>Km/h</th>
+      <th>m/s</th>
+   </tr>
+   </thead>
+   <tr>
+      <td>0</td>
+      <td>Calme</td>
+      <td>0 à 1</td>
+      <td>0 à 1</td>
+      <td>0 à 1</td>
+   </tr>
+   <tr>
+      <td>1</td>
+      <td>Très légère brise</td>
+      <td>1 à 3</td>
+      <td>1 à 5</td>
+      <td>0.5 à 1.5</td>
+   </tr>
+   <tr>
+      <td>2</td>
+      <td>Légère brise</td>
+      <td>4 à 6</td>
+      <td>6 à 11</td>
+      <td>1.5 à 3.3</td>
+   </tr>
+   <tr>
+      <td>3</td>
+      <td>Petite brise</td>
+      <td>7 à 10</td>
+      <td>12 à 19</td>
+      <td>3.4 à 5.5</td>
+   </tr>
+   <tr>
+      <td>4</td>
+      <td>Jolie brise</td>
+      <td>11 à 16</td>
+      <td>29 à 28</td>
+      <td>5.6 à 8</td>
+   </tr>
+   <tr>
+      <td>5</td>
+      <td>Bonne brise</td>
+      <td>17 à 21</td>
+      <td>29 à 38</td>
+      <td>8 à 11</td>
+   </tr>
+   <tr>
+      <td>6</td>
+      <td>Vent frais</td>
+      <td>22 à 27</td>
+      <td>22 à 27</td>
+      <td>11 à 14</td>
+   </tr>
+   <tr>
+      <td>7</td>
+      <td>Grand frais</td>
+      <td>28 à 33</td>
+      <td>50 à 61</td>
+      <td>14 à 17</td>
+   </tr>
+   <tr>
+      <td>8</td>
+      <td>Coup de vent</td>
+      <td>34 à 40</td>
+      <td>62 à 74</td>
+      <td>17 à 21</td>
+   </tr>
+   <tr>
+      <td>9</td>
+      <td>Fort coup de vent</td>
+      <td>41 à 47</td>
+      <td>75 à 88</td>
+      <td>21 à 24.5</td>
+   </tr>
+   <tr>
+      <td>10</td>
+      <td>Tempête</td>
+      <td>48 à 55</td>
+      <td>89 à 102</td>
+      <td>24.4 à 28.4</td>
+   </tr>
+   <tr>
+      <td>11</td>
+      <td>Violente tempête</td>
+      <td>56 à 63</td>
+      <td>103 à 117</td>
+      <td>28.4 à 32.6</td>
+   </tr>
+   <tr>
+      <td>12</td>
+      <td>Ouragan</td>
+      <td>>= 64 </td>
+      <td>>= 118 </td>
+      <td>0 à 32.6</td>
+   </tr>
+</table>
+
+<h2>Les principaux sites marées en France</h2>
+<ul>
+   <li> <a href = "http://maree.info">Marée Info</a></li>
+   <li> <a href = "https://shom.fr">SHOM</a></li>
+</ul>
+
+<p><script src="https://services.data.shom.fr/hdm/vignette/petite/LE_POULIGUEN?locale=fr"></script></p>
+
+<h2>Autres liens utiles</h2>
+<ul>
+   <li> <a href = "https://www.premar-atlantique.gouv.fr/avis-urgents-aux-navigateurs"> AVURNAV Préfecture maritime</a></li>
+   <li> <a href = "https://francis-fustier.fr/"> MAC fanas : le site de Francis Fustier </a></li>
+   <li> <a href = "https://weather.mailasail.com/Franks-weather"> Weather by Frank Singleton </a></li>
+</ul>
+
+
 </div>
+
 </div>
 <hr>
 

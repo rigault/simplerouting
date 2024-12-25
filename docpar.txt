@@ -1,17 +1,19 @@
 Name              Comment
-WD:               Working Directory
+WD:               Working Directory. TO KEEP ON FIRST LINE !
+ALLWAYS_SEA:      If 1 (true) then there is no earth avoidance. Allways on sea.
 POI:              Point of Interests
 PORT:             Point of Interest (ports)
 POR:              Point of Origin (lat, lon)
 PDEST:            Point of Destination (lat, lon)
 WP:               Way Point (lat, lon). Severeal WP are accepted
+COMPETITOR:       lat, lon, name of competitor. Ex WP: 56.78, 45.18, GRHUM
 POR_NAME:         Name of Origin Point
 PDEST_NAME:       Name of Destination Point
 CGRIB:            Grib File Name
 CURRENT_GRIB:     Current Grib File Name
 MOST_RECENT_GRIB: 1 if most recent grib replace CGRIB 0 otherwise
 GRIB_RESOLUTION:  Resolution (lat, lon) requested for Grib files
-GRIB_TIME_STEP:   Step requested for Frib Files
+GRIB_TIME_STEP:   Step requested for Grib Files
 GRIB_TIME_MAX:    Max in hours requested for Grb Files
 POLAR:            Polar File Name
 WAVE_POL:         Wave Polar File Name
@@ -26,7 +28,7 @@ START_TIME:       Start Time in Hours after befinning of Grib
 T_STEP:           Time Step between Isochrones
 RANGE_COG:        Range COG in degrees for Isochrone Calculation
 COG_STEP:         COG Steps in degrees for Isochrone Calculation
-MAX_ISO:          Max number of Isochrones
+MAX_ISO:          Max number of Isochronesi, Deprecated
 SPECIAL:          Special purpose
 PENALTY0:         Penalty in minutes for virement de bort.
 PENALTY1:         Penalty in minutes for empannage.
@@ -43,31 +45,38 @@ CONST_CURRENT_S:  If > 0, Constant Currenet Speed in Knots
 CONST_CURRENT_D:  If CONST_WIND_TWS > 0, Constant Current Direction in degrees
 DUMPI:            Dump Isochrone Text File Name
 DUMPR:            Dump Route Text File Name
-PAR_INFO:         Parameter Infomation Text File Name
-OPT:              Optimizatin Algorithm
+PAR_INFO:         Parameter Information Text File Name
+OPT:              Optimization Algorithm
 ISOC_DISP:        Isochrone Display
 COLOR_DISP:       Color Wind Grib Display
 DMS_DISP:         Degree Minutes Second Display 
 WIND_DISP:        Wind Display
 GRID_DISP:        Grid Display (meridian and parallels) every degree
-AVR_OR_GUST_DISP: Wind Average or Wind Gust display
+INDICATOR_DISP:   Wind Average or Wind Gust or Waves height or Rain on Pressure display
 CURRENT_DISP:     Current Display
 WAVE_DISP:        Wave Display
 INFO_DISP:        Display Info digest
 AIS_DISP:         Display AIS info
+SHP_POINTS_DISP:  Display SHP files as points, not as shapes filled.
 LEVEL_POI_DISP:   Level of Point of Interest for Display
 SPEED_DISP:       Speed of display (fluidity)
 TECHNO_DISP:      Additionnal Info display for technical expert
-MAX_THETA:        Deprecated
 J_FACTOR:         For ForwardOptimization algorithm
 K_FACTOR:         For ForwardOptimization algorithm
 N_SECTORS:        Number of sectors. For ForwardOptimization algorithm
+PYTHON:           True if Python scripts defined by SMTP_SCRIPT, IMAP_TO_SEEN, IMAP_SCRIPT should be used
+CURL_SYS:         True if system command for curl get is used
 SMTP_SCRIPT:      SMTP script Name
 IMAP_TO_SEEN:     Script Name that translate messages to seeen 
 IMAP_SCRIPT:      IMAP script name
+SMTP_SERVER:      name of SMTP server. Example: smtps://smtp.orange.fr
+SMTP_USER_NAME:   name of user name when sending SMTP message to grib service provider. Example: meteoinfoforrr@orange.fr
+IMAP_SERVER:      IMAP server name. Example: imap.orange.fr
+IMAP_USER_NAME:   IMAP user name. Example: rene.rigault@wanadoo.fr
+IMAP_MAIL_BOX:    IMAP mail box. Example: inbox/meteoinfoforrr@orange.fr
 MAIL_PW:          Mail Password (be careful)
 WEBKIT:           WebKit name
 EDITOR:           Editor Name
 SPREADSHEET:      SpreadSheet name (be careful)
 FORBID_ZONE:      Specification of Forbidden Zone
-NMEA:             NMEA port folloewed by index of speed. eg. NMEA: /dev/ttyUSB0, 14
+NMEA:             NMEA port followed by index of speed. eg. NMEA: /dev/ttyUSB0, 14
