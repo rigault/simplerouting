@@ -7,7 +7,7 @@
 #define N_METEO_CONSULT_CURRENT_URL 6
 #define METEO_CONSULT_WIND_DELAY    5  // nb hours after time run to get new grib
 #define METEO_CONSULT_CURRENT_DELAY 12
-#define NOAA_DELAY                  5
+#define NOAA_DELAY                  4
 #define ECMWF_DELAY                 8
 #define METEO_CONSULT_ROOT_GRIB_URL "https://static1.mclcm.net/mc2020/int/cartes/marine/grib/"
 #define NOAA_ROOT_GRIB_URL          "https://nomads.ncep.noaa.gov/cgi-bin/"
@@ -417,6 +417,7 @@ typedef struct {
    char pDestName [MAX_SIZE_NAME];           // Name of pDest if exist
    int style;                                // style of isochrones
    int showColors;                           // colors for wind speed
+   char description [MAX_SIZE_LINE];         // script used to send request for grib files
    char smtpScript [MAX_SIZE_LINE];          // script used to send request for grib files
    char imapToSeen [MAX_SIZE_LINE];          // script used to flag all messages to seen
    char imapScript [MAX_SIZE_LINE];          // script used to receive grib files
@@ -440,9 +441,7 @@ typedef struct {
    double dayEfficiency;                     // efficiency of team at day
    double xWind;                             // multiply factor for wind
    double maxWind;                           // max Wind supported
-   char editor [MAX_SIZE_NAME];              // name of text file editor
    char webkit [MAX_SIZE_NAME];              // name of webkit application
-   char spreadsheet [MAX_SIZE_NAME];         // name of spreadshhet application
    int  curlSys;                             // true if curl wuth system
    int  python;                              // true if python script used for mail grib request
    char smtpServer [MAX_SIZE_NAME];          // SMTP server name

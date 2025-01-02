@@ -76,8 +76,6 @@ FlowP *tGribData [2]= {NULL, NULL};  // wind, current
 Poi tPoi [MAX_N_POI];
 int nPoi = 0;
 
-int readGribRet = GRIB_RUNNING;     // to check if readGrib is terminated
-
 /*! for shp file */
 int  nTotEntities = 0;              // cumulated number of entities
 Entity *entities = NULL;
@@ -400,7 +398,7 @@ char *dollarSubstitute (const char* str, char *res, size_t maxLen) {
 #endif
 }
 
-/*! copy str in res with adding newline every n character */ 
+/*! copy str in res with adding newline every n character DEPRECATED */ 
 char *strCpyMaxWidth (const char *str, int n, char *res, size_t maxLen) {
     if (!str || n <= 0 || !res) {
         return NULL;
@@ -1479,7 +1477,7 @@ static inline int indexOf (int timeStep, double lat, double lon, const Zone *zon
 }
 
 /*! read grib file using eccodes C API 
-   return readGribRet */
+   return true if OK */
 bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
    FILE* f = NULL;
    int err = 0, iGrib;
@@ -1523,7 +1521,7 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
       fprintf (stderr, "In readGribAll, Errorcalloc tGribData [iFlow]\n");
       return false;
    }
-   printf ("In readGribAll : %s allocated\n", 
+   printf ("In readGribAll.: %s allocated\n", 
       formatThousandSep (str, sizeof (str), sizeof(FlowP) * (zone->nTimeStamp + 1) * zone->nbLat * zone->nbLon));
    
    // Message handle. Required in all the ecCodes calls acting on a message.
@@ -2015,14 +2013,17 @@ bool readParam (const char *fileName) {
       if ((!*pLine) || *pLine == '#' || *pLine == '\n') continue;
       if ((pt = strchr (pLine, '#')) != NULL)               // comment elimination
          *pt = '\0';
-      if (sscanf (pLine, "ALLWAYS_SEA:%d", &par.allwaysSea) > 0);
+
+      if (sscanf (pLine, "DESC:%255[^\n]s", par.description) > 0)
+         g_strstrip (par.description);
+      else if (sscanf (pLine, "ALLWAYS_SEA:%d", &par.allwaysSea) > 0);
       else if (sscanf (pLine, "WD:%255s", par.workingDir) > 0);  // should be first !!!
       else if (sscanf (pLine, "POI:%255s", str) > 0) 
          buildRootName (str, par.poiFileName, sizeof (par.poiFileName));
       else if (sscanf (pLine, "PORT:%255s", str) > 0)
          buildRootName (str, par.portFileName, sizeof (par.portFileName));
       else if (strstr (pLine, "POR:") != NULL) {
-            if (analyseCoord (strchr (pLine, ':') + 1, &par.pOr.lat, &par.pOr.lon)) {
+         if (analyseCoord (strchr (pLine, ':') + 1, &par.pOr.lat, &par.pOr.lon)) {
             //par.pOr.lon = lonCanonize (par.pOr.lon);
             par.pOr.id = -1;
             par.pOr.father = -1;
@@ -2143,12 +2144,9 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "AIS_DISP:%d", &par.aisDisp) > 0);
       else if (sscanf (pLine, "TECHNO_DISP:%d", &par.techno) > 0);
       else if (sscanf (pLine, "SHP_POINTS_DISP:%d", &par.shpPointsDisp) > 0);
+      else if (sscanf (pLine, "DESC:%255[^\n]s", par.description) > 0);
       else if (sscanf (pLine, "WEBKIT:%255[^\n]s", par.webkit) > 0)
          g_strstrip (par.webkit);
-      else if (sscanf (pLine, "EDITOR:%255[^\n]s", par.editor) > 0)
-         g_strstrip (par.editor);
-      else if (sscanf (pLine, "SPREADSHEET:%255[^\n]s", par.spreadsheet) > 0)
-         g_strstrip (par.spreadsheet);
       else if ((strstr (pLine, "FORBID_ZONE:") != NULL) && (par.nForbidZone < MAX_N_FORBID_ZONE)) {
          pLine = strchr (pLine, ':') + 1;
          g_strstrip (pLine);
@@ -2193,6 +2191,7 @@ bool writeParam (const char *fileName, bool header, bool password) {
    }
    if (header) 
       fprintf (f, "Name             Value\n");
+   fprintf (f, "DESC:            %s\n", par.description);
    fprintf (f, "WD:              %s\n", par.workingDir);
    fprintf (f, "ALLWAYS_SEA:     %d\n", par.allwaysSea);
    fprintf (f, "POI:             %s\n", par.poiFileName);
@@ -2205,6 +2204,8 @@ bool writeParam (const char *fileName, bool header, bool password) {
    latToStr (par.pDest.lat, par.dispDms, strLat, sizeof (strLat));
    lonToStr (par.pDest.lon, par.dispDms, strLon, sizeof (strLon));
    fprintf (f, "PDEST:           %.2lf,%.2lf #%s,%s\n", par.pDest.lat, par.pDest.lon, strLat, strLon);
+
+      
 
    if (par.pOrName [0] != '\0')
       fprintf (f, "POR_NAME:        %s\n", par.pOrName);
@@ -2298,8 +2299,6 @@ bool writeParam (const char *fileName, bool header, bool password) {
    fprintf (f, "IMAP_TO_SEEN:    %s\n", par.imapToSeen);
    fprintf (f, "IMAP_SCRIPT:     %s\n", par.imapScript);
    fprintf (f, "WEBKIT:          %s\n", par.webkit);
-   fprintf (f, "EDITOR:          %s\n", par.editor);
-   fprintf (f, "SPREADSHEET:     %s\n", par.spreadsheet);
    fprintf (f, "SMTP_SERVER:     %s\n", par.smtpServer);
    fprintf (f, "SMTP_USER_NAME:  %s\n", par.smtpUserName);
    fprintf (f, "IMAP_SERVER:     %s\n", par.imapServer);

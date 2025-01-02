@@ -657,7 +657,7 @@ static int configureSerialPort (int fd, int baudRate) {
 /*! read serial USB port to get NMEA GPS AIS info, Unix environment */
 void *getNmea (gpointer x) {
    int index = GPOINTER_TO_INT (x);
-   char buffer[MAX_SIZE_NMEA];
+   char buffer [MAX_SIZE_NMEA];
    int bytes_read;
 
    int fd = open (par.nmea [index].portName, O_RDONLY | O_NOCTTY | O_NDELAY); // serial port

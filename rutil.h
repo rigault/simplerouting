@@ -27,8 +27,6 @@ extern FlowP *tGribData [];            // wind, current
 extern Poi tPoi [MAX_N_POI];
 extern int nPoi;
 
-extern int readGribRet;                // to check if readGrib is terminated
-
 /*! for shp files */
 extern int    nTotEntities;
 extern Entity *entities;

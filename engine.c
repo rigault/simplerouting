@@ -762,7 +762,6 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
       free (tempList);
       return -1;
    } 
-   printf ("time Step: %.2lf, maxNIsoc: %d\n", dt, maxNIsoc);
 
    Pp *tempIsocArray = (Pp*) realloc (isocArray, maxNIsoc * MAX_SIZE_ISOC * sizeof(Pp));
    if (tempIsocArray == NULL) {
@@ -846,7 +845,7 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
          isoDesc [nIsoc].closest = index; 
          isoDesc [nIsoc].toIndexWp = toIndexWp; 
          *lastStepDuration = timeLastStep;
-         printf ("In routing, Destination reached to WP: %d\n", toIndexWp);
+         printf ("In routing, Destination reached to WP %d for %s\n", toIndexWp, competitors.t [competitors.runIndex].name);
          free (tempList);
          return nIsoc + 1;
       }
@@ -998,10 +997,10 @@ void *bestTimeDeparture () {
       chooseDeparture.minDuration = minDuration;
       chooseDeparture.maxDuration = maxDuration;
       routingLaunch ();
-      chooseDeparture.ret = EXIST_SOLUTION;
+      g_atomic_int_set (&chooseDeparture.ret, EXIST_SOLUTION);
    }  
    else {
-      chooseDeparture.ret = NO_SOLUTION;
+      g_atomic_int_set (&chooseDeparture.ret, NO_SOLUTION);
       printf ("No solution\n");
    }
    return NULL;
@@ -1037,7 +1036,7 @@ void *allCompetitors () {
       par.pOr.lon = competitors.t [i].lon;
       routingLaunch ();
       if (route.ret < 0) {
-         competitors.ret = NO_SOLUTION;
+         g_atomic_int_set (&competitors.ret, NO_SOLUTION);
          fprintf (stderr, "In allCompetitors, No solution for competitor: %s with return: %d\n", competitors.t[i].name, route.ret);
          return NULL;
       }
@@ -1046,7 +1045,7 @@ void *allCompetitors () {
    if (competitors.n > 1)
       qsort (competitors.t, competitors.n, sizeof(Competitor), compareDuration);
    
-   competitors.ret = EXIST_SOLUTION;
+   g_atomic_int_set (&competitors.ret, EXIST_SOLUTION);
    return NULL;
 }
 

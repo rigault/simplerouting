@@ -81,12 +81,12 @@ int main (int argc, char *argv []) {
    char errMessage [MAX_SIZE_TEXT];
    int deb = 1;
    if (argc <= 1) {
-      fprintf (stderr, "Synopsys: %s <file0> <file1> <file2>...\n", argv [0]);
+      fprintf (stderr, "In main, Synopsys: %s <file0> <file1> <file2>...\n", argv [0]);
       exit (EXIT_FAILURE);
    }  
    if (argc == 3 && strcmp (argv [1], "-a") == 0) {
       if (! readPolar (argv [2], &polMatTab [0], errMessage, sizeof (errMessage))) {
-         fprintf (stderr, "Impossible to read: %s: %s\n", argv [2], errMessage);
+         fprintf (stderr, "In main, Impossible to read: %s: %s\n", argv [2], errMessage);
          exit (EXIT_FAILURE);
       }
       analyse (&polMatTab [0]);
@@ -99,12 +99,12 @@ int main (int argc, char *argv []) {
    }
 
    if ((argc - deb) >= MAX_POLAR_FILES) {
-      fprintf (stderr, "Number of polar files exceed limit: %d\n", MAX_POLAR_FILES);
+      fprintf (stderr, "In main, Number of polar files exceed limit: %d\n", MAX_POLAR_FILES);
       exit (EXIT_FAILURE);
    }
    for (int i = deb; i < argc; i++) {
       if (! readPolar (argv [i], &polMatTab [i - deb], errMessage, sizeof (errMessage))) {
-         fprintf (stderr, "Impossible to read: %s: %s\n", argv [i], errMessage);
+         fprintf (stderr, "In main, Impossible to read: %s: %s\n", argv [i], errMessage);
          exit (EXIT_FAILURE);
       }
       if (verbose)

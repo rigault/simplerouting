@@ -13,6 +13,7 @@
 static void initScenarioOption (void) {
    char str [MAX_SIZE_LINE];
    char errMessage [MAX_SIZE_TEXT] = "";
+   int readGribRet;
    if (par.gribFileName [0] != '\0') {
       readGribRet = readGribAll (par.gribFileName, &zone, WIND);
       if (readGribRet == 0) {
