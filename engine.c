@@ -559,7 +559,7 @@ bool routeToStr (const SailRoute *route, char *str, size_t maxLen) {
    if (maxLen < MAX_SIZE_LINE)
       return false;
 
-   g_strlcpy (str, "  No  WP Lat        Lon         Date-Time         M/T/B  COG\
+   g_strlcpy (str, "  No  WP Lat        Lon         Date-Time         M/T/B  HDG\
      Dist     SOG  Twd   Twa      Tws    Gust  Awa      Aws   Waves\n", MAX_SIZE_LINE);
    snprintf (line, MAX_SIZE_LINE, " pOr %3d %-12s%-12s %6s %6s %4d° %7.2lf %7.2lf %4d° %4.0lf° %7.2lf %7.2lf %4.0lf° %7.2lf %7.2lf\n",\
       route->t[0].toIndexWp,\
@@ -567,7 +567,7 @@ bool routeToStr (const SailRoute *route, char *str, size_t maxLen) {
       lonToStr (route->t[0].lon, par.dispDms, strLon, sizeof (strLon)),\
       newDate (zone.dataDate [0], (zone.dataTime [0]/100) + route->t[0].time, strDate, sizeof (strDate)),\
       motorTribordBabord (route->t[0].motor, route->t[0].amure, shortStr, SMALL_SIZE),\
-      ((int) (route->t[0].lCap + 360) % 360), route->t[0].od, route->t[0].sog,\
+      ((int) (route->t[0].oCap + 360) % 360), route->t[0].od, route->t[0].sog,\
       (int) (route->t[0].twd + 360) % 360,\
       twa, route->t[0].tws,\
       MS_TO_KN * route->t[0].g, awa, aws, route->t[0].w);
@@ -588,7 +588,7 @@ bool routeToStr (const SailRoute *route, char *str, size_t maxLen) {
             lonToStr (route->t[i].lon, par.dispDms, strLon, sizeof (strLon)),\
             newDate (zone.dataDate [0], (zone.dataTime [0]/100) + route->t[i].time, strDate, sizeof (strDate)), \
             motorTribordBabord (route->t[i].motor, route->t[i].amure, shortStr, SMALL_SIZE), \
-            ((int) (route->t[i].lCap  + 360) % 360), route->t[i].od, route->t[i].sog,\
+            ((int) (route->t[i].oCap  + 360) % 360), route->t[i].od, route->t[i].sog,\
             (int) (route->t[i].twd + 360) % 360,\
             fTwa (route->t[i].lCap, route->t[i].twd), route->t[i].tws,\
             MS_TO_KN * route->t[i].g, awa, aws, route->t[i].w);
@@ -608,9 +608,12 @@ bool routeToStr (const SailRoute *route, char *str, size_t maxLen) {
    g_strlcat (str, line, maxLen);
 
    newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours + route->duration, strDate, sizeof (strDate));
-   snprintf (line, MAX_SIZE_LINE, " Arrival Date&Time: %s", newDate (zone.dataDate [0], \
+   snprintf (line, MAX_SIZE_LINE, " Arrival Date&Time: %s\n", newDate (zone.dataDate [0], \
       zone.dataTime [0]/100 + par.startTimeInHours + route->duration, strDate, sizeof (strDate)));
    g_strlcat (str, line, maxLen);
+   snprintf (line, MAX_SIZE_LINE, " Competitor       : %s\n", competitors.t [competitors.runIndex].name);
+   g_strlcat (str, line, maxLen);
+   
    return true;
 }
 
@@ -1016,15 +1019,6 @@ static void updateCompetitorsDashboard (int i, double duration) {
    competitors.t [i].dist = orthoDist (competitors.t [i].lat, competitors.t [i].lon, par.pDest.lat, par.pDest.lon);
 }
 
-/*! compare competittor duration for qsort */
-static int compareDuration (const void *a, const void *b) {
-    const Competitor *compA = (const Competitor *) a;
-    const Competitor *compB = (const Competitor *) b;
-    if (compA->duration < compB->duration) return -1;
-    if (compA->duration > compB->duration) return 1;
-    return 0;
-}
-
 /*! launch all competitors */
 void *allCompetitors () {
    for (int i = 0; i < competitors.n; i += 1) // reset eta(s)
@@ -1042,8 +1036,6 @@ void *allCompetitors () {
       }
       updateCompetitorsDashboard (i, route.duration); // set eta(s) and dist
    }
-   if (competitors.n > 1)
-      qsort (competitors.t, competitors.n, sizeof(Competitor), compareDuration);
    
    g_atomic_int_set (&competitors.ret, EXIST_SOLUTION);
    return NULL;
@@ -1068,32 +1060,45 @@ static char *delayToStr (double delay, char *str, size_t maxlen) {
    return str;
 }
 
+/*! compare competittor duration for qsort */
+static int compareDuration (const void *a, const void *b) {
+    const Competitor *compA = (const Competitor *) a;
+    const Competitor *compB = (const Competitor *) b;
+    if (compA->duration < compB->duration) return -1;
+    if (compA->duration > compB->duration) return 1;
+    return 0;
+}
+
 /*! translate competitors strct in a string  */
-void competitorsToStr (char *buffer, size_t maxLen) {
+void competitorsToStr (CompetitorsList *copyComp, char *buffer, size_t maxLen) {
    char strDep [MAX_SIZE_DATE];
    char strDelay [MAX_SIZE_LINE], strMainDelay [MAX_SIZE_LINE];
    char line [MAX_SIZE_TEXT];
    char strLat[MAX_SIZE_NAME], strLon[MAX_SIZE_NAME];
    double dist;
-   const int iMain = mainCompetitor ();
 
-   g_strlcpy (buffer, "Name;                   Lat.;        Lon.;  Dist To Main;              ETA;     Dist;  To Best Delay;  To Main Delay\n", maxLen);
+   Competitor mainCompetitor = copyComp->t [0];
 
-   for (int i = 0; i < competitors.n; i++) {
-      latToStr (competitors.t[i].lat, par.dispDms, strLat, sizeof(strLat));
-      lonToStr (competitors.t[i].lon, par.dispDms, strLon, sizeof(strLon));
+   if (copyComp->n > 1)
+      qsort (copyComp->t, copyComp->n, sizeof(Competitor), compareDuration);
+   // winner index is 0
+
+   g_strlcpy (buffer, "Name;                   Lat.;        Lon.;  Dist To Main;              ETA;     Dist;    To Best Delay;    To Main Delay\n", maxLen);
+
+   for (int i = 0; i < copyComp->n; i++) {
+      latToStr (copyComp->t[i].lat, par.dispDms, strLat, sizeof(strLat));
+      lonToStr (copyComp->t[i].lon, par.dispDms, strLon, sizeof(strLon));
       
-      delayToStr (competitors.t [i].duration - competitors.t [0].duration, 
+      delayToStr (copyComp->t [i].duration - copyComp->t [0].duration, 
          strDelay, sizeof (strDelay));          // delay with the winner in hours translated in string
 
-      delayToStr (competitors.t [i].duration - competitors.t [iMain].duration, 
+      delayToStr (copyComp->t [i].duration - mainCompetitor.duration, // main player 
          strMainDelay, sizeof (strMainDelay));  // delay between main and others in hours translated in string
 
-      if (i == iMain) dist = 0;
-      else dist = orthoDist (competitors.t [i].lat, competitors.t [i].lon, competitors.t [iMain].lat, competitors.t [iMain].lon);
+      dist = orthoDist (copyComp->t [i].lat, copyComp->t [i].lon, mainCompetitor.lat, mainCompetitor.lon);
 
-      snprintf (line, sizeof (line), "%-16s;%12s; %12s;      %8.2lf; %16s; %8.2lf; %14s; %14s\n", 
-         competitors.t[i].name, strLat, strLon, dist, competitors.t[i].strETA, competitors.t[i].dist, strDelay, strMainDelay);
+      snprintf (line, sizeof (line), "%-16s;%12s; %12s;      %8.2lf; %16s; %8.2lf; %16s; %16s\n", 
+         copyComp->t[i].name, strLat, strLon, dist, copyComp->t[i].strETA, copyComp->t[i].dist, strDelay, strMainDelay);
       g_strlcat (buffer, line, maxLen);
    }
 

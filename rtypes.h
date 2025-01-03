@@ -318,22 +318,20 @@ typedef struct {
 
 /*! Point for competitor */
 typedef struct {
+   int    colorIndex;                      // index used to select color
    double lat;
    double lon;
-   bool   allRun;                          // true if all competitors will run at same time
    double dist;                            // Orthodromic distance to destination 
    double duration;                        // in hours, duration of the trip.
    char   strETA [MAX_SIZE_DATE];          // estimated Time of Arrival
-   bool   main;                            // main competitor
    char   name [MAX_SIZE_NAME];
 } Competitor;
 
 /* list of competitors */
 typedef struct {
-   int n;                                  // numer of competitors
+   int n;                                  // number of competitors
    int runIndex;                           // index of last competitor running. -1 if all run !
    int ret;                                // return of allCompetitors running function
-   int main;                               
    Competitor t [MAX_N_COMPETITORS];
 } CompetitorsList;
 

@@ -147,6 +147,40 @@ void applySyntaxHighlight(GtkSourceBuffer *sourceBuffer) {
    gtk_text_buffer_apply_tag (GTK_TEXT_BUFFER (sourceBuffer), tag, &start, &end);
 }
 
+
+/*! Comments in green */
+void applyCommentHighlighting (GtkSourceBuffer *source_buffer) {
+   GtkTextTagTable *tag_table = gtk_text_buffer_get_tag_table(GTK_TEXT_BUFFER(source_buffer));
+   GtkTextTag *comment_tag = gtk_text_tag_table_lookup(tag_table, "comment");
+
+   if (!comment_tag) {
+      comment_tag = gtk_text_buffer_create_tag(GTK_TEXT_BUFFER(source_buffer), 
+                                               "comment",
+                                               "foreground", "green", 
+                                               "style", PANGO_STYLE_ITALIC, 
+                                               NULL);
+   }
+   GtkTextIter start, end;
+
+   // delete old tagd
+   gtk_text_buffer_get_start_iter(GTK_TEXT_BUFFER(source_buffer), &start);
+   gtk_text_buffer_get_end_iter(GTK_TEXT_BUFFER(source_buffer), &end);
+   gtk_text_buffer_remove_tag_by_name(GTK_TEXT_BUFFER(source_buffer), "comment", &start, &end);
+
+   // apply tag
+   gtk_text_buffer_get_start_iter(GTK_TEXT_BUFFER(source_buffer), &start);
+   while (gtk_text_iter_forward_search(&start, "#", GTK_TEXT_SEARCH_VISIBLE_ONLY, &start, &end, NULL)) {
+      GtkTextIter line_end = start;
+      gtk_text_iter_forward_to_line_end(&line_end);
+      gtk_text_buffer_apply_tag(GTK_TEXT_BUFFER(source_buffer), comment_tag, &start, &line_end);
+      gtk_text_iter_forward_line(&start);
+   }
+}
+
+void onBufferChanged(GtkTextBuffer *buffer, gpointer user_data) {
+   applyCommentHighlighting (GTK_SOURCE_BUFFER(buffer));
+}
+
 /*! simple test editor with finder, copy and save buttons */
 bool editor (GtkApplication *app, const char *fileName,  Callback callback) {
    FILE *file = fopen (fileName, "r");
@@ -187,6 +221,7 @@ bool editor (GtkApplication *app, const char *fileName,  Callback callback) {
    
    // Appliquer la coloration syntaxique à la première ligne
    applySyntaxHighlight (sourceBuffer);
+   applyCommentHighlighting (GTK_SOURCE_BUFFER(sourceBuffer));
 
    // Scroll bar creation
    GtkWidget *scroll = gtk_scrolled_window_new ();
@@ -223,6 +258,7 @@ bool editor (GtkApplication *app, const char *fileName,  Callback callback) {
    g_signal_connect (searchClicButton, "clicked", G_CALLBACK (onSearchClicked), data);
    g_signal_connect (pasteButton, "clicked", G_CALLBACK (onCopyClicked), data);
    g_signal_connect (windowEditor, "close-request", G_CALLBACK (callback), windowEditor);
+   g_signal_connect(sourceBuffer, "changed", G_CALLBACK (onBufferChanged), NULL);
 
    gtk_window_set_child (GTK_WINDOW (windowEditor), box);
    gtk_window_present (GTK_WINDOW (windowEditor));

@@ -41,7 +41,6 @@ extern CompetitorsList competitors;
 
 /*! functions defined in rutil.c */
 extern void   removeAllTmpFilesWithPrefix (const char *prefix);
-extern int    mainCompetitor ();
 extern double offsetLocalUTC (void);
 extern double diffTimeBetweenNowAndGribOrigin (long intDate, double nHours);
 extern void   *commandRun (void *data);

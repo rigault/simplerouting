@@ -17,4 +17,4 @@ extern void    *routingLaunch ();
 extern void    *bestTimeDeparture ();
 extern void    *allCompetitors ();
 extern void    freeHistoryRoute ();
-extern void    competitorsToStr (char *buffer, size_t maxLen);
+extern void    competitorsToStr (CompetitorsList *copyComp, char *buffer, size_t maxLen);

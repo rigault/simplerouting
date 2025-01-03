@@ -98,17 +98,6 @@ const char *METEO_CONSULT_CURRENT_URL [N_METEO_CONSULT_CURRENT_URL * 2] = {
    "Gascogne",          "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Gascogne.grb"
 };
 
-/*! find index of main competitor. If no competitor, number 0 is selected */
-int mainCompetitor () {
-   if (competitors.n == 0)
-      return 0;
-   for (int i = 0; i < competitors.n; i += 1) {
-      if (competitors.t[i].main)
-         return i;
-   }
-   return 0;
-}
-
 /*!remove all .tmp file with prefix */
 void removeAllTmpFilesWithPrefix (const char *prefix) {
    gchar *directory = g_path_get_dirname (prefix); 
@@ -2048,18 +2037,21 @@ bool readParam (const char *fileName) {
          if (competitors.n > MAX_N_COMPETITORS)
             fprintf (stderr, "In readParam, Error number of competitors exceeded; %d\n", MAX_N_COMPETITORS);
          else {
-            competitors.t [competitors.n].name [0] = '\0';
-            if (((pt = strrchr (pLine, ';')) != NULL) && (sscanf (pt + 1, "%64s", competitors.t [competitors.n].name) > 0)) {
-               *pt = '\0'; // cut line
-               g_strstrip (competitors.t [competitors.n].name);
-            }
-            if (analyseCoord (strchr (pLine, ':') + 1, &competitors.t [competitors.n].lat, &competitors.t [competitors.n].lon)) {
-            // printf ("i:%d, lat: %.2lf, lon: %.2lf, %s\n\n", competitors.n, competitors.t [competitors.n].lat, competitors.t [competitors.n].lon, competitors.t [competitors.n].name);
-               if (competitors.n == 0) {
-                  par.pOr.lat = competitors.t [0].lat;
-                  par.pOr.lon = competitors.t [0].lon;
+            if (sscanf (pLine, "COMPETITOR:%d", &competitors.t [competitors.n].colorIndex) > 0) {
+               competitors.t [competitors.n].name [0] = '\0';
+               if (((pt = strrchr (pLine, ';')) != NULL) && (sscanf (pt + 1, "%64s", competitors.t [competitors.n].name) > 0)) {
+                  *pt = '\0'; // cut line
+                  g_strstrip (competitors.t [competitors.n].name);
                }
-               competitors.n += 1;
+               if (analyseCoord (strchr (pLine, ';') + 1, &competitors.t [competitors.n].lat, &competitors.t [competitors.n].lon)) {
+               // printf ("i:%d, lat: %.2lf, lon: %.2lf, %s\n\n", competitors.n, competitors.t [competitors.n].lat, 
+               //competitors.t [competitors.n].lon, competitors.t [competitors.n].name);
+                  if (competitors.n == 0) {
+                     par.pOr.lat = competitors.t [0].lat;
+                     par.pOr.lon = competitors.t [0].lon;
+                  }
+                  competitors.n += 1;
+               }
             }
          }
       }
@@ -2170,7 +2162,6 @@ bool readParam (const char *fileName) {
       par.storeMailPw = true;
    }
    if (competitors.n > 0) {
-      competitors.t[0].main = true; // default main competitor is 0
       par.pOr.lat = competitors.t [0].lat;
       par.pOr.lon = competitors.t [0].lon;
    }
@@ -2214,19 +2205,10 @@ bool writeParam (const char *fileName, bool header, bool password) {
    for (int i = 0; i < wayPoints.n; i++)
       fprintf (f, "WP:              %.2lf,%.2lf\n", wayPoints.t [i].lat, wayPoints.t [i].lon);
 
-   if (competitors.n > 0) {      // main competitor is first
-      int iMain = mainCompetitor ();
-      latToStr (competitors.t [iMain].lat, par.dispDms, strLat, sizeof (strLat));
-      lonToStr (competitors.t [iMain].lon, par.dispDms, strLon, sizeof (strLon));
-      fprintf (f, "COMPETITOR:        %s,%s; %s # main \n", strLat, strLon, competitors.t[iMain].name);
-   }
-   
    for (int i = 0; i < competitors.n; i++) { // other competitors
-      if (! competitors.t [i].main) {
-         latToStr (competitors.t [i].lat, par.dispDms, strLat, sizeof (strLat));
-         lonToStr (competitors.t [i].lon, par.dispDms, strLon, sizeof (strLon));
-         fprintf (f, "COMPETITOR:        %s,%s; %s\n", strLat, strLon, competitors.t[i].name);
-      }
+      latToStr (competitors.t [i].lat, par.dispDms, strLat, sizeof (strLat));
+      lonToStr (competitors.t [i].lon, par.dispDms, strLon, sizeof (strLon));
+      fprintf (f, "COMPETITOR:        %2d; %s,%s; %s\n", competitors.t[i].colorIndex, strLat, strLon, competitors.t[i].name);
    }
    fprintf (f, "TRACE:           %s\n", par.traceFileName);
    fprintf (f, "CGRIB:           %s\n", par.gribFileName);

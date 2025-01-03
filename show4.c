@@ -146,6 +146,11 @@ double vOffsetLocalUTC;
 GdkRGBA colors [] = {{1.0,0,0,1}, {0,1.0,0,1},  {0,0,1.0,1},{0.5,0.5,0,1},{0,0.5,0.5,1},{0.5,0,0.5,1},{0.2,0.2,0.2,1},{0.4,0.4,0.4,1},{0.8,0,0.2,1},{0.2,0,0.8,1}}; // Colors for Polar curve
 const int nColors = 10;
 
+// ship colors
+const GdkRGBA colShip [] = {{0.0, 0.0, 1.0, 1.0}, {1.0, 0.0, 0.0, 1.0}, {1.0, 165.0/255.0, 0.0, 1.0}, {0.5, 0.5, 0.5, 1.0}, {0.0, 1.0, 0.0, 1.0}, {1.0, 0.0, 1.0, 1.0}};
+const int MAX_N_COLOR_SHIP = 6;
+
+
 #define N_WIND_COLORS 6
 guint8 colorPalette [N_WIND_COLORS][3] = {{0,0,255}, {0, 255, 0}, {255, 255, 0}, {255, 153, 0}, {255, 0, 0}, {139, 0, 0}};
 // blue, green, yellow, orange, red, blacked red
@@ -1429,15 +1434,16 @@ static int findIndexInRouteNow () {
 
 /*! give the focus on points in history routes at theTime */
 static void focusOnPointInHistory (cairo_t *cr)  {
-   const int MAX_TYPE_SHIP = 5;
    if (route.n == 0) return;
    int i = findIndexInRoute (&route, theTime);
    if ((i < 0) || (i >= route.n)) return;
 
    for (int k = 0; k < historyRoute.n; k += 1) {
       if (historyRoute.r[k].n == 0) break;
+      int iComp = historyRoute.r[k].competitorIndex;
       if ((i >= 0) && (i < historyRoute.r[k].n)) {
-         drawShip (cr, "", getX (historyRoute.r[k].t[i].lon), getY (historyRoute.r[k].t[i].lat), k % MAX_TYPE_SHIP, historyRoute.r[k].t[i].lCap);
+         drawShip (cr, "", getX (historyRoute.r[k].t[i].lon), getY (historyRoute.r[k].t[i].lat),
+            competitors.t[iComp].colorIndex, historyRoute.r[k].t[i].lCap);
       }
    }
 }
@@ -1486,8 +1492,10 @@ static void focusOnPointInRoute (cairo_t *cr, SailRoute *route)  {
             (isDayLight (route->t[i].time, lat, lon)) ? "Day" : "Night");
    }
    // showUnicode (cr, BOAT_UNICODE, getX (lon), getY (lat) - 20);
-   if (i >= 0)
-      drawShip (cr, "", getX (lon), getY (lat), 0, route->t [i].lCap);
+   if (i >= 0) {
+      int iComp = route->competitorIndex;
+      drawShip (cr, "", getX (lon), getY (lat), competitors.t [iComp].colorIndex, route->t [i].lCap);
+   }
    gtk_label_set_text (GTK_LABEL(labelInfoRoute), sInfoRoute);
    // circle (cr, lon, lat, 00, 0.0, 1.0); // blue
 }
@@ -1579,7 +1587,10 @@ static void drawCompetitors (cairo_t *cr) {
    cairo_select_font_face (cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
    cairo_set_font_size (cr, 10);
    for (int i = 0; i < competitors.n; i++) {
-      circle (cr, competitors.t[i].lon, competitors.t[i].lat, 0.0, 0.0, 0.0);
+      int iComp = competitors.t[i].colorIndex;
+      GdkRGBA color = colShip [MIN (MAX_N_COLOR_SHIP - 1, iComp)];
+      circle (cr, competitors.t[i].lon, competitors.t[i].lat, color.red, color.green, color.blue);
+      //circle (cr, competitors.t[i].lon, competitors.t[i].lat, 0.0, 0.0, 0.0);
       x = getX (competitors.t[i].lon);
       y = getY (competitors.t[i].lat);
       cairo_move_to (cr, x+10, y);
@@ -1895,7 +1906,8 @@ static void statusErrorMessage (GtkWidget *statusbar, const char *message) {
 static void statusWarningMessage (GtkWidget *statusbar, const char *message) {
    const char *animStr[] = {"↖︎","↑","↗︎","→","↘︎","↓","↙︎","←"};
    static int count = 0;
-   char *pango_markup = g_strdup_printf ("<span foreground='green' weight='bold'>%s %s</span>", animStr [count], message);
+   char *pango_markup = g_strdup_printf ("<span foreground='green' weight='bold' font_family='monospace'> %s %s</span>", 
+      animStr [count], message);
    count = (count + 1) % 8;
    gtk_label_set_markup (GTK_LABEL(statusbar), pango_markup);
    g_free(pango_markup);
@@ -2587,8 +2599,8 @@ static gboolean allCompetitorsCheck (gpointer data) {
    case RUNNING: // not terminated
       g_mutex_lock (&warningMutex);
       int i = MAX (0, competitors.runIndex);
-      snprintf (str, sizeof (str),"Competitors count: %d  %s %.0lf%%", 
-         i, competitors.t [i].name, 100 * (double) i / (double) competitors.n);
+      snprintf (str, sizeof (str),"%.0lf%% Competitors count: %2d  %s", 
+         100 * (double) i / (double) competitors.n, i, competitors.t [i].name);
       statusWarningMessage (statusbar, str);
       g_mutex_unlock (&warningMutex);
       return TRUE;
@@ -2740,7 +2752,7 @@ static void fCalendar (struct tm *start) {
       gtk_string_list_append (competitorsList, str);
    }
    GtkWidget *dropDownCompetitors = gtk_drop_down_new (G_LIST_MODEL (competitorsList), NULL); 
-   int selected = mainCompetitor ();
+   int selected = 0;
    par.pOr.lat = competitors.t [selected].lat;
    par.pOr.lon = competitors.t [selected].lon;
    competitors.runIndex = selected;
@@ -3115,7 +3127,7 @@ static void onOkButtonDepClicked (GtkWidget *widget, gpointer theWindow) {
 
 /*! launch all routing in order to choose best departure time */
 static void onChooseDepartureButtonClicked (GtkWidget *widget, gpointer data) {
-   int main = mainCompetitor ();
+   int main = 0;
    par.pOr.lat = competitors .t [main].lat;
    par.pOr.lon = competitors .t [main].lon;
    if (! isInZone (par.pOr.lat, par.pOr.lon, &zone) && (par.constWindTws == 0)) {
@@ -3383,8 +3395,10 @@ static void editTrace () {
 static void traceAdd () {
    char fileName [MAX_SIZE_FILE_NAME];
    buildRootName (par.traceFileName, fileName, sizeof (fileName));
-   if (competitors.n > 0)
-      addTracePt (fileName, competitors.t [0].lat, competitors.t [0].lon);
+   if (competitors.n > 0) {
+      int iMain = 0;
+      addTracePt (fileName, competitors.t [iMain].lat, competitors.t [iMain].lon);
+   }
    else
       infoMessage ("No competitor", GTK_MESSAGE_WARNING);
    gtk_widget_queue_draw (drawing_area);
@@ -3445,7 +3459,6 @@ static void traceDump () {
    char title [MAX_SIZE_LINE];
    snprintf (title, MAX_SIZE_LINE, "Trace Info: %s", par.traceFileName);
    displayFile (buildRootName (par.traceFileName, str, sizeof (str)), title);
-   printf ("end traceDump\n");
 }
 
 /* call back for openScenario */
@@ -3502,6 +3515,7 @@ static void polygonDump () {
 /*! display competitors display */
 static void competitorsDump() {
    char *buffer = NULL;
+   CompetitorsList *copy = NULL;
 
    if (competitors.n == 0) {
       infoMessage ("No competiton done", GTK_MESSAGE_ERROR);
@@ -3512,8 +3526,14 @@ static void competitorsDump() {
       infoMessage ("Memory allocation issue", GTK_MESSAGE_ERROR);
       return;
    }
-
-   competitorsToStr (buffer, MAX_SIZE_BUFFER);
+   if ((copy = (CompetitorsList *) malloc (sizeof (CompetitorsList))) == NULL) {
+      fprintf (stderr, "In competitorDump: Error Malloc CompetitorsList"); 
+      infoMessage ("Memory allocation issue", GTK_MESSAGE_ERROR);
+      free (buffer);
+      return;
+   }
+   *copy = competitors; // copy because CompetitorsToStr sort the table
+   competitorsToStr (copy, buffer, MAX_SIZE_BUFFER);
    displayText (1200, 400, buffer, strlen (buffer), "Competitors Dashboard");
    free (buffer);
 }
@@ -3918,7 +3938,6 @@ static void routeGram () {
 /*! print the route from origin to destination or best point */
 static void routeDump () {
    char line [MAX_SIZE_LINE];
-   int cIndex = MAX (0, route.competitorIndex);
    char *buffer = NULL;
 
    if ((route.n <= 0) || (competitors.n == 0)) {
@@ -3932,7 +3951,7 @@ static void routeDump () {
    }
    routeToStr (&route, buffer, MAX_SIZE_BUFFER); 
    snprintf (line, sizeof (line), "%s %s", (route.destinationReached) ? "Destination reached" :\
-      "Destination unreached. Route to best point", competitors.t [cIndex].name);
+      "Destination unreached. Route to best point", competitors.t [competitors.runIndex].name);
    displayText (1400, 400, buffer, strlen (buffer), line);
    free (buffer);
 }
@@ -4609,7 +4628,7 @@ static void *getGribWebAll (void *user_data) {
 
          g_mutex_lock (&warningMutex);
          snprintf (statusbarWarningStr, sizeof (statusbarWarningStr), 
-            "Time Max: %3d Time Run: %02dZ   %3.0lf%%", timeMax, data->hhZ, 100 * (double) i / (double) (maxI * 1.1));
+            "Time Run: %02dZ Time Max: %3d  %3.0lf%%", data->hhZ, timeMax, 100 * (double) i / (double) (maxI * 1.1));
          g_mutex_unlock (&warningMutex);
 
          if (! curlGet (data->url, fileName, errMessage, sizeof (errMessage))) {
@@ -4633,7 +4652,7 @@ static void *getGribWebAll (void *user_data) {
 
          g_mutex_lock (&warningMutex);
          snprintf (statusbarWarningStr, sizeof (statusbarWarningStr), 
-            "Time Step: %3d/%3d Time Run: %02dZ  %3.0lf%%", i, timeMax, data->hhZ, 100 * (double) i / (double) (timeMax * 1.1));
+            "Time Run: %02dZ Time Step: %3d/%3d %3.0lf%%", data->hhZ, i, timeMax, 100 * (double) i / (double) (timeMax * 1.1));
          g_mutex_unlock (&warningMutex);
          
          //printf ("timeStep/timeMax = %d/%d\n", i, timeMax); 
@@ -5608,21 +5627,6 @@ static void cbDropDownSel (GObject *dropDown, GParamSpec *pspec, gpointer user_d
    }
 }
 
-/* Queck Download */
-static void getGribQuick () {
-   readGribRet = GRIB_RUNNING;
-   gribRequestData.typeWeb = NOAA_WIND;
-   gribRequestData.hhZ = 18;
-   gribRequestData.latMax = 60;
-   gribRequestData.latMin = 30;
-   gribRequestData.lonLeft = -60;
-   gribRequestData.lonRight = 1;
-   gribRequestData.timeStep = 3;
-   gribRequestData.timeMax = 8;
-   gloThread = g_thread_new ("readGribThread", getGribWebAll, &gribRequestData);
-   gribReadTimeout = g_timeout_add (READ_GRIB_TIME_OUT, readGribCheck, NULL);
-}
-   
 /*! Test select */
 static void testSelection () {
    GtkWidget *testWindow = gtk_application_window_new (app);
@@ -5661,12 +5665,11 @@ static void onLonChange (GtkWidget *widget, gpointer data) {
    gtk_widget_queue_draw (drawing_area);
 }
 
-/*! set par.pOr according to main comprtitor */
+/*! set par.pOr according to main competitor */
 static void mainCompetitorUpdate () {
-   int iMain = mainCompetitor ();
-   if (iMain >= 0) {
-      par.pOr.lat = competitors.t [iMain].lat;
-      par.pOr.lon = competitors.t [iMain].lon;
+   if (competitors.n > 0) {
+      par.pOr.lat = competitors.t [0].lat;
+      par.pOr.lon = competitors.t [0].lon;
       competitors.runIndex = 0;
    }
 }
@@ -5831,30 +5834,32 @@ static void windTwsUpdate (GtkWidget *widget, gpointer data) {
    gtk_widget_queue_draw  (drawing_area); 
 }
 
-/*! retasse */
-void updateCompetitors () {
-   int count = 0;
+/*! Retasse competitorss */
+void updateCompetitors() {
+   int writeIndex = 0; // Index pour retasser la liste
+
    for (int i = 0; i < MAX_N_COMPETITORS; i++) {
-      g_strstrip (competitors.t[i].name);
-      printf ("index: %d, name: %s\n", i, competitors.t[i].name);
-      if (competitors.t[i].name[0] == '\0') {
-         for (int j = i + 1; j < MAX_N_COMPETITORS; j++) {
-            g_strlcpy (competitors.t [j-1].name, competitors.t [j].name, MAX_SIZE_NAME);
-            competitors.t [j-1].lat = competitors.t [j].lat; 
-            competitors.t [j-1].lon = competitors.t [j].lon;
-            competitors.t [j].name [0] = '\0';
-            competitors.t [j].lat = 0; 
-            competitors.t [j].lon = 0;
+      g_strstrip(competitors.t[i].name);
+
+      if (competitors.t[i].name[0] != '\0') {
+         if (i != writeIndex) {
+            g_strlcpy(competitors.t[writeIndex].name, competitors.t[i].name, MAX_SIZE_NAME);
+            competitors.t[writeIndex].lat = competitors.t[i].lat;
+            competitors.t[writeIndex].lon = competitors.t[i].lon;
          }
+         writeIndex++;
       }
    }
-   // count competitors
-   for (int i = 0; i < MAX_N_COMPETITORS; i++) {
-      if (competitors.t[i].name [0] != '\0')
-         count += 1;
+
+   // delete the rest
+   for (int i = writeIndex; i < MAX_N_COMPETITORS; i++) {
+      competitors.t[i].name[0] = '\0';
+      competitors.t[i].lat = 0;
+      competitors.t[i].lon = 0;
    }
-   competitors.n = count;
-   printf ("number of competitors: %d\n", competitors.n);
+
+   competitors.n = writeIndex;
+   printf("Number of competitors: %d\n", competitors.n);
 }
 
 /*! callback for name change */
@@ -5866,6 +5871,13 @@ static void entryNameChange (GtkEditable *editable, gpointer user_data) {
    gtk_widget_queue_draw (drawing_area);
 }
 
+/*! callback for color index change */
+static void colorIndexUpdate (GtkSpinButton *spin_button, gpointer user_data) {
+   int *value = (int *) user_data;
+   *value = gtk_spin_button_get_value_as_int (spin_button);
+   gtk_widget_queue_draw (drawing_area);
+}
+
 /*! Change parameters and pOr and pDest coordinates */ 
 static void change () {
    // Create dialog box
@@ -5873,7 +5885,7 @@ static void change () {
    gtk_window_set_title (GTK_WINDOW(changeWindow), "Settings");
    g_signal_connect (window, "destroy", G_CALLBACK(onParentDestroy), changeWindow);
    gtk_window_set_modal (GTK_WINDOW (changeWindow), TRUE);
-   gtk_window_set_transient_for (GTK_WINDOW (changeWindow), GTK_WINDOW (window));
+   //gtk_window_set_transient_for (GTK_WINDOW (changeWindow), GTK_WINDOW (window));
 
    // Create notebook
    GtkWidget *notebook = gtk_notebook_new();
@@ -6196,13 +6208,18 @@ static void change () {
       GtkWidget *entryCompName = gtk_entry_new_with_buffer(bufferName);
       gtk_widget_set_size_request (entryCompName, 200, -1); 
 
+      GtkWidget *spinCompIndex = gtk_spin_button_new_with_range (0, MAX_N_COLOR_SHIP - 1, 1);
+      gtk_spin_button_set_value (GTK_SPIN_BUTTON(spinCompIndex), competitors.t [i].colorIndex);
+
       GtkWidget *entryCompPos = (i < competitors.n) ? latLonToEntry (competitors.t [i].lat, competitors.t [i].lon) : latLonToEntry (0.0, 0.0);
       gtk_widget_set_size_request (entryCompPos, 250, -1); // minimum width...
       
       gtk_grid_attach (GTK_GRID(tabComp), entryCompName, 0, i + 1, 1, 1);
-      gtk_grid_attach (GTK_GRID(tabComp), entryCompPos,  1, i + 1, 1, 1);
+      gtk_grid_attach (GTK_GRID(tabComp), spinCompIndex, 1, i + 1, 1, 1);
+      gtk_grid_attach (GTK_GRID(tabComp), entryCompPos,  2, i + 1, 1, 1);
       g_signal_connect (entryCompName, "changed", G_CALLBACK (entryNameChange), competitors.t[i].name);
       g_signal_connect (entryCompPos, "changed", G_CALLBACK (onLatLonChange), GINT_TO_POINTER (i));
+      g_signal_connect (spinCompIndex, "value-changed", G_CALLBACK (colorIndexUpdate), &competitors.t [i].colorIndex);
    }
   
    gtk_window_present (GTK_WINDOW (changeWindow));
@@ -6301,7 +6318,7 @@ static void originSelected () {
       return;
    }
    destPressed = false;
-   int iMain = mainCompetitor ();
+   int iMain = 0;
    competitors.t [iMain].lat = par.pOr.lat = yToLat (whereIsPopup.y);
    competitors.t [iMain].lon = par.pOr.lon = xToLon (whereIsPopup.x);
    competitors.runIndex = 0;
@@ -6449,8 +6466,7 @@ static gboolean onMotionEvent (GtkEventControllerMotion *controller, double x, d
 
 /*! Draw ship at position (x, y) according to type and direction (cog) */
 static void drawShip (cairo_t *cr, const char *name, double x, double y, int type, int cog) {
-   const GdkRGBA colShip [] = {{0.0, 0.0, 1.0, 1.0}, {1.0, 0.0, 0.0, 1.0}, {1.0, 165.0/255.0, 0.0, 1.0}, {0.5, 0.5, 0.5, 1.0}, {0.0, 1.0, 0.0, 1.0}};
-   const GdkRGBA color = colShip [MIN (4, type)];
+   const GdkRGBA color = colShip [MIN (MAX_N_COLOR_SHIP - 1, type)];
 
    cairo_set_source_rgba (cr, color.red, color.green, color.blue, color.alpha);
    cairo_move_to (cr, x+10, y);
@@ -6535,7 +6551,7 @@ static void onRightClickEvent (GtkGestureClick *gesture, int n_press, double x, 
    GtkWidget *meteoGramButton = gtk_button_new_with_label ("Meteogram");
    g_signal_connect (meteoGramButton, "clicked", G_CALLBACK (meteogram), NULL);
 
-   char *strPt = g_strdup_printf ("Point of Origin: %s", competitors.t[mainCompetitor ()].name);
+   char *strPt = g_strdup_printf ("Point of Origin: %s", competitors.t [0].name);
    GtkWidget *originButton = gtk_button_new_with_label (strPt);
    g_free (strPt);
    g_signal_connect (originButton, "clicked", G_CALLBACK (originSelected), NULL);
@@ -6633,8 +6649,8 @@ static gboolean onKeyEvent (GtkEventController *controller, guint keyval, \
       else if (competitors.n == 0)
          infoMessage ("No competitor", GTK_MESSAGE_WARNING);
       else {
-         competitors.t[mainCompetitor ()].lat = par.pOr.lat = my_gps_data.lat;
-         competitors.t[mainCompetitor ()].lon = par.pOr.lon =  my_gps_data.lon;
+         competitors.t[0].lat = par.pOr.lat = my_gps_data.lat;
+         competitors.t[0].lon = par.pOr.lon =  my_gps_data.lon;
          infoMessage ("Point of Origin = GPS position", GTK_MESSAGE_WARNING);
       }
       break;
@@ -7106,7 +7122,6 @@ static void appActivate (GApplication *application) {
    createButton (toolBox, "find-location-symbolic", onCenterMap);
    createButton (toolBox, "edit-select-all", paletteDraw);
    createButton (toolBox, "applications-engineering-symbolic", testSelection);
-   createButton (toolBox, "applications-engineering-symbolic", getGribQuick);
    
    GtkWidget *gpsInfo = gtk_label_new (" GPS Info coming...");
    gtk_box_append (GTK_BOX (toolBox), gpsInfo);
@@ -7359,7 +7374,7 @@ static void appStartup (GApplication *application) {
 
    // Add elements for "Trace" menu
    char strAdd [MAX_SIZE_LINE];
-   snprintf (strAdd, MAX_SIZE_LINE, "Add %s", competitors.t [mainCompetitor ()].name); 
+   snprintf (strAdd, MAX_SIZE_LINE, "Add %s", competitors.t [0].name); 
    GMenu *trace_menu_v = g_menu_new ();
    subMenu (trace_menu_v, strAdd, "app.traceAdd");
    subMenu (trace_menu_v, "Report", "app.traceReport");
@@ -7454,6 +7469,7 @@ int main (int argc, char *argv[]) {
       fprintf (stderr, "In main, Error failed to initialize cURL.\n");
       return EXIT_FAILURE;
    }
+   g_setenv ("GTK_A11Y", "none", TRUE); // mitigation problems of copy paste
 
    g_mutex_init (&warningMutex);
 
