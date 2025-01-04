@@ -237,15 +237,17 @@ sudo apt-get install libwebkit2gtk-4.1-dev
 sudo apt-get install -y libcurl4 libcurl4-openssl-dev 
 sudo apt-get install libshp-dev
 sudo apt-get install -y libeccodes0 libeccodes-dev
+sudo apt install libgtk-4-dev libgtksourceview-5-dev
 </code>
 </pre>
+      <p>Note que gsourceview est une bibliothèque GTK dédiée à l'édition de texte enrichi, souvent utilisée pour construire des éditeurs de texte ou des IDE. 
+   Elle prend en charge la coloration syntaxique, les numéros de ligne, la recherche/remplacement, et bien d'autres fonctionnalités avancées.</p>
+
+   <p>Documentation : GtkSourceView Documentation
+ 
 
       <h4>Installation de la police 7 segments pour Dashboard</h4>
       <code>sudo apt-get install fonts-dseg</code>
-      <p>&nbsp;</p>
-
-      <h4>Installation de cdo</h4>
-      <code>sudo apt-get install cdo</code>
       <p>&nbsp;</p>
 
       <h4>Construction du code</h4>
@@ -356,7 +358,7 @@ Possible causes:
 		<h4>Autres particularité Windows</h4>
 		<p> Voir partie AIS GPS</p>
 
-      <p> Le fichier routing.par peut nécessiter de ajustements, notamment sur les noms de certains chemins d’accès absolus, à préfixer par C:
+      <p> Le fichier routing.par peut nécessiter des ajustements, notamment sur les noms de certains chemins d’accès absolus, à préfixer par C:
 Voir fichier <a href="../par/routingwindows.par">routingwindows.par</a>.</p>
 
 		<h2>2.2. Organisation des fichiers </h2>
@@ -372,7 +374,9 @@ par
 pol
 py
 rte
-trace</pre>
+trace
+VRdashboard
+</pre>
 
 		<h4>csources4</h4>
       <p>csources4 contient les programmes sources et le Makefile ainsi que ccall4 et docshow.</p>
@@ -385,6 +389,8 @@ option.c
 rutil.c
 aisgps.c
 mailutil.c
+editor.c
+dashboardVR.c
 show4.c
 
 rtypes.h
@@ -394,6 +400,8 @@ option.h
 rutil.h
 aisgps.h
 mailutil.h
+editor.h
+dashboardVR.h
 </pre>
 Ainsi que les fichiers&nbsp;:
 <pre>
@@ -411,7 +419,7 @@ docshow
 <code>Make</code>
       </pre>
 		<p> Dans csources4 se trouve aussi le répertoire&nbsp;: html qui contient la documentation produite par
-		Doxigen à l'aide de la commande&nbsp;:</p>
+		Doxygen à l'aide de la commande&nbsp;:</p>
 		<pre>
 <code>doxygen docshow</code>
       </pre>
@@ -493,6 +501,10 @@ docshow
 		<h4>trace</h4>
 
       <p>Ce répertoire contient les fichiers dump des traces au format csv, créés par le logiciel.</p>
+
+		<h4>VRdashboard</h4>
+
+      <p>Ce répertoire contient les fichiers au format csv issus de l'exportation du dashboard de Virtual Regatta.</p>
 
 		<h2>Desktop </h2>
 
@@ -605,6 +617,7 @@ NMEA: COM4 38400
 		<li>une ligne de boutons (avec des informations GPS),</li>
 		<li>une ligne d'informations,</li>
 		<li>la fenêtre où s’affiche la carte, le Grib, les isochrones, …</li>
+      <li>une barre de contrôle du temps</li>
 		<li>une barre d’état indiquant à la position du curseur, la
 		latitude, longitude, la vitesse et l’orientation du vent, vaques,
 		courant,...</li>
@@ -629,7 +642,7 @@ NMEA: COM4 38400
 
 		<h3>Clic gauche</h3>
 		
-      <p>Un clic gauche permet de définir une sélection qui lance a recherche
+      <p>Un clic gauche permet de définir une sélection qui lance la recherche
 		d’un fichier Grib via l’un des fournisseurs de services sur la
 		géographie définie.</p>
       <img src="images/leftclic.png" alt="left clic" width="450" height="300">
@@ -648,9 +661,6 @@ NMEA: COM4 38400
          </tr>
          </thead>
          <tbody>
-         <tr>
-            <td>ESC</td><td>Sortie</td>
-         </tr>
          <tr>
             <td>F1</td><td>Initialise le point d’origine à la position GPS</td>
          </tr>
@@ -743,7 +753,7 @@ NMEA: COM4 38400
 		<p>Ce menu permet l’affichage des informations GPS, des informations AIS et la gestion
 		des ports NMEA USB.</p>
 
-		<h3>Menu Web</h3>
+		<h3>Menu Web-Sites</h3>
 
 		<p>Lance les URL associées avec la localisation (latitude longitude).</p>
 		<h3>Menu Help</h3>
@@ -762,9 +772,6 @@ NMEA: COM4 38400
 		<p>Un bouton permet de lancer la gestion des paramètres. C’est un
 		raccourci pour le menu scenario/settings.</p>
 
-		<p>Des boutons de style «&nbsp;magnétoscope&nbsp;» permettent de
-		passer au time step suivant ou précédent, de jouer la scène, de mettre en pause…</p>
-
 		<p>Des boutons permettent de zoomer (idem scroll souris).</p>
 
 		<p>Un bouton permet de revenir au centre du Grib.</p>
@@ -780,6 +787,17 @@ NMEA: COM4 38400
 		<h2>7.7. Zone routage</h2>
 		<p>Lorsque une route a été lancée, la troisième ligne affiche en rouge les
 		information de routage au temps correspondant à l’affichage. </p>
+
+      <h2>7.8. Barre de contrôle du temps </h2>
+
+		<p>En base de l'écran, des boutons de style «&nbsp;magnétoscope&nbsp;» permettent de
+		passer au time step suivant ou précédent, de jouer la scène, de mettre en pause…</p>
+
+      <h2>7.9. Barre d'état </h2>
+
+      <p> Tout en base de l'écran, la barre d'état affiche des informations générales sur la localisation.</p>
+      <p> Des messages en vert d'information ou en rouge d'erreur peuvent s'y afficher.<p>
+
 
 <h1 id="chap8" style="page-break-inside: avoid">8. Trigonométrie</h1>
 		<h2>8.1. Conventions</h2>
@@ -1624,7 +1642,7 @@ grib_get_data -L &quot;%.2lf %.2lf&quot; -F &quot;%.2lf&quot; -m -999999 -w shor
 
    <p>Les autres librairies utilisées sont&nbsp;:
    <ul>
-      <li>Les librairies liées à  GTK4, et notamment la Glib,</li>
+      <li>Les librairies liées à GTK4, et notamment la Glib,</li>
       <li>shapelib (pour la représentation des fonds de carte),</li>
       <li>eccodes (pour le décodage des fichiers Grib,</li>
       <li>curl (pour le téléchargement de fichiers Grib).</li>
@@ -1672,6 +1690,18 @@ grib_get_data -L &quot;%.2lf %.2lf&quot; -F &quot;%.2lf&quot; -m -999999 -w shor
          </tr>
          <tr>
             <td>mailutil.h</td><td>Interface de mailutil (prototypes des fonctions externes).</td>
+         </tr>
+         <tr>
+            <td>editor.c</td><td>Petit éditeur de texte intégré.</td>
+         </tr>
+         <tr>
+            <td>editor.h</td><td>Interface de editor (prototypes des fonctions externes).</td>
+         </tr>
+         <tr>
+            <td>dashboardVR.c</td><td>Utilitaires pour Virtual Regatta Dashboard</td>
+         </tr>
+         <tr>
+            <td>dashboardVR.h</td><td>Interface de dashboardVR (prototypes des fonctions externes).</td>
          </tr>
          <tr>
             <td>show4.c</td><td>Le main et les interfaces graphiques s'appuyant sur GTK4.</td>
@@ -1781,6 +1811,7 @@ GINT_TO_POINTER
 g_ascii_isspace
 g_strlcat
 g_strlcpy
+g_str_to_ascii
 g_utf8_strup
 g_utf8_casefold
 g_strdelimit
