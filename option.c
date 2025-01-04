@@ -48,6 +48,7 @@ static void initScenarioOption (void) {
 /*! Manage command line option reduced to one character */
 void optionManage (char option) {
 	FILE *f = NULL;
+   char directory [MAX_SIZE_DIR_NAME];
    char buffer [MAX_SIZE_BUFFER] = "";
    double w, twa, tws, lon, lat, lat2, lon2, cog;
    char errMessage [MAX_SIZE_TEXT] = "";
@@ -91,6 +92,10 @@ void optionManage (char option) {
       }
       break;
    case 'g': // grib
+      if (par.mostRecentGrib) {// most recent grib will replace existing grib
+         snprintf (directory, sizeof (directory), "%sgrib/", par.workingDir); 
+         mostRecentFile (directory, ".csv", par.gribFileName, sizeof (par.gribFileName));
+      }
       printf ("Grib File Name: %s\n", par.gribFileName);
       readGribAll (par.gribFileName, &zone, WIND);
       gribToStr (&zone, buffer, MAX_SIZE_BUFFER);
@@ -160,8 +165,10 @@ void optionManage (char option) {
       break;
    case 'r': // routing
       initZone (&zone);
-      if (par.mostRecentGrib) // most recent grib will replace existing grib
-         initWithMostRecentGrib ();
+      if (par.mostRecentGrib) {// most recent grib will replace existing grib
+         snprintf (directory, sizeof (directory), "%sgrib/", par.workingDir); 
+         mostRecentFile (directory, ".csv", par.gribFileName, sizeof (par.gribFileName));
+      }
       initScenarioOption ();
       routingLaunch ();
       routeToStr (&route, buffer, sizeof (buffer));

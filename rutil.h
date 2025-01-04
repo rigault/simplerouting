@@ -88,7 +88,7 @@ extern bool   writePoi (const char *fileName);
 extern int    findPoiByName (const char *name, double *lat, double *lon);
 extern void   poiPrint ();
 extern char   *nearestPort (double lat, double lon, const char *fileName, char *str, size_t maxLen);
-extern char   *poiToStr (bool portCheck, char *str, size_t maxLen);
+extern int    poiToStr (bool portCheck, char *str, size_t maxLen);
 extern bool   checkGribInfoToStr (int type, Zone *zone, char *buffer, size_t maxLen);
 extern bool   checkGribToStr (char *buffer, size_t maxLen);
 extern char   *dollarSubstitute (const char* str, char *res, size_t maxLen);
@@ -103,7 +103,7 @@ extern bool   distanceTraceDone (const char *fileName, double *od, double *ld, d
 extern bool   infoDigest (const char *fileName, double *od, double *ld, double *rd, double *sog);
 extern bool   isDayLight (double t, double lat, double lon);
 extern void   initWayPoints (void);
-extern void   initWithMostRecentGrib (void);
+extern bool   mostRecentFile (const char *directory, const char *pattern, char *name, size_t maxLen);
 extern int    buildMeteoConsultUrl (int type, int i, int delay, char *url, size_t maxLen);
 extern int    buildGribUrl (int typeWeb, int topLat, int leftLon, int bottomLat, int rightLon, int step, int step2, char *url, size_t maxLen);
 extern bool   buildGribMail (int type, double lat1, double lon1, double lat2, double lon2, char *object, char *command, size_t maxLen);

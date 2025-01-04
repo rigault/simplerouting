@@ -3,6 +3,6 @@ extern GHashTable *aisTable;
 
 extern bool aisTableInit (void);
 extern bool testAisTable ();
-extern void aisToStr (char *str, size_t maxLen);
+extern int aisToStr (char *str, size_t maxLen);
 extern char *nmeaInfo (char *strGps, int len);
 extern void *getNmea (gpointer x);

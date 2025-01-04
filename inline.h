@@ -139,3 +139,16 @@ static inline double findPolar (double twa, double w, PolMat mat) {
    return interpolate (w, mat.t [0][cInf], mat.t [0][cSup], s0, s1);
 }
 
+/*! return max speed of boat at tws for all twa */
+static inline double maxSpeedInPolarAt (double tws, const PolMat *mat) {
+   double max = 0.0;
+   double speed;
+   for (int i = 1; i < mat->nLine; i++) {
+      speed = findPolar (mat->t [i][0], tws, *mat);
+      if (speed > max) max = speed;
+   }
+   return max;
+}
+
+
+

@@ -79,7 +79,7 @@ double distSegment (double latX, double lonX, double latA, double lonA, double l
     double t = (AXx * ABx + AXy * ABy) / AB_AB;
 
     // Limiter t à l'intervalle [0, 1] pour rester sur le segment AB
-    t = fmax(0.0, fmin(1.0, t));
+    t = fmax (0.0, fmin(1.0, t));
 
     // Point projeté H sur AB
     double xH = xA + t * ABx;
@@ -90,17 +90,6 @@ double distSegment (double latX, double lonX, double latA, double lonA, double l
     double dy = yX - yH;
 
     return sqrt (dx * dx + dy * dy);
-}
-
-/*! return max speed of boat at tws for all twa */
-static inline double maxSpeedInPolarAt (double tws, const PolMat *mat) {
-   double max = 0.0;
-   double speed;
-   for (int i = 1; i < mat->nLine; i++) {
-      speed = findPolar (mat->t [i][0], tws, *mat);
-      if (speed > max) max = speed;
-   }
-   return max;
 }
 
 /*! find first point in isochrone. Useful for drawAllIsochrones */ 
@@ -305,6 +294,9 @@ bool isoDescToStr (char *str, size_t maxLen) {
          isoDesc[i].closest, distance, isoDesc[i].bestVmg, 
          latToStr (isoDesc [i].focalLat, par.dispDms, strLat, sizeof (strLat)), 
          lonToStr (isoDesc [i].focalLon, par.dispDms, strLon, sizeof (strLon)));
+      //printf ("i = %d\n", i);
+      //printf ("%s\n", line);
+   
       if ((strlen (str) + strlen (line)) > maxLen) 
          return false;
       g_strlcat (str, line, maxLen);
@@ -1068,7 +1060,7 @@ static int compareDuration (const void *a, const void *b) {
     if (compA->duration > compB->duration) return 1;
     return 0;
 }
-
+   
 /*! translate competitors strct in a string  */
 void competitorsToStr (CompetitorsList *copyComp, char *buffer, size_t maxLen) {
    char strDep [MAX_SIZE_DATE];
@@ -1083,7 +1075,7 @@ void competitorsToStr (CompetitorsList *copyComp, char *buffer, size_t maxLen) {
       qsort (copyComp->t, copyComp->n, sizeof(Competitor), compareDuration);
    // winner index is 0
 
-   g_strlcpy (buffer, "Name;                   Lat.;        Lon.;  Dist To Main;              ETA;     Dist;    To Best Delay;    To Main Delay\n", maxLen);
+   g_strlcpy (buffer, "Name;                      Lat.;        Lon.;  Dist To Main;              ETA;     Dist;    To Best Delay;    To Main Delay\n", maxLen);
 
    for (int i = 0; i < copyComp->n; i++) {
       latToStr (copyComp->t[i].lat, par.dispDms, strLat, sizeof(strLat));
@@ -1095,10 +1087,17 @@ void competitorsToStr (CompetitorsList *copyComp, char *buffer, size_t maxLen) {
       delayToStr (copyComp->t [i].duration - mainCompetitor.duration, // main player 
          strMainDelay, sizeof (strMainDelay));  // delay between main and others in hours translated in string
 
-      dist = orthoDist (copyComp->t [i].lat, copyComp->t [i].lon, mainCompetitor.lat, mainCompetitor.lon);
+      if (strcmp (mainCompetitor.name, copyComp->t [i].name) == 0)
+         dist = 0.0;
+      else
+         dist = orthoDist (copyComp->t [i].lat, copyComp->t [i].lon, mainCompetitor.lat, mainCompetitor.lon);
 
-      snprintf (line, sizeof (line), "%-16s;%12s; %12s;      %8.2lf; %16s; %8.2lf; %16s; %16s\n", 
-         copyComp->t[i].name, strLat, strLon, dist, copyComp->t[i].strETA, copyComp->t[i].dist, strDelay, strMainDelay);
+      char *noAccents = g_str_to_ascii (copyComp->t[i].name, NULL); // replace accents...
+      noAccents [18] = '\0'; // trunc
+      snprintf (line, sizeof (line), "%-19s;%12s; %12s;      %8.2lf; %16s; %8.2lf; %16s; %16s\n", 
+         noAccents, strLat, strLon, dist, copyComp->t[i].strETA, copyComp->t[i].dist, strDelay, strMainDelay);
+      g_free (noAccents);
+
       g_strlcat (buffer, line, maxLen);
    }
 

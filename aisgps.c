@@ -215,11 +215,12 @@ bool testAisTable () {
 }
 
 /*! ais information to string */
-void aisToStr (char *str, size_t maxLen) {
+int aisToStr (char *str, size_t maxLen) {
    char strLat [MAX_SIZE_NAME] = "", strLon [MAX_SIZE_NAME] = "";
    char line [MAX_SIZE_LINE];
    char strDate [MAX_SIZE_DATE];
    char country [32];
+   int count = 0;
 
    // use GHashTableIter to iterare on all elements
    GHashTableIter iter;
@@ -247,7 +248,9 @@ void aisToStr (char *str, size_t maxLen) {
          epochToStr (ship->lastUpdate, false, strDate, MAX_SIZE_DATE));
 
       g_strlcat (str, line, maxLen);
+      count += 1;
    }
+   return count;
 }
 
 /*! remove ship not updated since tMax */

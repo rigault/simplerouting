@@ -327,8 +327,8 @@ void freeSHP (void) {
 
 /*! select most recent file in "directory" that contains "pattern" in name 
   return true if found with name of selected file */
-static bool mostRecentFile (const char *directory, const char *pattern, char *name, size_t maxLen) {
-   DIR *dir = opendir(directory);
+bool mostRecentFile (const char *directory, const char *pattern, char *name, size_t maxLen) {
+   DIR *dir = opendir (directory);
    if (dir == NULL) {
       fprintf (stderr, "In mostRecentFile, Error opening: %s\n", directory);
       return false;
@@ -346,7 +346,7 @@ static bool mostRecentFile (const char *directory, const char *pattern, char *na
          && (S_ISREG(statbuf.st_mode) && statbuf.st_mtime > latestTime)) {
          latestTime = statbuf.st_mtime;
          if (strlen (entry->d_name) < maxLen)
-            g_strlcpy (name, entry->d_name, maxLen);
+            snprintf (name, maxLen, "%s%s", directory, entry->d_name);
          else {
             fprintf (stderr, "In mostRecentFile, Error File name size is: %zu and exceed Max Size: %zu\n", \
                strlen (entry->d_name), maxLen);
@@ -355,6 +355,7 @@ static bool mostRecentFile (const char *directory, const char *pattern, char *na
       }
    }
    closedir(dir);
+   
    return (latestTime > 0);
 }
 
@@ -666,12 +667,14 @@ void poiPrint () {
    printf ("\nNumber of Points Of Interest: %d\n", nPoi);
 }
 
-/*! translate poi table into a string */
-char *poiToStr (bool portCheck, char *str, size_t maxLen) {
+/*! translate poi table into a string, return number of visible poi */
+int poiToStr (bool portCheck, char *str, size_t maxLen) {
    char line [MAX_SIZE_LINE] = "";
    char strLat [MAX_SIZE_NAME] = "";
    char strLon [MAX_SIZE_LINE] = "";
+   int count = 0;
    snprintf (str, MAX_SIZE_LINE, "Lat         Lon           Type  Level Country Name\n");
+   
    
    for (int i = 0; i < nPoi; i++) {
       if ((tPoi [i].type > UNVISIBLE) && ((tPoi [i].type != PORT) || portCheck)) {
@@ -680,9 +683,10 @@ char *poiToStr (bool portCheck, char *str, size_t maxLen) {
             lonToStr (tPoi[i].lon, par.dispDms, strLon, sizeof (strLon)),\
             tPoi [i].type, tPoi [i].level, tPoi [i].cc, tPoi[i].name);
 	      g_strlcat (str, line, maxLen);
+         count += 1;
       }
    }
-   return str;
+   return count;
 }
 
 /*! return name of nearest port found in file fileName from lat, lon. return empty string if not found */
@@ -1876,12 +1880,12 @@ bool analyseCoord (const char *strCoord, double *lat, double *lon) {
 void polygonToStr (char *buffer, size_t maxLen) {
    char strLat[MAX_SIZE_NAME], strLon[MAX_SIZE_NAME];
    buffer [0] = '\0';
-   char *line =  g_strdup_printf ( "Number of polygons: %d\n", par.nForbidZone);
+   char *line =  g_strdup_printf ("Number of polygons: %d\n", par.nForbidZone);
    g_strlcat (buffer, line, maxLen);
    g_free (line);
 
    for (int i = 0; i < par.nForbidZone; i++) {
-      char *line = g_strdup_printf("Polygon %2d:\n", i);
+      char *line = g_strdup_printf ("Polygon %2d:\n", i);
       g_strlcat (buffer, line, maxLen);
       g_free (line);
       for (int j = 0; j < forbidZones[i].n; j++) {
@@ -2078,6 +2082,11 @@ bool readParam (const char *fileName) {
          buildRootName (str, par.midFileName, sizeof (par.midFileName));
       else if (sscanf (pLine, "CLI_HELP:%255s", str) > 0)
          buildRootName (str, par.cliHelpFileName, sizeof (par.cliHelpFileName));
+      else if (strstr (pLine, "VR_DASHBOARD:") != NULL)  {
+         pLine = strchr (pLine, ':') + 1;
+         g_strstrip (pLine);
+         buildRootName (pLine, par.dashboardVR, sizeof (par.dashboardVR));
+      }
       else if (sscanf (pLine, "HELP:%255s", par.helpFileName) > 0); // full link required
       else if (sscanf (pLine, "CURL_SYS:%d", &par.curlSys) > 0);
       else if (sscanf (pLine, "PYTHON:%d", &par.python) > 0);
@@ -2225,6 +2234,8 @@ bool writeParam (const char *fileName, bool header, bool password) {
    fprintf (f, "TIDES:           %s\n", par.tidesFileName);
    fprintf (f, "HELP:            %s\n", par.helpFileName);
    fprintf (f, "CLI_HELP:        %s\n", par.cliHelpFileName);
+   fprintf (f, "VR_DASHBOARD:    %s\n", par.dashboardVR);
+
    for (int i = 0; i < par.nShpFiles; i++)
       fprintf (f, "SHP:             %s\n", par.shpFileName [i]);
 
@@ -2670,19 +2681,6 @@ void initWayPoints (void) {
    wayPoints.totLoxoDist = 0;
    wayPoints.t [0].lat = par.pDest.lat;
    wayPoints.t [0].lon = par.pDest.lon;
-}
-
-/*! replace gribFileName with most recent file found ing grib ditrectory */
-void initWithMostRecentGrib (void) {
-   char fileName [MAX_SIZE_FILE_NAME];
-   par.gribFileName [0] = '\0';
-   if ((strlen (par.workingDir) + strlen ("grib/"))  < sizeof (par.gribFileName)) { 
-      g_strlcat (par.gribFileName, par.workingDir, sizeof (par.gribFileName));
-      g_strlcat (par.gribFileName, "grib/", sizeof (par.gribFileName));
-      mostRecentFile (par.gribFileName, ".gr", fileName, sizeof (fileName)); // most recent grib file found
-      if ((strlen (par.gribFileName) + strlen (fileName))  < sizeof (par.gribFileName))
-         g_strlcat (par.gribFileName, fileName, sizeof (par.gribFileName));
-   }
 }
 
 /*! build object and body of grib mail */

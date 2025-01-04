@@ -1,3 +1,6 @@
+/*! Text editor
+   compilation: gcc -c editor.c `pkg-config --cflags gtk4 gtksourceview-5`
+*/
 #include <gtk/gtk.h>
 #include <gtksourceview/gtksource.h>
 #include <stdbool.h>
@@ -52,7 +55,7 @@ static void searchAndHighlight(GtkSourceBuffer *buffer, const gchar *text, GList
    gtk_text_buffer_get_bounds(GTK_TEXT_BUFFER(buffer), &startIter, &endIter);
 
    // Supprimer les tags de surbrillance précédents si le tag existe
-   if (GTK_IS_TEXT_TAG(highlightTag)) {
+   if (GTK_IS_TEXT_TAG (highlightTag)) {
       gtk_text_buffer_remove_tag(GTK_TEXT_BUFFER(buffer), highlightTag, &startIter, &endIter);
    }
 
@@ -182,7 +185,7 @@ void onBufferChanged(GtkTextBuffer *buffer, gpointer user_data) {
 }
 
 /*! simple test editor with finder, copy and save buttons */
-bool editor (GtkApplication *app, const char *fileName,  Callback callback) {
+bool editor (GtkApplication *app, const char *fileName, Callback callback) {
    FILE *file = fopen (fileName, "r");
    if (file == NULL) {
       fprintf (stderr, "In editor, Impossible to open: %s", fileName);
@@ -257,7 +260,8 @@ bool editor (GtkApplication *app, const char *fileName,  Callback callback) {
    g_signal_connect (saveButton, "clicked", G_CALLBACK (onSaveCkicked), data);
    g_signal_connect (searchClicButton, "clicked", G_CALLBACK (onSearchClicked), data);
    g_signal_connect (pasteButton, "clicked", G_CALLBACK (onCopyClicked), data);
-   g_signal_connect (windowEditor, "close-request", G_CALLBACK (callback), windowEditor);
+   if (callback != NULL)
+      g_signal_connect (windowEditor, "close-request", G_CALLBACK (callback), windowEditor);
    g_signal_connect(sourceBuffer, "changed", G_CALLBACK (onBufferChanged), NULL);
 
    gtk_window_set_child (GTK_WINDOW (windowEditor), box);
