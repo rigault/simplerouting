@@ -43,7 +43,8 @@ struct tm getTmTime (const char *strDate, const char *strTime) {
    tm0.tm_min   = strtol (timeTokens [1], NULL, 10);
    tm0.tm_sec   = strtol (timeTokens [2], NULL, 10);
 
-   tm0.tm_sec -= offsetLocalUTC () ;               // to get UTC time
+   if (!par.dashboardUTC)
+      tm0.tm_sec -= offsetLocalUTC () ;            // to get UTC time if not already UTC
    mktime (&tm0);                                  // adjust with seconds modified
    return tm0;
 }

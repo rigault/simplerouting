@@ -8,6 +8,8 @@
 #include "rutil.h"
 #include "inline.h"
 #include "engine.h"
+#include "grib.h"
+#include "polar.h"
 
 /*! Make initialization following parameter file load */
 static void initScenarioOption (void) {

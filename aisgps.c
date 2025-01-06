@@ -291,7 +291,7 @@ static int aisCharToBits (char c) {
 }
 
 /*! bits extraction from frame */
-static void extract_bits (const char *payload, char *bits) {
+static void extractBits (const char *payload, char *bits) {
    int len = strlen (payload);
    bits[0] = '\0';
    for (int i = 0; i < len; i++) {
@@ -308,7 +308,7 @@ static int getIntFromBits (const char *bits, int start, int length) {
    char buf [33];
    g_strlcpy (buf, bits + start, length);
    buf [length] = '\0';
-   return (int) strtol(buf, NULL, 2);
+   return (int) strtol (buf, NULL, 2);
 }
 
 /*! extract signed integer value within a bit string */
@@ -387,7 +387,7 @@ static void decodeAisPayload (const char *payload) {
    char bits [1000] = {0};
    const int MAX_SOG = 1000; 
    
-   extract_bits (payload, bits);
+   extractBits (payload, bits);
    printf ("Bits: %s\n", bits);
 
    int messageId = getIntFromBits(bits, 0, 6); // message ID conversion

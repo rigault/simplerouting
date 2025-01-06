@@ -35,6 +35,8 @@
 #include "shapefil.h"
 #include "rtypes.h"
 #include "rutil.h"
+#include "grib.h"
+#include "polar.h"
 #include "inline.h"
 #include "engine.h"
 #include "option.h"
@@ -4751,48 +4753,6 @@ static char *warningMessage (int service, int mailService, char *warning, size_t
    return warning;
 }
 
-/*! return maxTimeRange based on timeStep and resolution */
-static int maxTimeRange (int service, int mailService) {
-   switch (service) {
-   case  NOAA_WIND:
-      return (par.gribTimeStep == 1) ? 120 : (par.gribTimeStep < 6) ? 192 : 384;
-   case ECMWF_WIND:
-      return (par.gribTimeStep < 6) ? 144 : 240;
-   case ARPEGE_WIND:
-      return 102;
-   case MAIL:
-      switch (mailService) {
-      case SAILDOCS_GFS:
-         return (par.gribTimeStep == 1) ? 24 : (par.gribTimeStep < 6) ? 192 : (par.gribTimeStep < 12) ? 240 : 384;
-      case SAILDOCS_ECMWF:
-         return (par.gribTimeStep < 6) ? 144 : 240;
-      case SAILDOCS_ICON:
-         return 180;
-      case SAILDOCS_ARPEGE:
-         return 96;
-      case SAILDOCS_AROME:
-         return 48;
-      case SAILDOCS_CURR:
-         return 192;
-      case MAILASAIL:
-         return (par.gribTimeStep < 12) ? 192 : 240;
-      case NOT_MAIL:
-         return 0;
-      default:
-         fprintf (stderr, "In maxTimeRange: provider not supported: %d\n", mailService);
-         return 120;
-     }
-   default:
-      fprintf (stderr, "In maxTimeRange: service not supported: %d\n", service);
-      return 120;
-   }
-}
-
-/*! evaluate number of shortnames according to service and id mail, mailService */
-static int howManyShortnames (int service, int mailService) { 
-   return (service == MAIL) ? mailServiceTab [mailService].nShortNames : serviceTab [service].nShortNames; 
-}
-
 /*! return number of values x n message wich give an evaluation
    of grib file size in bytes */
 static int evalSize (int nShortName) {
@@ -5209,7 +5169,7 @@ static void saveScenario () {
 }
 
 /*! Make initialization following parameter file load */
-static void initScenario () {
+void initScenario () {
    char str [MAX_SIZE_LINE];
    char errMessage [MAX_SIZE_TEXT] = "";
    int poiIndex = -1;
@@ -5258,6 +5218,7 @@ static void initScenario () {
    
    if ((poiIndex = findPoiByName (par.pOrName, &par.pOr.lat, &par.pOr.lon)) != -1)
       g_strlcpy (par.pOrName, tPoi [poiIndex].name, sizeof (par.pOrName));
+
    else par.pOrName [0] = '\0';
    if ((poiIndex = findPoiByName (par.pDestName, &par.pDest.lat, &par.pDest.lon)) != -1)
       g_strlcpy (par.pDestName, tPoi [poiIndex].name, sizeof (par.pDestName));

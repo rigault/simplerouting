@@ -20,6 +20,7 @@
 #include "rtypes.h"
 #include "inline.h"
 #include "rutil.h"
+#include "grib.h"
 
 /*! global variables */
 Pp        *isocArray = NULL;                      // list of isochrones Two dimensions array : maxNIsoc  * MAX_SIZE_ISOC
