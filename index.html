@@ -45,6 +45,7 @@
    <a href="#chap16">16. Bugs ou comportements particuliers</a>
    <a href="#chap17">17. Éléments bibliographiques </a>
    <a href="#chap18">18. Programmation</a>
+   <a href="#chap19">19. Gestion du temps</a>
 
 <p></p>
 
@@ -1789,94 +1790,20 @@ mailRequestBox
 		<p> Toutes les autres fenêtres sont non modales, ne proposent pas de boutons
 		ok cancel et sont et également créées avec <code>gtk_application_window_new</code>. </p>
 
-		<h2>18.5. Bibliothèque Glib</h2>
+		<h2>18.5. Bibliothèque Glib et GTK4</h2>
 
-<h3>Constantes</h3>
+      <h3>Constantes</h3>
 <pre>
-G_PI
+G_PI TRUE FALSE
 </pre>
-<h3>Macros</h3>
+   <h3>Macros</h3>
 <pre>
-MAX
-MIN
-CLAMP
-G_APPROX_VALUE
-GPOINTER_TO_INT
-GINT_TO_POINTER
-</pre>
-<h3>Fonctions</h3>
-
-<p>String</p>
-<pre>
-g_ascii_isspace
-g_strlcat
-g_strlcpy
-g_str_to_ascii
-g_utf8_strup
-g_utf8_casefold
-g_strdelimit
-g_strstrip
-g_str_has_prefix
-g_str_has_suffix
-g_strdup_printf
-g_markup_printf_escaped
-g_strstr_len
-g_strnfill
-g_strsplit
-g_strfreev
-g_ascii_strdown
-g_string_new
-g_string_append
-g_string_free
+MAX MIN CLAMP G_APPROX_VALUE GPOINTER_TO_INT GINT_TO_POINTER
 </pre>
 
-<p>Time</p>
-<pre>
-g_timeout_add
-g_timeout_add_seconds
-g_date_time_get_day_of_month
-g_date_time_get_month
-g_date_time_get_year
-g_date_time_new_utc
-g_date_time_unref
-</pre>
+      <h3>Fonctions Glib et GTK4</h3>
+      <p> Voir le fichier texte : <p><a href= "glibgtk.txt">Fonctions Glib et GTK4</a></p>
 
-<p>Regex </p>
-<pre>
-g_regex_new
-g_regex_match
-g_regex_unref
-</pre>
-
-<p>Hash Table </p>
-<pre>
-g_hash_table_new_full
-g_hash_table_insert
-g_hash_table_iter_init
-g_hash_table_iter_next
-g_hash_table_iter_remove
-g_hash_table_lookup
-g_hash_table_destroy
-</pre>
-
-<p>File</p>
-<pre>
-g_path_get_dirname
-g_path_get_basename
-g_file_get_contents
-g_file_get_path
-g_build_filename
-g_dir_open
-g_dir_close
-</pre>
-
-<p>misc</p>
-<pre>
-g_free
-g_locale_to_utf8
-g_clear_error
-g_thread_new
-</pre>
 
 		<h2>18.6. Lecture des données NMEA</h2>
 
@@ -1974,7 +1901,33 @@ SMTP_SCRIPT:     python3 /home/rr/routing/py/smtp.py  #script python pour l'envo
 
 		<a href="../par/routingwindows.par">../par/routingwindows.par</a></p>
 
-		<p>&nbsp;</p>
+<h1 id="chap19">19. Gestion du temps</h1>
+	<h2>Principes généraux </h2>
+   <p>La gestion du temps est assez complexe et mérite quelques éclaicissements.<p>
+   
+   <h3>Fichiers Grib </h3>
+   Les fichiers Grib contiennent des informations sur le temps, en heures UTC.
+
+   Toutes les informations relatives au temps se réfèrent au temps UTC.
+
+   <h3>Variables globales dans RCube </h3>
+
+   <p><code>par.startTimeInHours </code> stocke en heures le temps t comme la différence en heure entre le temps t et le début du grib.</p>
+   <p><code>startInfo</code> est une variable globale struct tm qui stocke le temps.</p>
+   <p>Elle est initialisée à la valeur du temps de début de Grib par la fonction </p>
+   <p><code> initStart (&startInfo)</code><p>
+
+   <p> on peut traduire startInfo en heures par rapport au début du Grib avec la fonction suivante&nbsp;: </p> 
+   <p><code>par.startTimeInHours = getDepartureTimeInHour (&startInfo) </code></p>
+
+   <p><code>vOffsetLocalUTC</code> stocke la différence en secondes entre le temps UTC et le temps local.</p>
+   <p>Par exemple, en France la valeur est donc de 3600 ou de 7200, selon l'heure d'été ou d'hiver <p>
+   <p>Il s'obtient par l'appel à la fonction suivante&nbsp;:<p>
+   <p><code> OffsetLocalUTC = offsetLocalUTC () </code></p>
+
+   <p><code>theTime</code> est un double qui stocke la valeur du temps exprimée en heures après le début du grib.
+   pour l'affichage de la carte météo<p>
+
 </div>
 <div class="notes">
 

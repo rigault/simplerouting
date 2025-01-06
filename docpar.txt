@@ -1,4 +1,5 @@
 Name              Comment
+DESC:             Descciption field for information
 WD:               Working Directory. TO KEEP ON FIRST LINE !
 ALLWAYS_SEA:      If 1 (true) then there is no earth avoidance. Allways on sea.
 POI:              Point of Interests
@@ -24,6 +25,7 @@ HELP:             Help html File Name
 CLI_HELP:         Text Help File Name
 SHP:              Shape File Name
 TRACE:            Trace File Name
+VR_DASHBOARD:     Virtual Regatta Dashboard File Name
 START_TIME:       Start Time in Hours after befinning of Grib
 T_STEP:           Time Step between Isochrones
 RANGE_COG:        Range COG in degrees for Isochrone Calculation
