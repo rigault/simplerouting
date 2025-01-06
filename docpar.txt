@@ -26,6 +26,7 @@ CLI_HELP:         Text Help File Name
 SHP:              Shape File Name
 TRACE:            Trace File Name
 VR_DASHBOARD:     Virtual Regatta Dashboard File Name
+VR_DASHB_UTC:     1 if VR Dashboard provide time in UTC. O if local time.
 START_TIME:       Start Time in Hours after befinning of Grib
 T_STEP:           Time Step between Isochrones
 RANGE_COG:        Range COG in degrees for Isochrone Calculation

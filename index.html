@@ -388,6 +388,8 @@ VRdashboard
 engine.c
 option.c
 rutil.c
+grib.c
+polar.c
 aisgps.c
 mailutil.c
 editor.c
@@ -399,6 +401,8 @@ inline.h
 engine.h
 option.h
 rutil.h
+grib.h
+polar.h
 aisgps.h
 mailutil.h
 editor.h
@@ -1687,6 +1691,18 @@ grib_get_data -L &quot;%.2lf %.2lf&quot; -F &quot;%.2lf&quot; -m -999999 -w shor
          <tr>
             <td>rutil.h</td><td>Interface de rutil (prototypes des fonctions externes).</td>
          <tr>
+         <tr>
+            <td>grib.c</td><td>Lecture des fichiers Grib et utilitaires Grib.</td>
+         </tr>
+         <tr>
+            <td>grib.h</td><td>Interface de grib (prototypes des fonctions externes).</td>
+         <tr>
+         <tr>
+            <td>polar.c</td><td>Lectures des fichiers polaires et utilitaires associés.</td>
+         </tr>
+         <tr>
+            <td>polar.h</td><td>Interface de polar (prototypes des fonctions externes).</td>
+         <tr>
             <td>mailutil.c</td><td>Interface pour la gestion mail.</td>
          </tr>
          <tr>
@@ -1923,7 +1939,7 @@ SMTP_SCRIPT:     python3 /home/rr/routing/py/smtp.py  #script python pour l'envo
    <p><code>vOffsetLocalUTC</code> stocke la différence en secondes entre le temps UTC et le temps local.</p>
    <p>Par exemple, en France la valeur est donc de 3600 ou de 7200, selon l'heure d'été ou d'hiver <p>
    <p>Il s'obtient par l'appel à la fonction suivante&nbsp;:<p>
-   <p><code> OffsetLocalUTC = offsetLocalUTC () </code></p>
+   <p><code> vOffsetLocalUTC = offsetLocalUTC () </code></p>
 
    <p><code>theTime</code> est un double qui stocke la valeur du temps exprimée en heures après le début du grib.
    pour l'affichage de la carte météo<p>
