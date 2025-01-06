@@ -1,6 +1,7 @@
 extern Pp        *isocArray;                    // two dimensions array for isochrones
 extern IsoDesc   *isoDesc;                      // one dimension array for isochrones meta data
 extern int       nIsoc;                         // number of isochrones calculated  by routing
+extern int       maxNIsoc;                      // max number of Isoc considering Grib meta information and timestep
 extern Pp        lastClosest;                   // closest point to destination in last isocgrone computed
 extern ChooseDeparture chooseDeparture;         // for choice of departure time
 extern HistoryRouteList historyRoute;           // history of calculated routes

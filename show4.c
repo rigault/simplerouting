@@ -142,7 +142,7 @@ cairo_surface_t *surface [MAX_N_SURFACE];
 cairo_t *surface_cr [MAX_N_SURFACE];
 char existSurface [MAX_N_SURFACE] = {false};
 
-double vOffsetLocalUTC; 
+double vOffsetLocalUTC;             // difference in seconds between local time and UTC
 
 GdkRGBA colors [] = {{1.0,0,0,1}, {0,1.0,0,1},  {0,0,1.0,1},{0.5,0.5,0,1},{0,0.5,0.5,1},{0.5,0,0.5,1},{0.2,0.2,0.2,1},{0.4,0.4,0.4,1},{0.8,0,0.2,1},{0.2,0,0.8,1}}; // Colors for Polar curve
 const int nColors = 10;
@@ -171,7 +171,7 @@ bool   destPressed = true;
 bool   polygonStarted = false;
 bool   selecting = FALSE;
 bool   updatedColors = false; 
-struct tm startInfo;
+struct tm startInfo =  {0};
 double theTime = 0.0;
 int    polarType = POLAR;
 int    segmentOrBezier = SEGMENT;
@@ -2583,28 +2583,6 @@ static void polarDraw () {
    gtk_window_present (GTK_WINDOW (polWindow));
 }
 
-/*! time management init */
-static void initStart (struct tm *start) {
-   long intDate = zone.dataDate [0];
-   long intTime = zone.dataTime [0];
-   start->tm_year = (intDate / 10000) - 1900;
-   start->tm_mon = ((intDate % 10000) / 100) - 1;
-   start->tm_mday = intDate % 100;
-   start->tm_hour = intTime / 100;
-   start->tm_min = intTime % 100;
-   start->tm_isdst = -1;                                       // avoid adjustments with hours summer winter
-   start->tm_sec += 3600 * par.startTimeInHours;               // add seconds
-   mktime (start);
-}
-
-/*! calculate difference in hours between departure time and time 0 */
-static double getDepartureTimeInHour (struct tm *start) {
-   time_t theTime0 = gribDateTimeToEpoch (zone.dataDate [0], zone.dataTime [0]);
-   start->tm_isdst = -1;                                       // avoid adjustments with hours summer winter
-   time_t startTime = mktime (start);                          
-   return (startTime - theTime0)/3600.0;                       // calculated in hours
-} 
-
 /*! check if routing is terminated */
 static gboolean allCompetitorsCheck (gpointer data) {
    char str [MAX_SIZE_LINE] = "";
@@ -2614,7 +2592,7 @@ static gboolean allCompetitorsCheck (gpointer data) {
       g_mutex_lock (&warningMutex);
       int i = MAX (0, competitors.runIndex);
       snprintf (str, sizeof (str),"%.0lf%% Competitors count: %2d  %s", 
-         100 * (double) i / (double) competitors.n, i, competitors.t [i].name);
+         100.0 * i / competitors.n, i, competitors.t [i].name);
       statusWarningMessage (statusbar, str);
       g_mutex_unlock (&warningMutex);
       return TRUE;
@@ -2766,11 +2744,10 @@ static void fCalendar (struct tm *start) {
       gtk_string_list_append (competitorsList, str);
    }
    GtkWidget *dropDownCompetitors = gtk_drop_down_new (G_LIST_MODEL (competitorsList), NULL); 
-   int selected = 0;
-   par.pOr.lat = competitors.t [selected].lat;
-   par.pOr.lon = competitors.t [selected].lon;
-   competitors.runIndex = selected;
-   gtk_drop_down_set_selected ((GtkDropDown *) dropDownCompetitors, selected + 1);
+   par.pOr.lat = competitors.t [0].lat;
+   par.pOr.lon = competitors.t [0].lon;
+   competitors.runIndex = 0;
+   gtk_drop_down_set_selected ((GtkDropDown *) dropDownCompetitors, 1);
    g_signal_connect (dropDownCompetitors, "notify::selected", G_CALLBACK (cbCalCompetitor), NULL);
 
    gtk_box_append (GTK_BOX (vBox), calendar);
@@ -3050,6 +3027,10 @@ static gboolean routingCheck (gpointer data) {
    gtk_widget_queue_draw (drawing_area); // affiche le tout
    switch (route.ret) {
    case ROUTING_RUNNING: // not terminated
+      g_mutex_lock (&warningMutex);
+      snprintf (str, sizeof (str),"%3.0lf%% Isoc count: %5d",  100.0 * nIsoc/maxNIsoc, nIsoc);
+      statusWarningMessage (statusbar, str);
+      g_mutex_unlock (&warningMutex);
       return TRUE;
    case ROUTING_STOPPED: // stopped by user
       break;
@@ -3080,7 +3061,6 @@ static void onRunButtonClicked () {
    if (! gpsTrace)
       if (addTraceGPS (par.traceFileName))
          gpsTrace = true; // only one GPS trace per session
-   initStart (&startInfo);
    if (par.special == 0)
       fCalendar (&startInfo);
 }
@@ -3094,7 +3074,7 @@ static gboolean bestDepartureCheck (gpointer data) {
       g_mutex_lock (&warningMutex);
       if (chooseDeparture.tEnd  != 0) {
          snprintf (str, sizeof (str),"Evaluation count: %d  %.0lf%%", chooseDeparture.count, 
-            100 * (double) (chooseDeparture.count * chooseDeparture.tStep) / (double) chooseDeparture.tEnd);
+            100.0 * (chooseDeparture.count * chooseDeparture.tStep) / chooseDeparture.tEnd);
          statusWarningMessage (statusbar, str);
       }
       g_mutex_unlock (&warningMutex);
@@ -3408,30 +3388,6 @@ void cbEditTrace (void *) {
 /*! Edit trace  */
 static void editTrace () {
    editor (app, par.traceFileName, cbEditTrace);
-}
-
-/*! display virtual Regatta dashboard file */
-static void virtualRegDashboardRDump () {
-   char *buffer = NULL;
-   char footer [MAX_SIZE_LINE];
-   char fileName [MAX_SIZE_FILE_NAME];
-   char title [MAX_SIZE_LINE];
-   char directory [MAX_SIZE_DIR_NAME];
-
-   snprintf (directory, sizeof (directory), "%sVRdashboard/", par.workingDir); 
-   if (! mostRecentFile (directory, ".csv", fileName, sizeof (fileName))) { // most recent csv file found
-      infoMessage ("No Virtual Regatta dashboard file found", GTK_MESSAGE_WARNING);
-      return;
-   }
-   g_strlcpy (par.dashboardVR, fileName, sizeof (par.dashboardVR));
-   if ((buffer = (char *) malloc (MAX_SIZE_BUFFER)) == NULL) {
-      infoMessage ("Not enough memory", GTK_MESSAGE_ERROR); 
-      return;
-   }
-   snprintf (title, MAX_SIZE_LINE, "Virtual Regatta Dump: %s", fileName);
-   dashboardFormat (fileName, &competitors, buffer, MAX_SIZE_BUFFER, footer, sizeof (footer)); 
-   displayText (1800, 500, buffer, strlen (buffer), title, footer);
-   free (buffer);
 }
 
 /*! add POR to current trace */
@@ -4094,7 +4050,6 @@ static void drawSpeedometer(GtkDrawingArea *area, cairo_t *cr, int width, int he
    cairo_stroke(cr);
 }
 
-
 /*!  Function to draw the compass */
 static void drawCompass (GtkDrawingArea *area, cairo_t *cr, int width, int height, gpointer data) {
    MyGpsData  *dashboard = (MyGpsData *)data;
@@ -4339,7 +4294,6 @@ static void dashboard () {
 
    gtk_window_present (GTK_WINDOW (dashboardWindow));   
 }
-
 
 /*! reinit NMEA ports */
 static void nmeaInit (GtkWidget *widget, gpointer theWindow) {
@@ -4684,7 +4638,7 @@ static void *getGribWebAll (void *user_data) {
 
          g_mutex_lock (&warningMutex);
          snprintf (statusbarWarningStr, sizeof (statusbarWarningStr), 
-            "Time Run: %02dZ Time Max: %3d  %3.0lf%%", data->hhZ, timeMax, 100 * (double) i / (double) (maxI * 1.1));
+            "Time Run: %02dZ Time Max: %3d  %3.0lf%%", data->hhZ, timeMax, 100.0 * i / (maxI * 1.1));
          g_mutex_unlock (&warningMutex);
 
          if (! curlGet (data->url, fileName, errMessage, sizeof (errMessage))) {
@@ -4708,7 +4662,7 @@ static void *getGribWebAll (void *user_data) {
 
          g_mutex_lock (&warningMutex);
          snprintf (statusbarWarningStr, sizeof (statusbarWarningStr), 
-            "Time Run: %02dZ Time Step: %3d/%3d %3.0lf%%", data->hhZ, i, timeMax, 100 * (double) i / (double) (timeMax * 1.1));
+            "Time Run: %02dZ Time Step: %3d/%3d %3.0lf%%", data->hhZ, i, timeMax, 100.0 * i / (timeMax * 1.1));
          g_mutex_unlock (&warningMutex);
          
          //printf ("timeStep/timeMax = %d/%d\n", i, timeMax); 
@@ -5315,6 +5269,7 @@ static void initScenario () {
    nIsoc = 0;
    route.n = 0;
    route.destinationReached = false;
+   initStart (&startInfo);
 }
 
 /*! callback after edit scenario */
@@ -5648,24 +5603,32 @@ static gboolean getGribWebAllBis (gpointer data) {
    return TRUE;
 }
 
-/*! dashboard import */
-static void dashboardImport () {
-   char messageReport [MAX_SIZE_TEXT] = "";
-   char directory [MAX_SIZE_DIR_NAME];
+/*! Import and display virtual Regatta dashboard file */
+static void virtualRegDashboardImport () {
+   char *buffer = NULL;
+   char footer [MAX_SIZE_LINE];
    char fileName [MAX_SIZE_FILE_NAME];
+   char title [MAX_SIZE_LINE];
+   char directory [MAX_SIZE_DIR_NAME];
+
    snprintf (directory, sizeof (directory), "%sVRdashboard/", par.workingDir); 
    if (! mostRecentFile (directory, ".csv", fileName, sizeof (fileName))) { // most recent csv file found
       infoMessage ("No Virtual Regatta dashboard file found", GTK_MESSAGE_WARNING);
       return;
    }
    g_strlcpy (par.dashboardVR, fileName, sizeof (par.dashboardVR));
-   dashboardImportParam (fileName, &competitors, messageReport, MAX_SIZE_TEXT);
+   if ((buffer = (char *) malloc (MAX_SIZE_BUFFER)) == NULL) {
+      infoMessage ("Not enough memory", GTK_MESSAGE_ERROR); 
+      return;
+   }
+   snprintf (title, MAX_SIZE_LINE, "Virtual Regatta Dump: %s", fileName);
+   startInfo = dashboardImportParam (fileName, &competitors, buffer, MAX_SIZE_BUFFER, footer, sizeof (footer)); 
+   par.pOr.lat = competitors.t [0].lat;
+   par.pOr.lon = competitors.t [0].lon;
+   competitors.runIndex = 0;
    
-   char *messageReportWithoutAccent = g_str_to_ascii (messageReport, NULL);
-   infoMessage (messageReportWithoutAccent, GTK_MESSAGE_INFO);
-   g_free (messageReportWithoutAccent);
-   
-   gtk_widget_queue_draw (drawing_area);
+   displayText (1800, 500, buffer, strlen (buffer), title, footer);
+   free (buffer);
 }
 
 /*! CallBack for test choice */
@@ -5702,9 +5665,6 @@ static void cbDropDownSel (GObject *dropDown, GParamSpec *pspec, gpointer user_d
    case 4:
       testAisTable ();
       break;
-   case 5:
-      dashboardImport ();
-      break;
 
    default:;
    }
@@ -5716,7 +5676,7 @@ static void testSelection () {
    gtk_window_set_title (GTK_WINDOW(testWindow), "Test");
    g_signal_connect (testWindow, "destroy", G_CALLBACK(onParentDestroy), testWindow);
 
-   const char *arrayTest [] = {"readGribLaunch", "calculate", "disp Zone", "getGribWeb", "testAis", "dashboardImport", NULL};
+   const char *arrayTest [] = {"readGribLaunch", "calculate", "disp Zone", "getGribWeb", "testAis", NULL};
    GtkWidget *dropDownSel = gtk_drop_down_new_from_strings (arrayTest);
    gtk_drop_down_set_selected ((GtkDropDown *) dropDownSel, 0);
    g_signal_connect (dropDownSel, "notify::selected", G_CALLBACK (cbDropDownSel), NULL);
@@ -5822,7 +5782,6 @@ static void cbDropDownTStep (GObject *dropDown, GParamSpec *pspec, gpointer user
 #define MAX_INDEX 5
    double values [MAX_INDEX] = {0.25, 0.5, 1.0, 2.0, 3.0};
    int index = gtk_drop_down_get_selected (GTK_DROP_DOWN (dropDown));
-   printf ("index = %d, value = %.2lf\n", index, values [index]);
    if ((index >= 0) && (index < MAX_INDEX))
       par.tStep = values [index];
    gtk_widget_queue_draw (drawing_area); // Draw all
@@ -5922,11 +5881,11 @@ void updateCompetitors() {
    int writeIndex = 0; // Index pour retasser la liste
 
    for (int i = 0; i < MAX_N_COMPETITORS; i++) {
-      g_strstrip(competitors.t[i].name);
+      g_strstrip (competitors.t[i].name);
 
       if (competitors.t[i].name[0] != '\0') {
          if (i != writeIndex) {
-            g_strlcpy(competitors.t[writeIndex].name, competitors.t[i].name, MAX_SIZE_NAME);
+            g_strlcpy (competitors.t[writeIndex].name, competitors.t[i].name, MAX_SIZE_NAME);
             competitors.t[writeIndex].lat = competitors.t[i].lat;
             competitors.t[writeIndex].lon = competitors.t[i].lon;
          }
@@ -6474,67 +6433,6 @@ static void closePolygonSelected () {
    }
    polygonStarted = false;
 }
-
-GtkWidget *popover = NULL;
-const double proximity_threshold = 10.0; // La distance maximale pour détecter un survol
-
-/*static double tabPoint[10][2] = {
-    {50.0, 50.0},
-    {100.0, 100.0},
-    {150.0, 150.0},
-    {200.0, 200.0},
-    {250.0, 250.0},
-    {300.0, 300.0},
-    {350.0, 350.0},
-    {400.0, 400.0},
-    {450.0, 450.0},
-    {500.0, 500.0}
-};
-size_t maxPoint = 10;
-
-static gboolean NonMotionEvent (GtkEventControllerMotion *controller, double x, double y, gpointer user_data) {
-   whereIsMouse.x = x;
-   whereIsMouse.y = y;
-
-   // Check if the mouse is near any point in tabPoint
-   for (size_t i = 0; i < maxPoint; i++) {
-      double point_x = tabPoint[i][0];
-      double point_y = tabPoint[i][1];
-        
-      double distance = sqrt(pow(x - point_x, 2) + pow(y - point_y, 2));
-      if (distance < proximity_threshold) {
-         printf ("found %.2lf %.2lf\n", point_x, point_y);
-         if (popover == NULL) {
-            popover = gtk_popover_new();
-            GtkWidget *label = gtk_label_new ("Point info");
-            gtk_widget_set_parent (popover, drawing_area);
-            g_signal_connect (drawing_area, "destroy", G_CALLBACK (onParentWindowDestroy), popover);
-            gtk_popover_set_child ((GtkPopover*) popover, (GtkWidget *) label);
-         }
-        
-         // Position the popover near the mouse pointer
-         gtk_popover_set_pointing_to ((GtkPopover *) popover, &(GdkRectangle){point_x, point_y, 1, 1});
-         gtk_widget_set_visible (popover, true);
-         return TRUE;
-      }
-   }
-
-   // Hide the popover if the mouse is not near any point
-   if (popover != NULL) {
-      ;
-      gtk_widget_set_visible (popover, false);
-      // gtk_widget_unparent (popover);
-   }
-
-   if (selecting) {
-      gtk_widget_queue_draw(drawing_area); // Redraw for selection rectangle drawing
-   } else {
-      statusBarUpdate();
-   }
-
-   return TRUE;
-}
-*/
 
 /*! callback when mouse move */
 static gboolean onMotionEvent (GtkEventControllerMotion *controller, double x, double y, gpointer user_data) {
@@ -7204,7 +7102,6 @@ static void appActivate (GApplication *application) {
    createButton (toolBox, "pan-end-symbolic", onRightButtonClicked);
    createButton (toolBox, "find-location-symbolic", onCenterMap);
    createButton (toolBox, "edit-select-all", paletteDraw);
-   createButton (toolBox, "insert-object", dashboardImport);
    createButton (toolBox, "applications-engineering-symbolic", testSelection);
    
    GtkWidget *gpsInfo = gtk_label_new (" GPS Info coming...");
@@ -7374,7 +7271,7 @@ static void appStartup (GApplication *application) {
 
    createAction ("polygonDump", polygonDump);
    createAction ("competitorsDump", competitorsDump);
-   createAction ("virtualRegDashboardRDump", virtualRegDashboardRDump);
+   createAction ("virtualRegDashboardImport", virtualRegDashboardImport);
 
    createAction ("nmea", nmeaConf);
    createAction ("ais", aisDump);
@@ -7472,7 +7369,7 @@ static void appStartup (GApplication *application) {
    GMenu *misc_menu_v = g_menu_new ();
    subMenu (misc_menu_v, "Polygon Dump", "app.polygonDump");
    subMenu (misc_menu_v, "Competitors Dump", "app.competitorsDump");
-   subMenu (misc_menu_v, "Virtual Regatta Dashboard Dump", "app.virtualRegDashboardRDump");
+   subMenu (misc_menu_v, "Virtual Regatta Dashboard Import", "app.virtualRegDashboardImport");
 
    // Add elements for "ais gps" menu
    GMenu *ais_gps_menu_v = g_menu_new ();
@@ -7544,7 +7441,6 @@ static void appStartup (GApplication *application) {
 
    gtk_application_set_menubar (GTK_APPLICATION (app), G_MENU_MODEL (menubar));
 }
-
 
 /*! Display main menu and make initializations */
 int main (int argc, char *argv[]) {
@@ -7656,5 +7552,4 @@ int main (int argc, char *argv[]) {
    
    return ret;
 }
-
 

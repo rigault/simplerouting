@@ -365,8 +365,7 @@ bool isNumber (const char *name) {
     return strpbrk (name, "0123456789") != NULL;
 }
 
-/*! replace $ by sequence 
-   can be simplified with g_string_replace(gstr, "$", "\\$", TRUE); */
+/*! replace $ by sequence */
 char *dollarSubstitute (const char* str, char *res, size_t maxLen) {
 #ifdef _WIN32
    g_strlcpy (res, str, maxLen); // no issue with $ with Windows 
@@ -443,14 +442,22 @@ double getCoord (const char *str, double minLimit, double maxLimit) {
    return CLAMP (sign * (deg + min/60.0 + sec/3600.0), minLimit, maxLimit);
 }
 
-/*! build root name if not already a root name */
+/*! Build root name if not already a root name.
+ * Combines the working directory with the file name if it is not absolute.
+ * Stores the result in `rootName` and ensures it does not exceed `maxLen`.
+ *
+ * @param fileName  The name of the file (absolute or relative).
+ * @param rootName  The buffer to store the resulting root name.
+ * @param maxLen    The maximum length of the buffer `rootName`.
+ * @return          A pointer to `rootName`, or NULL on error.
+ */
 char *buildRootName (const char *fileName, char *rootName, size_t maxLen) {
-   if (fileName [0] == '/') 
-      g_strlcpy (rootName, fileName, maxLen);
-   else if (par.workingDir [0] != '\0')
-      snprintf (rootName, maxLen, "%s%s", par.workingDir, fileName);
-   else snprintf (rootName, maxLen, "%s%s", WORKING_DIR, fileName);
-   return (rootName);
+   const char *workingDir = par.workingDir[0] != '\0' ? par.workingDir : WORKING_DIR;
+   gchar *fullPath = (g_path_is_absolute (fileName)) ? g_strdup (fileName) : g_build_filename (workingDir, fileName, NULL);
+   if (!fullPath) return NULL;
+   g_strlcpy (rootName, fullPath, maxLen);
+   g_free (fullPath);
+   return rootName;
 }
 
 /*! get file size */
@@ -759,6 +766,20 @@ void initZone (Zone *zone) {
    zone->nbLon = 0;
 }
 
+/*! time management init at begining of Grib */
+void initStart (struct tm *start) {
+   long intDate = zone.dataDate [0];
+   long intTime = zone.dataTime [0];
+   start->tm_year = (intDate / 10000) - 1900;
+   start->tm_mon = ((intDate % 10000) / 100) - 1;
+   start->tm_mday = intDate % 100;
+   start->tm_hour = intTime / 100;
+   start->tm_min = intTime % 100;
+   start->tm_isdst = -1;                                       // avoid adjustments with hours summer winter
+   start->tm_sec += 3600 * par.startTimeInHours;               // add seconds
+   mktime (start);
+}
+
 /*! return offset Local UTC in seconds */
 double offsetLocalUTC (void) {
    time_t now;
@@ -830,6 +851,14 @@ time_t gribDateTimeToEpoch (long date, long time) {
    tm0.tm_isdst = -1;                        // avoid adjustments with hours summer winter
    return mktime (&tm0);                                 
 }
+
+/*! calculate difference in hours between departure time and time 0 */
+double getDepartureTimeInHour (struct tm *start) {
+   time_t theTime0 = gribDateTimeToEpoch (zone.dataDate [0], zone.dataTime [0]);
+   start->tm_isdst = -1;                                       // avoid adjustments with hours summer winter
+   time_t startTime = mktime (start);                          
+   return (startTime - theTime0)/3600.0;                       // calculated in hours
+} 
 
 /*! return difference in hours between two zones (current zone and Wind zone) */
 double zoneTimeDiff (const Zone *zone1, const Zone *zone0) {

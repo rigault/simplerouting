@@ -42,6 +42,7 @@ extern CompetitorsList competitors;
 /*! functions defined in rutil.c */
 extern void   removeAllTmpFilesWithPrefix (const char *prefix);
 extern double offsetLocalUTC (void);
+extern void   initStart (struct tm *start);
 extern double diffTimeBetweenNowAndGribOrigin (long intDate, double nHours);
 extern void   *commandRun (void *data);
 extern bool   compact (bool full, const char *dir, const char *inFile,\
@@ -63,6 +64,7 @@ extern char   *durationToStr (double duration, char *res, size_t maxLen);
 extern void   initZone (Zone *zone);
 extern char   *epochToStr (time_t t, bool seconds, char *str, size_t len);
 extern time_t gribDateTimeToEpoch (long date, long time);
+extern double getDepartureTimeInHour (struct tm *start);
 extern char   *gribDateTimeToStr (long date, long time, char *str, size_t len);
 extern double zoneTimeDiff (const Zone *zone1, const Zone *zone0);
 extern bool   readPolar (const char *fileName, PolMat *mat, char *errMessage, size_t maxLen);

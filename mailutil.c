@@ -228,14 +228,13 @@ static char* extractFilename (const char *filename) {
    return filenameFound;
 }
 
-/*! extract Base64 content from text fiename */
+/*! extract Base64 content from text filename */
 static char *extractBase64Content (const char *filename) {
    FILE *file = fopen(filename, "r");
    if (file == NULL) {
       fprintf (stderr, "In ExtractBase64Content: Error opening file: %s", filename);
       return NULL;
    }
-
    GString *contentBuffer = g_string_new (NULL); // dynamic buffer
    gboolean isBase64Section = FALSE;
    char line [MAX_SIZE_LINE_BASE64];
@@ -247,7 +246,6 @@ static char *extractBase64Content (const char *filename) {
          isBase64Section = TRUE;
          continue; // Passer à la ligne suivante
       }
-
       // collect encoded lines
       if (isBase64Section) {
          if ((strstr (lowerLine, "content-") != NULL) && (strstr (lowerLine, "name="))) continue; // next line 
@@ -255,19 +253,16 @@ static char *extractBase64Content (const char *filename) {
          if (line[0] == '-' || strstr (lowerLine, "content-") != NULL) {
             break;
          }
-         g_string_append(contentBuffer, g_strstrip(line));
+         g_string_append (contentBuffer, g_strstrip(line));
       }
       g_free (lowerLine);
    }
-
    fclose(file);
-
    if (contentBuffer->len == 0) {
       fprintf (stderr, "In extractBase64Content: no data found in file: %s\n", filename);
       g_string_free (contentBuffer, TRUE);
       return NULL;
    }
-
    char *base64_content = g_strdup (contentBuffer->str);
    g_string_free (contentBuffer, TRUE);
    return base64_content;
