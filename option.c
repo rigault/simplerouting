@@ -31,12 +31,12 @@ static void initScenarioOption (void) {
       printf ("Cur grib loaded: %s\n", par.currentGribFileName);
       printf ("Grib DateTime0 : %s\n", gribDateTimeToStr (currentZone.dataDate [0], currentZone.dataTime [0], str, sizeof (str)));
    }
-   if (readPolar (par.polarFileName, &polMat, errMessage, sizeof (errMessage)))
+   if (readPolar (true, par.polarFileName, &polMat, errMessage, sizeof (errMessage)))
       printf ("Polar loaded   : %s\n", par.polarFileName);
    else
       fprintf (stderr, "In initScenarioOption, Error readPolar: %s\n", errMessage);
       
-   if (readPolar (par.wavePolFileName, &wavePolMat, errMessage, sizeof (errMessage)))
+   if (readPolar (true, par.wavePolFileName, &wavePolMat, errMessage, sizeof (errMessage)))
       printf ("Polar loaded   : %s\n", par.wavePolFileName);
    else
       fprintf (stderr, "In initScenatioOption, Error readPolar: %s\n", errMessage);
@@ -51,10 +51,17 @@ static void initScenarioOption (void) {
 void optionManage (char option) {
 	FILE *f = NULL;
    char directory [MAX_SIZE_DIR_NAME];
-   char buffer [MAX_SIZE_BUFFER] = "";
+   char *buffer = NULL;
+   char footer [MAX_SIZE_LINE] = "";
    double w, twa, tws, lon, lat, lat2, lon2, cog;
    char errMessage [MAX_SIZE_TEXT] = "";
    char str [MAX_SIZE_LINE] = "";
+
+   if ((buffer = (char *) malloc (MAX_SIZE_BUFFER)) == NULL) {
+      fprintf (stderr, "In optionManage, Error Malloc %d\n", MAX_SIZE_BUFFER); 
+      return;
+   }
+   
    switch (option) {
    case 'a':
       snprintf (str, sizeof (str), "%sgrib/inter-", par.workingDir);
@@ -142,7 +149,7 @@ void optionManage (char option) {
       else printf ("No network\n");
       break;
    case 'p': // polar
-      readPolar (par.polarFileName, &polMat, errMessage, sizeof (errMessage));
+      readPolar (true, par.polarFileName, &polMat, errMessage, sizeof (errMessage));
       polToStr (&polMat, buffer, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       while (true) {
@@ -154,7 +161,7 @@ void optionManage (char option) {
       }
       break;
    case 'P': // Wave polar
-      readPolar (par.wavePolFileName, &wavePolMat, errMessage, sizeof (errMessage));
+      readPolar (true, par.wavePolFileName, &wavePolMat, errMessage, sizeof (errMessage));
       polToStr (&wavePolMat, buffer, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       while (true) {
@@ -173,8 +180,9 @@ void optionManage (char option) {
       }
       initScenarioOption ();
       routingLaunch ();
-      routeToStr (&route, buffer, sizeof (buffer));
+      routeToStr (&route, buffer, sizeof (buffer), footer, sizeof (footer));
       printf ("%s\n", buffer);
+      printf ("%s\n", footer);
       break;
    case 's': // isIsea
       readIsSea (par.isSeaFileName);
@@ -229,4 +237,5 @@ void optionManage (char option) {
       printf ("Option unknown: -%c\n", option);
       break;
    }
+   free (buffer);
 }

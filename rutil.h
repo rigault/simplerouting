@@ -1,3 +1,10 @@
+/*! Zone description */
+extern Zone zone;                      // wind
+extern Zone currentZone;               // current
+
+/*! grib data description */
+extern FlowP *tGribData [];            // wind, current
+
 /*! list of wayPoint */
 extern WayPointList wayPoints;
 
@@ -5,27 +12,23 @@ extern WayPointList wayPoints;
 extern MyPolygon forbidZones [MAX_N_FORBID_ZONE];
 
 /*! Meteo service */
-extern struct MeteoElmt meteoTab [];
+extern struct MeteoElmt meteoTab [N_METEO_ADMIN];
 extern const struct MailService mailServiceTab [];
 extern const struct GribService serviceTab [];
 
 /*! polar description */
+extern const char *sailName [];
 extern PolMat polMat;
+extern PolMat sailPolMat;
 extern PolMat wavePolMat;
 
 extern Par par;
 
-/*! Zone description */
-extern Zone zone;                      // wind
-extern Zone currentZone;               // current
-
 extern char *tIsSea;                   // array of byte. 0 if earth, 1 if sea
-
-/*! grib data description */
-extern FlowP *tGribData [];            // wind, current
 
 extern Poi tPoi [MAX_N_POI];
 extern int nPoi;
+extern struct tm startInfo;
 
 /*! for shp files */
 extern int    nTotEntities;
@@ -40,6 +43,11 @@ extern const char *METEO_CONSULT_CURRENT_URL [];
 extern CompetitorsList competitors;
 
 /*! functions defined in rutil.c */
+extern char  *fSailName (int val, char *str, size_t maxLen);
+extern void   initZone (Zone *zone);
+extern int    maxTimeRange (int service, int mailService);
+extern int    howManyShortnames (int service, int mailService);
+extern char   *newFileNameSuffix (const char *fileName, const char *suffix, char *newFileName, size_t maxLen);
 extern void   removeAllTmpFilesWithPrefix (const char *prefix);
 extern double offsetLocalUTC (void);
 extern void   initStart (struct tm *start);
@@ -61,29 +69,15 @@ extern long   getFileSize (const char *fileName);
 extern char   *latToStr (double lat, int type, char* str, size_t maxLen);
 extern char   *lonToStr (double lon, int type, char* str, size_t maxLen);
 extern char   *durationToStr (double duration, char *res, size_t maxLen);
-extern void   initZone (Zone *zone);
 extern char   *epochToStr (time_t t, bool seconds, char *str, size_t len);
 extern time_t gribDateTimeToEpoch (long date, long time);
 extern double getDepartureTimeInHour (struct tm *start);
 extern char   *gribDateTimeToStr (long date, long time, char *str, size_t len);
-extern double zoneTimeDiff (const Zone *zone1, const Zone *zone0);
-extern bool   readPolar (const char *fileName, PolMat *mat, char *errMessage, size_t maxLen);
-extern char   *polToStr (const PolMat *mat, char *str, size_t maxLen);
-extern bool   readGribAll (const char *fileName, Zone *zone, int iFlow);
-extern void   findWindGrib (double lat, double lon, double t, double *u, double *v, double *gust, double *w, double *twd, double *tws );
-extern double findRainGrib (double lat, double lon, double t);
-extern double findPressureGrib (double lat, double lon, double t);
-extern void   findCurrentGrib (double lat, double lon, double t, double *uCurr, double *vCurr, double *tcd, double *tcs);
 extern char   *newDate (long intDate, double myTime, char *res, size_t maxLen);
 extern char   *newDateWeekDay (long intDate, double myTime, char *res, size_t maxLen);
 extern char   *newDateWeekDayVerbose (long intDate, double myTime, char *res, size_t maxLen);
-extern char   *gribToStr (const Zone *zone, char *str, size_t maxLen);
-extern double maxValInPol (const PolMat *mat);
-extern void   bestVmg (double tws, PolMat *mat, double *vmgAngle, double *vmgSpeed);
-extern void   bestVmgBack (double tws, PolMat *mat, double *vmgAngle, double *vmgSpeed);
 extern bool   readParam (const char *fileName);
 extern bool   writeParam (const char *fileName, bool header, bool password);
-extern void   printGrib (const Zone *zone, const FlowP *gribData);
 extern bool   readIsSea (const char *fileName);
 extern int    readPoi (const char *fileName);
 extern bool   writePoi (const char *fileName);
@@ -91,8 +85,6 @@ extern int    findPoiByName (const char *name, double *lat, double *lon);
 extern void   poiPrint ();
 extern char   *nearestPort (double lat, double lon, const char *fileName, char *str, size_t maxLen);
 extern int    poiToStr (bool portCheck, char *str, size_t maxLen);
-extern bool   checkGribInfoToStr (int type, Zone *zone, char *buffer, size_t maxLen);
-extern bool   checkGribToStr (char *buffer, size_t maxLen);
 extern char   *dollarSubstitute (const char* str, char *res, size_t maxLen);
 extern char   *strCpyMaxWidth (const char *str, int n, char *res, size_t maxLen);
 extern bool   curlGet (const char *url, const char *outputFile, char *errMessage, size_t maxLen); 

@@ -11,6 +11,7 @@
 
 /*! copy src to dest with and padding */
 static void strncpyPad (char *dest, const char *src, size_t n) {
+    //snprintf (dest, n + 1, "%s;", src); 
     g_strlcpy (dest, src, n + 1);
     size_t len = strlen (dest);
     memset (dest + len, ' ', n - len);
@@ -50,7 +51,8 @@ struct tm getTmTime (const char *strDate, const char *strTime) {
 }
 
 /*! format one CSV line */
-static void formatLine (bool first, char **tokens, char *line, size_t maxLen, const size_t elemSize[], size_t elemSizeLen) {
+static void formatLine (bool first, char **tokens, const char *strTime, char *line, size_t maxLen, 
+                        const size_t elemSize[], size_t elemSizeLen) {
    char elem [MAX_SIZE_NAME];
    line [0] = '\0';
    int dec = 0;
@@ -63,8 +65,8 @@ static void formatLine (bool first, char **tokens, char *line, size_t maxLen, co
          newToken = g_str_to_ascii (tokens [i], NULL); // suppress accents
          break;
       case 2: // date & time
-        newToken = (first) ? g_strdup ("UTC") : g_strdup (tokens [2]);
-        break;
+         newToken = g_strdup (strTime);
+         break;
       case 10: 
          newToken = g_strdup (tokens [i]);
          if (first) dec = -2;
@@ -77,7 +79,9 @@ static void formatLine (bool first, char **tokens, char *line, size_t maxLen, co
       g_strlcat (line, elem, maxLen);
       g_strlcat (line, " ", maxLen);
    }
-   g_strlcat (line, "\n", maxLen);
+   g_strstrip (line);
+   if (strlen (line) > 0)
+      g_strlcat (line, "\n", maxLen);
 }
 
 /*! Import virtual Regatta dashboard file
@@ -86,16 +90,17 @@ static void formatLine (bool first, char **tokens, char *line, size_t maxLen, co
    report: text
    footer: with metadata
 */
-struct tm dashboardImportParam (const char *filename, CompetitorsList *competitors, char *report, size_t maxLen, char *footer, size_t maxLenFooter) {
+struct tm dashboardImportParam (const char *filename, CompetitorsList *competitors, 
+                                char *report, size_t maxLen, char *footer, size_t maxLenFooter) {
    double lat, lon;
    char line [MAX_SIZE_LINE];
    char reportLine [MAX_SIZE_TEXT] = "";
    int nLine = 0;
-   const size_t elemSize [] = {0, 12, 9, 8, 10, 10, 0, 5, 0, 12, 31, 7, 8, 8, 8, 7, 7, 10, 10};
+   const size_t elemSize [] = {0, 12, 9, 8, 10, 10, 0, 5, 0, 0, 31, 7, 8, 8, 8, 7, 7, 10, 10}; // 0 means not shown
    const size_t elemSizeLen = sizeof (elemSize) / sizeof (size_t);
    FILE *file = fopen (filename, "r");
    struct tm tm0 = {0}; 
-   char strDate [MAX_SIZE_NAME];
+   char strDate [MAX_SIZE_NAME], strTime [MAX_SIZE_NAME];
 
    if (file == NULL) {
       snprintf (report, maxLen, "In dashboardFormat, could not open file: %s\n", filename);
@@ -107,37 +112,42 @@ struct tm dashboardImportParam (const char *filename, CompetitorsList *competito
       // Parse the CSV line
       nLine += 1;
       gchar **tokens = g_strsplit (line, ";", -1);
-      if (!tokens || g_strv_length (tokens) < 11) {
-         if (nLine < 4) {
-            if (strstr (tokens [0], "Name") != NULL)
-               snprintf (footer, maxLenFooter, "%s   ", g_strstrip (tokens [1]));
-            else if (strstr (tokens [0], "Export Date") != NULL)
-               g_strlcpy (strDate, tokens [1], sizeof (strDate));
-         }
-         g_strfreev(tokens);
-         continue; // Skip invalid lines
-      }
-      if (nLine == 5) {
-         formatLine (true, tokens, reportLine, sizeof (reportLine), elemSize, elemSizeLen);
-         g_strlcat (report, reportLine, maxLen);
-      }
-
-      // Extract fields (
-      g_strstrip (tokens [1]);                        // second column as name
-
-      if (! analyseCoord (tokens [10], &lat, &lon))   // 11th column with lat, lon
+      if (! tokens)
          continue;
-
-      // Check if the name exists in the competitors list
-      for (int i = 0; i < competitors->n; i++) {
-         if (g_strcmp0 (tokens [1], competitors->t[i].name) == 0) {
-            competitors->t[i].lat = lat;
-            competitors->t[i].lon = lon;
-            tm0 = getTmTime (strDate, tokens [2]); // find tm time based on date and time in column 2
-            snprintf (tokens [2], strlen (tokens [2]), "%02d:%02d:%02d", tm0.tm_hour, tm0.tm_min, tm0.tm_sec); // overwrite token [2]
-            formatLine (false, tokens, reportLine, sizeof (reportLine), elemSize, elemSizeLen);
+      switch (nLine) {
+      case 1: 
+         if ((g_strv_length (tokens) > 1) && (strstr (tokens [0], "Name") != NULL))
+            snprintf (footer, maxLenFooter, "%s   ", g_strstrip (tokens [1]));
+         break;
+      case 3:
+         if ((g_strv_length (tokens) > 1) &&  (strstr (tokens [0], "Export Date") != NULL))
+            g_strlcpy (strDate, tokens [1], sizeof (strDate));
+         break;
+      case 5:
+         if ((g_strv_length (tokens) > 11)) {
+            formatLine (true, tokens, "UTC", reportLine, sizeof (reportLine), elemSize, elemSizeLen);
             g_strlcat (report, reportLine, maxLen);
-            break;
+         }
+         break;
+      default:
+         if ((g_strv_length (tokens) > 11)) {
+            g_strstrip (tokens [1]);                        // second column as name
+            if (! analyseCoord (tokens [10], &lat, &lon)) {  // 11th column with lat, lon
+               g_strfreev (tokens);
+               break;
+            }
+            // Check if the name exists in the competitors list
+            for (int i = 0; i < competitors->n; i++) {
+               if (g_strcmp0 (tokens [1], competitors->t[i].name) == 0) {
+                  competitors->t[i].lat = lat;
+                  competitors->t[i].lon = lon;
+                  tm0 = getTmTime (strDate, tokens [2]); // find tm time based on date and time in column 2
+                  snprintf (strTime, sizeof (strTime), "%02d:%02d:%02d", tm0.tm_hour, tm0.tm_min, tm0.tm_sec);
+                  formatLine (false, tokens, strTime, reportLine, sizeof (reportLine), elemSize, elemSizeLen);
+                  g_strlcat (report, reportLine, maxLen);
+                  break;
+               }
+            }
          }
       }
       g_strfreev (tokens);

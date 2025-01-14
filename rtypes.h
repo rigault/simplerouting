@@ -49,8 +49,8 @@
 #define MAX_N_DAYS_WEATHER    16               // Max number od days for weather forecast
 #define MAX_SIZE_ISOC         50000            // max number of point in an isochrone
 #define MAX_N_ISOC            (384 + 1) * 4    // Max Hours in 16 days * 4 times per hours max (tSep = 15 mn) required for STATIC way
-#define MAX_N_POL_MAT_COLS    64
-#define MAX_N_POL_MAT_LINES   64
+#define MAX_N_POL_MAT_COLS    128
+#define MAX_N_POL_MAT_LINES   128
 #define MAX_SIZE_LINE         256		         // max size of pLine in text files
 #define MAX_SIZE_STD          1024		         // max size of lines standard
 #define MAX_SIZE_LINE_BASE64  1024              // max size of line in base64 mail file
@@ -85,11 +85,12 @@
 #define MAX_INDEX_ENTITY      512               // for shp. Index.
 #define MAX_N_COMPETITORS     10                // Number max of competitors
 #define MAX_SIZE_SHIP_NAME    21                // see AIS specificatiions
+#define MAX_N_SAIL            8                 // max number of sails in sailName table
 
 enum {NOAA_WIND, ECMWF_WIND, ARPEGE_WIND, MAIL, MAIL_SAILDOCS_CURRENT}; // NOAA or ECMWF for web download or MAIL. Specific for current
 enum {GPS_INDEX, AIS_INDEX};                    // for NMEA USB serial port reading
 enum {WIND, CURRENT};                           // for grib information, either WIND or CURRENT
-enum {POLAR, WAVE_POLAR};                       // for polar information, either POLAR or WAVE
+enum {WIND_POLAR, WAVE_POLAR, SAIL_POLAR};      // for polar information, either WIND or WAVE or SAIL
 enum {POI_SEL, PORT_SEL};                       // for editor or spreadsheet, call either POI or PORT
 enum {BASIC, DD, DM, DMS};                      // degre, degre decimal, degre minutes, degre minutes seconds
 enum {TRIBORD, BABORD};                         // amure
@@ -247,6 +248,7 @@ typedef struct {
    int    id;
    int    father;
    int    amure;
+   int    sail;
    bool   motor;
    int    sector;
    int    toIndexWp;
@@ -260,7 +262,7 @@ typedef struct {
 typedef struct {
    int    toIndexWp; // index of waypoint targetted
    double distance;  // best distance from Isoc to pDest
-   double bestVmg;   // best VMG (distance)
+   double bestVmc;   // best VMC (distance)
    int    closest;   // index in Iso of closest point to pDest
    int    first;     // index of first point, useful for drawAllIsochrones
    int    size;      // size of isochrone
@@ -293,6 +295,7 @@ typedef struct {
    int    father;
    int    amure;
    int    toIndexWp;
+   int    sail;
    bool   motor;
    double time;   // time in hours after start
    double oCap;   // orthodromic cap
@@ -338,6 +341,7 @@ typedef struct {
 /*! Route description  */
 typedef struct {
    int    nIsoc;                            // number of Isochrones
+   double isocTimeStep;                     // isoc time step for this route
    int    n;                                // number of steps
    double calculationTime;                  // compute time to calculate the route
    double lastStepDuration;                 // in hours
@@ -358,6 +362,7 @@ typedef struct {
    double maxWave;                          // max wave of the route
    double maxSog;                           // max Speed Over Ground
    int    competitorIndex;                  // index of competitor. See CompetitorsList.
+   int    nSailChange;
    SailPoint *t;                            // array of points (maxNIsoc + 1)
    //SailPoint t [MAX_N_ISOC + 1];            // idem STATIC
 } SailRoute;
@@ -374,7 +379,7 @@ typedef struct {
    int dashboardUTC;                         // true if VR Dashboard provide time in UTC. false if local time.
    int maxPoiVisible;                        // poi visible if <= maxPoiVisible
    int opt;                                  // 0 if no optimization, else number of opt algorithm
-   double tStep;                             // hours
+   double tStep;                             // hours, for isochrones
    int cogStep;                              // step of cog in degrees
    int rangeCog;                             // range of cog from x - RANGE_GOG, x + RAGE_COG+1
    int special;                              // special purpose
@@ -408,6 +413,7 @@ typedef struct {
    char traceFileName [MAX_SIZE_FILE_NAME];  // trace is a list of point/time
    char midFileName [MAX_SIZE_FILE_NAME];    // list of mid country related to mmsi and AIS
    char tidesFileName [MAX_SIZE_FILE_NAME];  // list of ports witht lat, lon fo tides
+   char logFileName [MAX_SIZE_FILE_NAME];    // log the runs
    char dashboardVR [MAX_SIZE_FILE_NAME];    // Virtual Regatta dashboard thanks to plugin 
    int nShpFiles;                            // number of Shp files
    double startTimeInHours;                  // time of beginning of routing after time0Grib
@@ -433,8 +439,9 @@ typedef struct {
    int speedDisp;                            // Speed of Display 
    int aisDisp;                              // AIS display
    int shpPointsDisp;                        // display points only for SHP files
-   int penalty0;                             // penalty in minutes when amure change front
-   int penalty1;                             // penalty in minutes when amure change back
+   int penalty0;                             // penalty in minutes for tack
+   int penalty1;                             // penalty in minutes fot Gybe
+   int penalty2;                             // penalty in minutes for sail change
    double motorSpeed;                        // motor speed if used
    double threshold;                         // threshold for motor use
    double nightEfficiency;                   // efficiency of team at night

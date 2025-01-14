@@ -383,7 +383,7 @@ static int imapRead (const char* imapServer, const char *username, const char *p
 static int imapGetUnseenPython (const char *path, char *gribFileName, size_t maxLen) {
    char *fileName;
    const int MAX_LINES = 10;
-   char line[MAX_SIZE_LINE] = "";
+   char line [MAX_SIZE_LINE] = "";
    char buffer[MAX_SIZE_BUFFER] = "\n";
    int n = 0;
    static int count; 

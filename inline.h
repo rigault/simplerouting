@@ -139,6 +139,28 @@ static inline double findPolar (double twa, double w, PolMat mat) {
    return interpolate (w, mat.t [0][cInf], mat.t [0][cSup], s0, s1);
 }
 
+/*! find in polar boat closest int value without interpolation */
+static inline int closestInPolar (double twa, double w, PolMat mat) {
+   int l, c, lInf, cInf, lSup, cSup;
+   if (mat.nLine == 0 || mat.nCol == 0)
+      return 0;
+   if (twa > 180) twa = 360 - twa;
+   else if (twa < 0) twa = -twa;
+   for (l = 1; l < mat.nLine; l++) 
+      if (mat.t [l][0] > twa) break;
+   lSup = (l < mat.nLine - 1) ? l : mat.nLine - 1;
+   lInf = (l == 1) ? 1 : l - 1;
+   l =  (fabs (twa - lInf) < fabs (twa - lSup)) ? lInf : lSup;
+
+   for (c = 1; c < mat.nCol; c++) 
+      if (mat.t [0][c] > w) break;
+   cSup = (c < mat.nCol - 1) ? c : mat.nCol - 1;
+   cInf = (c == 1) ? 1 : c - 1;
+   c =  (fabs (w - cInf) < fabs (twa - cSup)) ? cInf : cSup;
+
+   return mat.t [l][c];
+}
+
 /*! return max speed of boat at tws for all twa */
 static inline double maxSpeedInPolarAt (double tws, const PolMat *mat) {
    double max = 0.0;

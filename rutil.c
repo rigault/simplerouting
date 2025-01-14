@@ -47,6 +47,8 @@ const struct GribService serviceTab [N_WEB_SERVICES] = {
    {3, "Resolution allways 0.25. Time Step allways 3 hours. 5 days max => 4.25 days (102 hours) max."} // ARPEGE
 };
 
+const char *sailName [MAX_N_SAIL] = {"NA", "C0", "HG", "Jib", "LG", "LJ", "Spi", "SS"}; // for sail polars
+
 /*! list of wayPoint */
 WayPointList wayPoints;
 
@@ -55,6 +57,10 @@ CompetitorsList competitors;
 
 /*! polar matrix description */
 PolMat polMat;
+
+/*! polar matrix for sails */
+PolMat sailPolMat;
+
 
 /*! polar matrix for waves */
 PolMat wavePolMat;
@@ -79,6 +85,9 @@ Zone currentZone;                   // current
 
 FlowP *tGribData [2]= {NULL, NULL};  // wind, current
 
+// start date
+struct tm startInfo =  {0};
+
 const char *METEO_CONSULT_WIND_URL [N_METEO_CONSULT_WIND_URL * 2] = {
    "Atlantic North",   "%sMETEOCONSULT%02dZ_VENT_%02d%02d_Nord_Atlantique.grb",
    "Atlantic Center",  "%sMETEOCONSULT%02dZ_VENT_%02d%02d_Centre_Atlantique.grb",
@@ -96,6 +105,15 @@ const char *METEO_CONSULT_CURRENT_URL [N_METEO_CONSULT_CURRENT_URL * 2] = {
    "Manche",            "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Manche.grb",
    "Gascogne",          "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Gascogne.grb"
 };
+
+/*! return the name of the sail */
+char *fSailName (int val, char *str, size_t maxLen) {
+   if (val >= 0 && val < MAX_N_SAIL)
+      g_strlcpy (str, sailName [val], maxLen);
+   else
+      g_strlcpy (str, "--", maxLen);
+   return str;
+}
 
 /*! reinit zone decribing geographic meta data */
 void initZone (Zone *zone) {
@@ -149,6 +167,29 @@ int maxTimeRange (int service, int mailService) {
 /*! evaluate number of shortnames according to service and id mail, mailService */
 int howManyShortnames (int service, int mailService) { 
    return (service == MAIL) ? mailServiceTab [mailService].nShortNames : serviceTab [service].nShortNames; 
+}
+
+/*! replace former suffix (after last dot) by suffix 
+   example : "pol/bibi.toto.csv" with suffix "sailpol" will give: "pol/bibi.toto.sailpol" */
+char *newFileNameSuffix (const char *fileName, const char *suffix, char *newFileName, size_t maxLen) {
+   const char *lastDot = strrchr(fileName, '.'); // find last point position
+   const char *baseName = fileName;
+   size_t baseLen;
+
+   if (lastDot != NULL) // // length of base
+      baseLen = lastDot - fileName;
+   else
+      baseLen = strlen (fileName);
+
+   // check resulting lenght is in maxLen
+   if (baseLen + strlen (suffix) + 1 >= maxLen) { // for the  '.'
+      return NULL; // not enough space
+   }
+   g_strlcpy (newFileName, baseName, baseLen + 1);
+   strcat (newFileName, ".");
+   strcat (newFileName, suffix);
+
+   return newFileName;
 }
 
 /*!remove all .tmp file with prefix */
@@ -563,6 +604,12 @@ char *latToStr (double lat, int type, char* str, size_t maxLen) {
    double mn = 60 * lat - 60 * (int) lat;
    double sec = 3600 * lat - (3600 * (int) lat) - (60 * (int) mn);
    char c = (lat > 0) ? 'N' : 'S';
+
+   if (lat > 90.0 || lat < -90.0) {
+      g_strlcpy (str, "Lat Errror", maxLen);
+      return str;
+   }
+
    switch (type) {
    case BASIC: snprintf (str, maxLen, "%.2lf°", lat); break;
    case DD: snprintf (str, maxLen, "%06.2lf°%c", fabs (lat), c); break;
@@ -580,6 +627,12 @@ char *lonToStr (double lon, int type, char *str, size_t maxLen) {
    double mn = 60 * lon - 60 * (int) lon;
    double sec = 3600 * lon - (3600 * (int) lon) - (60 * (int) mn);
    char c = (lon > 0) ? 'E' : 'W';
+
+   if (lon > 180.0 || lon < -180.0) {
+      g_strlcpy (str, "Lon Errror", maxLen);
+      return str;
+   }
+
    switch (type) {
    case BASIC: snprintf (str, maxLen, "%.2lf°", lon); break;
    case DD: snprintf (str, maxLen, "%06.2lf°%c", fabs (lon), c); break;
@@ -722,14 +775,14 @@ void poiPrint () {
 int poiToStr (bool portCheck, char *str, size_t maxLen) {
    char line [MAX_SIZE_LINE] = "";
    char strLat [MAX_SIZE_NAME] = "";
-   char strLon [MAX_SIZE_LINE] = "";
+   char strLon [MAX_SIZE_NAME] = "";
    int count = 0;
    snprintf (str, MAX_SIZE_LINE, "Lat         Lon           Type  Level Country Name\n");
    
    
    for (int i = 0; i < nPoi; i++) {
       if ((tPoi [i].type > UNVISIBLE) && ((tPoi [i].type != PORT) || portCheck)) {
-         snprintf (line, MAX_SIZE_LINE, "%-12s %-12s %6d %6d %7s %s\n",\
+         snprintf (line, MAX_SIZE_LINE, "%-12s;%-12s;%6d;%6d;%7s;%s\n",\
             latToStr (tPoi[i].lat, par.dispDms, strLat, sizeof (strLat)),\
             lonToStr (tPoi[i].lon, par.dispDms, strLon, sizeof (strLon)),\
             tPoi [i].type, tPoi [i].level, tPoi [i].cc, tPoi[i].name);
@@ -757,7 +810,7 @@ char *nearestPort (double lat, double lon, const char *fileName, char *res, size
 
    if ((f = fopen (fileName, "r")) == NULL) {
       fprintf (stderr, "In nearestPort, Error cannot open: %s\n", fileName);
-      return res;
+      return NULL;
    }
    while (fgets (str, MAX_SIZE_LINE, f) != NULL ) {
       if (sscanf (str, "%lf,%lf,%63s", &latPort, &lonPort, portName) > 2) {
@@ -769,6 +822,7 @@ char *nearestPort (double lat, double lon, const char *fileName, char *res, size
          }
       }
    }
+   fclose (f);
    return res;
 }
 
@@ -897,7 +951,8 @@ bool analyseCoord (const char *strCoord, double *lat, double *lon) {
    char *pt = NULL;
    char *str = g_strdup (strCoord);
    g_strstrip (str);
-   if (isNumber (str) && ((pt = strchr (str, ',')) || (pt = strchr (str, '-')))) {
+   // be careful with '-' separator: ambiguity if -45-60
+   if (isNumber (str) && ((pt = strchr (str, ',')) || (pt = strchr (str, '-'))) && isNumber (pt + 1)) {
       *lon = getCoord (pt + 1, MIN_LON, MAX_LON);
       *pt = '\0'; // cut str in two parts
       *lat = getCoord (str, MIN_LAT, MAX_LAT);
@@ -1039,7 +1094,7 @@ bool readParam (const char *fileName) {
       if ((pt = strchr (pLine, '#')) != NULL)               // comment elimination
          *pt = '\0';
 
-      if (sscanf (pLine, "DESC:%255[^\n]s", par.description) > 0)
+      if (sscanf (pLine, "DESC:%255[^\n]", par.description) > 0)
          g_strstrip (par.description);
       else if (sscanf (pLine, "ALLWAYS_SEA:%d", &par.allwaysSea) > 0);
       else if (sscanf (pLine, "WD:%255s", par.workingDir) > 0);  // should be first !!!
@@ -1069,26 +1124,23 @@ bool readParam (const char *fileName) {
                wayPoints.n += 1;
          }
       }
-      else if (strstr (pLine, "COMPETITOR:") != NULL) {
+      else if  (strstr (pLine, "COMPETITOR:") != NULL) {
          if (competitors.n > MAX_N_COMPETITORS)
             fprintf (stderr, "In readParam, Error number of competitors exceeded; %d\n", MAX_N_COMPETITORS);
          else {
-            if (sscanf (pLine, "COMPETITOR:%d", &competitors.t [competitors.n].colorIndex) > 0) {
-               competitors.t [competitors.n].name [0] = '\0';
-               if (((pt = strrchr (pLine, ';')) != NULL) && (sscanf (pt + 1, "%64s", competitors.t [competitors.n].name) > 0)) {
-                  *pt = '\0'; // cut line
-                  g_strstrip (competitors.t [competitors.n].name);
-               }
-               if (analyseCoord (strchr (pLine, ';') + 1, &competitors.t [competitors.n].lat, &competitors.t [competitors.n].lon)) {
-               // printf ("i:%d, lat: %.2lf, lon: %.2lf, %s\n\n", competitors.n, competitors.t [competitors.n].lat, 
-               //competitors.t [competitors.n].lon, competitors.t [competitors.n].name);
+            if (sscanf (pLine, "COMPETITOR:%d;%255[^;];%255s", &competitors.t [competitors.n].colorIndex, str,
+                        competitors.t [competitors.n].name) > 2) {
+               g_strstrip (competitors.t [competitors.n].name);
+               if (analyseCoord (str, &competitors.t [competitors.n].lat, &competitors.t [competitors.n].lon)) {
                   if (competitors.n == 0) {
                      par.pOr.lat = competitors.t [0].lat;
                      par.pOr.lon = competitors.t [0].lon;
                   }
                   competitors.n += 1;
                }
+               else fprintf (stderr, "In readParam, COMPETITOR: Coordinates Error: %s\n", str);
             }
+            else fprintf (stderr, "In readParam, COMPETITOR: Syntax Error: %s\n", pLine);
          }
       }
       else if (sscanf (pLine, "POR_NAME:%255s", par.pOrName) > 0);
@@ -1123,11 +1175,11 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "HELP:%255s", par.helpFileName) > 0); // full link required
       else if (sscanf (pLine, "CURL_SYS:%d", &par.curlSys) > 0);
       else if (sscanf (pLine, "PYTHON:%d", &par.python) > 0);
-      else if (sscanf (pLine, "SMTP_SCRIPT:%255[^\n]s", par.smtpScript) > 0)
+      else if (sscanf (pLine, "SMTP_SCRIPT:%255[^\n]", par.smtpScript) > 0)
          g_strstrip (par.smtpScript);
-      else if (sscanf (pLine, "IMAP_TO_SEEN:%255[^\n]s", par.imapToSeen) > 0)
+      else if (sscanf (pLine, "IMAP_TO_SEEN:%255[^\n]", par.imapToSeen) > 0)
          g_strstrip (par.imapToSeen);
-      else if (sscanf (pLine, "IMAP_SCRIPT:%255[^\n]s", par.imapScript) > 0)
+      else if (sscanf (pLine, "IMAP_SCRIPT:%255[^\n]", par.imapScript) > 0)
          g_strstrip (par.imapScript);
       else if (sscanf (pLine, "SHP:%255s", str) > 0) {
          buildRootName (str, par.shpFileName [par.nShpFiles], sizeof (par.shpFileName [0]));
@@ -1156,13 +1208,16 @@ bool readParam (const char *fileName) {
          buildRootName (str, par.dumpIFileName, sizeof (par.dumpIFileName));
       else if (sscanf (pLine, "DUMPR:%255s", str) > 0)
          buildRootName (str, par.dumpRFileName, sizeof (par.dumpRFileName));
-      else if (sscanf (pLine, "PAR_INFO:%255s", str) > 0)
+      else if (sscanf (pLine, "PAR_INFO:%254s", str) > 0)
          buildRootName (str, par.parInfoFileName, sizeof (par.parInfoFileName));
+      else if (sscanf (pLine, "LOG:%254s", str) > 0)
+         buildRootName (str, par.logFileName, sizeof (par.logFileName));
       else if (sscanf (pLine, "OPT:%d", &par.opt) > 0);
       else if (sscanf (pLine, "J_FACTOR:%d", &par.jFactor) > 0);
       else if (sscanf (pLine, "K_FACTOR:%d", &par.kFactor) > 0);
       else if (sscanf (pLine, "PENALTY0:%d", &par.penalty0) > 0);
       else if (sscanf (pLine, "PENALTY1:%d", &par.penalty1) > 0);
+      else if (sscanf (pLine, "PENALTY2:%d", &par.penalty2) > 0);
       else if (sscanf (pLine, "N_SECTORS:%d", &par.nSectors) > 0);
       else if (sscanf (pLine, "ISOC_DISP:%d", &par.style) > 0);
       else if (sscanf (pLine, "COLOR_DISP:%d", &par.showColors) > 0);
@@ -1178,8 +1233,7 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "AIS_DISP:%d", &par.aisDisp) > 0);
       else if (sscanf (pLine, "TECHNO_DISP:%d", &par.techno) > 0);
       else if (sscanf (pLine, "SHP_POINTS_DISP:%d", &par.shpPointsDisp) > 0);
-      else if (sscanf (pLine, "DESC:%255[^\n]s", par.description) > 0);
-      else if (sscanf (pLine, "WEBKIT:%255[^\n]s", par.webkit) > 0)
+      else if (sscanf (pLine, "WEBKIT:%255[^\n]", par.webkit) > 0)
          g_strstrip (par.webkit);
       else if ((strstr (pLine, "FORBID_ZONE:") != NULL) && (par.nForbidZone < MAX_N_FORBID_ZONE)) {
          pLine = strchr (pLine, ':') + 1;
@@ -1280,6 +1334,7 @@ bool writeParam (const char *fileName, bool header, bool password) {
    fprintf (f, "SPECIAL:         %d\n", par.special);
    fprintf (f, "PENALTY0:        %d\n", par.penalty0);
    fprintf (f, "PENALTY1:        %d\n", par.penalty1);
+   fprintf (f, "PENALTY2:        %d\n", par.penalty2);
    fprintf (f, "MOTOR_S:         %.2lf\n", par.motorSpeed);
    fprintf (f, "THRESHOLD:       %.2lf\n", par.threshold);
    fprintf (f, "DAY_EFFICIENCY:  %.2lf\n", par.dayEfficiency);
@@ -1302,6 +1357,7 @@ bool writeParam (const char *fileName, bool header, bool password) {
    fprintf (f, "DUMPI:           %s\n", par.dumpIFileName);
    fprintf (f, "DUMPR:           %s\n", par.dumpRFileName);
    fprintf (f, "PAR_INFO:        %s\n", par.parInfoFileName);
+   fprintf (f, "LOG:             %s\n", par.logFileName);
    fprintf (f, "OPT:             %d\n", par.opt);
    fprintf (f, "ISOC_DISP:       %d\n", par.style);
    fprintf (f, "COLOR_DISP:      %d\n", par.showColors);

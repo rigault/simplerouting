@@ -1,8 +1,9 @@
 #!/bin/bash
+gcc -Wall -Wextra -pedantic -Werror -std=c11 -O2 -c polar.c `pkg-config --cflags glib-2.0` 
 gcc -Wall -Wextra -pedantic -Werror -std=c11 -O2 -c rutil.c `pkg-config --cflags glib-2.0` 
 gcc -Wall -Wextra -pedantic -Werror -std=c11 -c aisgps.c `pkg-config --cflags glib-2.0`
 gcc -c composepol.c `pkg-config --cflags glib-2.0`
 
-gcc composepol.o rutil.o aisgps.o -o composepol -std=c11 -lcurl -lgps -lshp -leccodes -lm `pkg-config --cflags --libs glib-2.0`
+gcc composepol.o polar.o rutil.o aisgps.o -o composepol -std=c11 -lcurl -lgps -lshp -leccodes -lm `pkg-config --cflags --libs glib-2.0`
 
 rm *.o

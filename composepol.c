@@ -8,17 +8,20 @@
 #include "rtypes.h"
 #include "inline.h"
 #include "rutil.h"
-#include "option.h"
-#define  MAX_POLAR_FILES 10
-#define  STEP_WIND  5
-#define  STEP_ANGLE 5
-#define  MAX_WIND  60
+#include "polar.h"
+#define MAX_POLAR_FILES 10
+#define OUTPUT_RES "VRrespol.csv"
+#define OUTPUT_SAIL "VRrespol.sailpol"
+
  
-PolMat polMatTab [MAX_POLAR_FILES], resMat;
+int sailID [MAX_N_SAIL] = {1, 2, 3, 4, 5, 6, 7, 8};
+int sailCount [MAX_N_SAIL];
+
+PolMat polMatTab [MAX_POLAR_FILES], resMat, sailMat;
 char buffer [MAX_SIZE_BUFFER];
 
 /*! write polar information to console as pure csv file */
-char *polPrint (const PolMat *mat) {
+static void polPrint (const PolMat *mat) {
    for (int i = 0; i < mat->nLine; i++) {
       for (int j = 0; j < mat->nCol; j++) {
          printf ("%6.2f; ", mat->t [i][j]);
@@ -27,8 +30,28 @@ char *polPrint (const PolMat *mat) {
    }
 }
 
+/*! write polar information to console as pure csv file */
+static void polWrite (const char *fileName, const PolMat *mat) {
+   FILE *f;
+   if ((f = fopen (fileName, "w")) == NULL) {
+      fprintf (stderr,  "In poiWrite, Unable to open %s\n", fileName);
+      return;
+   }
+   
+   for (int i = 0; i < mat->nLine; i++) {
+      for (int j = 0; j < mat->nCol; j++) {
+         if ((i == 0) || (j == 0))
+            fprintf (f, "%6.0f; ", mat->t [i][j]);
+         else
+            fprintf (f, "%6.2f; ", mat->t [i][j]);
+      }
+      fprintf (f, "\n");
+   }
+   fclose (f);
+}
+
 /*! check and analyse  polar information  */
-char *analyse (const PolMat *mat) {
+static void analyse (const PolMat *mat) {
    double diffH, diffV, diffMax = -1, perc;
    for (int i = 1; i < mat->nLine; i++) {
       diffMax = -1;
@@ -50,42 +73,98 @@ char *analyse (const PolMat *mat) {
    }
 }
 
+/*! mix matrix n  matrix */
+static void compose (int nPol) {
+   sailPolMat.t [0][0] = resMat.t [0][0] = -1;  // first cell
+   int nLine = polMatTab [0].nLine;
+   int nCol = polMatTab [0].nCol;
+   sailMat.nLine = resMat.nLine = nLine;
+   sailMat.nCol = resMat.nCol = nCol;
 
-/*! produce resulting matrix */
-void compose (int nPol) {
-   resMat.t [0][0] = -1;  // first cell
-   resMat.nLine = 1, resMat.nCol = 1;  
-
-   for (double tws = 0.0; tws <= MAX_WIND; tws += STEP_WIND) { // first line
-      resMat.t [0][resMat.nCol] = tws;
-      resMat.nCol += 1;
+   for (int c = 0; c < nCol; c += 1) { // first line
+      sailMat.t [0][c] = resMat.t [0][c] = polMatTab [0].t[0][c];
    }
-      
-   for (double twa = 0.0; twa <= 180.0; twa += STEP_ANGLE) { // first column
-      resMat.t [resMat.nLine][0] = twa;
-      resMat.nLine += 1;
+   for (int l = 1; l < nLine; l += 1) { // first column
+      sailMat.t [l][0] = resMat.t [l][0] = polMatTab [0].t[l][0];
    }
-  
-   for (int lig = 1; lig < resMat.nLine; lig += 1) {
-      for (int col = 1; col < resMat.nCol; col += 1) {
-         for (int iPol = 0; iPol < nPol; iPol += 1) {
-            double v = findPolar (resMat.t [lig][0], resMat.t [0][col], polMatTab [iPol]);
-            resMat.t [lig][col] = MAX (resMat.t [lig][col], v);
+   for (int lig = 1; lig < nLine; lig += 1) {
+      for (int col = 1; col < nCol; col += 1) {
+         double v = polMatTab [nPol].t[lig][col];
+         if (v > resMat.t [lig][col]) {
+            resMat.t [lig][col] = v;
+            sailMat.t [lig][col] = sailID [nPol];
          }
       }
    }
+}
+
+/* check that input polar are consistent (nLine, nCol, twa, tws) */
+static bool checkConsistency (int nPol) {
+   int nLine = polMatTab [0].nLine;
+   int nCol = polMatTab [0].nCol;
+   printf ("checkConsistency nPol: %d\n", nPol);
+   if (polMatTab [nPol].nLine != nLine) {
+      fprintf (stderr, "In checkConsistency,  Polar: %d, Number of line: %d Incorrect\n", nPol, polMatTab [nPol].nLine);  
+      return false;
+   }
+   if (polMatTab [nPol].nCol != nCol) {
+      fprintf (stderr, "In checkConsistency,  Polar: %d, Number of Col: %d Incorrect\n", nPol, polMatTab [nPol].nCol);  
+      return false;
+   }
+   for (int c = 1; c < nCol; c += 1) { // check line 0 is the same
+      if (polMatTab [nPol].t[0][c] != polMatTab [0].t[0][c]) {
+         fprintf (stderr, "In checkConsistency,  Polar: %d, Incorrect at col %d\n", nPol, c);  
+         return false;
+      }
+   }
+   for (int l = 1; l < nLine; l += 1) { // check column 0 is the same
+      if (polMatTab [nPol].t[l][0] != polMatTab [0].t[l][0]) {
+         fprintf (stderr, "In checkConsistency,  Polar: %d, Incorrect at line %d\n", nPol, l);  
+         return false;
+      }
+   }
+   return true;
+}
+
+/*! check after composition the sail Matrix*/
+static void countSail (const PolMat *mat) {
+   const double EPSILON = 0.01;
+   for (int lig = 1; lig < mat->nLine; lig += 1) {
+      for (int col = 1; col < mat->nCol; col += 1) {
+         int v = (int) mat->t [lig][col];
+         if (v >= 0 && v < MAX_N_SAIL) 
+            sailCount [v] += 1;
+         else
+            fprintf (stderr, "In countSail, Error stange value: %d\n", v);
+      }
+   }
+}
+
+/* write smaill sail report */
+static void reportSail () {
+   char str [MAX_SIZE_NAME];
+   int total = 0;
+   printf ("\nnline except 0: %d, nCol except 0: %d, total cell: %d\n",
+      sailMat.nLine -1, sailMat.nCol -1, (sailMat.nLine - 1) * (sailMat.nCol - 1)); 
+   printf ("\nindex  Count Name\n");
+   for (int i = 0; i < MAX_N_SAIL; i++) {
+      printf ("%6d %5d %s\n", i, sailCount [i], fSailName (i, str, sizeof (str)));
+      total += sailCount [i];
+   }
+   printf ("Total: %5d\n", total);
 }
 
 int main (int argc, char *argv []) {
    bool verbose = false;
    char errMessage [MAX_SIZE_TEXT];
    int deb = 1;
-   if (argc <= 1) {
-      fprintf (stderr, "In main, Synopsys: %s <file0> <file1> <file2>...\n", argv [0]);
+   int nPol = 0;
+   if (argc <= 2) {
+      fprintf (stderr, "In main, Synopsys: %s -c <file0> <file1> <file2>...\n", argv [0]);
       exit (EXIT_FAILURE);
    }  
    if (argc == 3 && strcmp (argv [1], "-a") == 0) {
-      if (! readPolar (argv [2], &polMatTab [0], errMessage, sizeof (errMessage))) {
+      if (! readPolar (false, argv [2], &polMatTab [0], errMessage, sizeof (errMessage))) {
          fprintf (stderr, "In main, Impossible to read: %s: %s\n", argv [2], errMessage);
          exit (EXIT_FAILURE);
       }
@@ -98,25 +177,43 @@ int main (int argc, char *argv []) {
       deb += 1;
    }
 
+   if (strcmp (argv [1], "-c") != 0) {
+      fprintf (stderr, "In main, Synopsys: %s -c <file0> <file1> <file2>...\n", argv [0]);
+      exit (EXIT_FAILURE);
+   }
+   deb += 1;
+
    if ((argc - deb) >= MAX_POLAR_FILES) {
       fprintf (stderr, "In main, Number of polar files exceed limit: %d\n", MAX_POLAR_FILES);
       exit (EXIT_FAILURE);
    }
    for (int i = deb; i < argc; i++) {
-      if (! readPolar (argv [i], &polMatTab [i - deb], errMessage, sizeof (errMessage))) {
+      nPol = i - deb ;
+      // printf ("Analyse Polar; %d\n", nPol);
+      if (! readPolar (false, argv [nPol + 2], &polMatTab [nPol], errMessage, sizeof (errMessage))) {
          fprintf (stderr, "In main, Impossible to read: %s: %s\n", argv [i], errMessage);
          exit (EXIT_FAILURE);
       }
       if (verbose)
          printf ("Manage: %s\n", argv [i]);
-      polToStr (&polMatTab [i - deb], buffer, MAX_SIZE_BUFFER);
+      polToStr (&polMatTab [nPol], buffer, MAX_SIZE_BUFFER);
       if (verbose) printf ("%s\n", buffer);
-      compose (argc - deb);
+      if (checkConsistency (nPol));
+      compose (nPol);
    }
    if (verbose) {
       polToStr (&resMat, buffer, MAX_SIZE_BUFFER);
       printf ("Result:\n%s\n", buffer);
    }
-   polPrint (&resMat);
+   countSail (&sailMat);
+   reportSail ();
+   //printf ("Resulting Polar:\n");
+   //polPrint (&resMat);
+   polWrite (OUTPUT_RES, &resMat);
+   //printf ("Resulting SailPolar:\n");
+   polWrite (OUTPUT_SAIL, &sailMat);
+   printf ("resulting polar and sail polar names: %s %s\n", OUTPUT_RES, OUTPUT_SAIL);
+
    exit (EXIT_SUCCESS);
 } 
+
