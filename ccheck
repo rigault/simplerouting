@@ -1,0 +1,16 @@
+#!/bin/bash
+echo "cppcheck"
+cppcheck --enable=warning,performance,portability *.h
+cppcheck --enable=warning,performance,portability *.c
+
+echo "gcc analyser"
+gcc -fanalyzer -c engine.c `pkg-config --cflags glib-2.0` 
+gcc -fanalyzer -c rutil.c `pkg-config --cflags glib-2.0`
+gcc -fanalyzer -c grib.c `pkg-config --cflags glib-2.0`
+gcc -fanalyzer -c polar.c `pkg-config --cflags glib-2.0`
+gcc -fanalyzer -c aisgps.c `pkg-config --cflags glib-2.0`
+gcc -fanalyzer -c option.c `pkg-config --cflags glib-2.0`
+gcc -fanalyzer -c mailutil.c `pkg-config --cflags gtk4`
+gcc -fanalyzer -c dashboardVR.c `pkg-config --cflags gtk4`
+gcc -fanalyzer -c show4.c `pkg-config --cflags gtk4`
+gcc -fanalyzer -c editor.c `pkg-config --cflags gtk4 gtksourceview-5`
