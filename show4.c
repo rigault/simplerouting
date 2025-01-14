@@ -2043,22 +2043,27 @@ static void drawGrid (cairo_t *cr, DispZone *dispZone, int step) {
    CAIRO_SET_SOURCE_RGB_LIGHT_GRAY (cr);
    cairo_set_line_width (cr, 0.5);
    // meridians
-   //for (int intLon = MAX (-180, dispZone.lonLeft); intLon < MIN (180, dispZone->lonRight); intLon += step) { // ATT
-   for (int intLon = -360; intLon < 360; intLon += step) {
+   for (int intLon = 0; intLon > -180; intLon -= step) {
+      cairo_move_to (cr, getX (intLon), getY (MAX_LAT));
+      cairo_line_to (cr, getX (intLon), getY (MIN_LAT));
+      cairo_stroke(cr);
+   }
+   for (int intLon = 0; intLon <= 180; intLon += step) {
       cairo_move_to (cr, getX (intLon), getY (MAX_LAT));
       cairo_line_to (cr, getX (intLon), getY (MIN_LAT));
       cairo_stroke(cr);
    }
    // parallels
-   for (int intLat = MAX (-MAX_LAT, dispZone->latMin); intLat <= MIN (MAX_LAT, dispZone->latMax); intLat += MIN (step, MAX_LAT)) {
+   for (int intLat = 0; intLat > MAX (-MAX_LAT, dispZone->latMin); intLat -= step) {
       cairo_move_to (cr, dispZone->xR, getY (intLat));
       cairo_line_to (cr, dispZone->xL, getY (intLat));
       cairo_stroke(cr);
    }
-   // equator, whatever
-   cairo_move_to (cr, dispZone->xR, getY (0));
-   cairo_line_to (cr, dispZone->xL, getY (0));
-   cairo_stroke (cr);
+   for (int intLat = 0; intLat < MIN (MAX_LAT, dispZone->latMax); intLat += step) {
+      cairo_move_to (cr, dispZone->xR, getY (intLat));
+      cairo_line_to (cr, dispZone->xL, getY (intLat));
+      cairo_stroke(cr);
+   }
 }
 
 /* draw barbules or arrows */
@@ -2132,7 +2137,7 @@ static void drawGribCallback (GtkDrawingArea *area, cairo_t *cr, int width, int 
 
    drawShpMap (cr);     
    
-   drawGrid (cr, &dispZone, (par.gridDisp) ? 1 : 90);     // if gridDisp, every degree. Else only every 90°
+   drawGrid (cr, &dispZone, (par.gridDisp) ? 1 : 45);     // if gridDisp, every degree. Else only every 45°
    drawScale (cr, &dispZone);  
    drawBarbulesArrows (cr);
 
@@ -2849,15 +2854,16 @@ static void fCalendar (struct tm *start) {
 /*! one line for niceReport () */
 static void lineReport (GtkWidget *grid, int l, const char* iconName, const char *libelle, const char *value) {
    GtkWidget *icon = gtk_button_new_from_icon_name (iconName);
+   //GtkWidget *icon = gtk_label_new ("");
    GtkWidget *label = gtk_label_new (libelle);
    gtk_grid_attach(GTK_GRID (grid), icon, 0, l, 1, 1);
-   gtk_label_set_yalign(GTK_LABEL (label), 0);
-   gtk_label_set_xalign(GTK_LABEL (label), 0);   
-   gtk_grid_attach(GTK_GRID (grid), label,1, l, 1, 1);
+   gtk_label_set_yalign (GTK_LABEL (label), 0);
+   gtk_label_set_xalign (GTK_LABEL (label), 0);   
+   gtk_grid_attach (GTK_GRID (grid), label,1, l, 1, 1);
    GtkWidget *labelValue = gtk_label_new (value);
-   gtk_label_set_yalign(GTK_LABEL (labelValue), 0);
-   gtk_label_set_xalign(GTK_LABEL (labelValue), 1);   
-   GtkWidget *separator = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+   gtk_label_set_yalign (GTK_LABEL (labelValue), 0);
+   gtk_label_set_xalign (GTK_LABEL (labelValue), 1);   
+   GtkWidget *separator = gtk_separator_new (GTK_ORIENTATION_HORIZONTAL);
    // add separator to grid
    gtk_grid_attach (GTK_GRID (grid), labelValue, 2, l, 1, 1);
    gtk_grid_attach(GTK_GRID(grid), separator,    0, l + 1, 3, 1);
@@ -3039,10 +3045,10 @@ static void niceReport (SailRoute *route, double computeTime) {
    gtk_window_set_child (GTK_WINDOW (reportWindow), (GtkWidget *) vBox);
    
    GtkWidget *grid = gtk_grid_new();   
-   gtk_grid_set_column_spacing(GTK_GRID(grid), 10);
-   gtk_grid_set_row_spacing(GTK_GRID(grid), 5);
-   gtk_grid_set_row_homogeneous(GTK_GRID(grid), FALSE);
-   gtk_grid_set_column_homogeneous(GTK_GRID(grid), FALSE);
+   gtk_grid_set_column_spacing(GTK_GRID (grid), 10);
+   //gtk_grid_set_row_spacing (GTK_GRID (grid), 5);
+   gtk_grid_set_row_homogeneous (GTK_GRID (grid), FALSE);
+   gtk_grid_set_column_homogeneous (GTK_GRID(grid), FALSE);
    
    snprintf (line, sizeof (line), "%4d/%02d/%02d %02d:%02d\n", 
       startInfo.tm_year + 1900, startInfo.tm_mon+1, startInfo.tm_mday, startInfo.tm_hour, startInfo.tm_min);
@@ -3120,9 +3126,10 @@ static gboolean routingCheck (gpointer data) {
    int localRet = g_atomic_int_get (&route.ret); // atomic read
    switch (localRet) {
    case ROUTING_RUNNING: // not terminated
-      g_mutex_lock (&warningMutex); /// BUG : plante erratiquement
+      g_mutex_lock (&warningMutex); 
       snprintf (str, sizeof (str),"%3.0lf%% Isoc count: %5d",  100.0 * nIsoc/maxNIsoc, nIsoc);
-      statusWarningMessage (statusbar, str);  
+      // printf ("Running: %s\n", str);
+      statusWarningMessage (statusbar, str);   /// BUG : plante erratiquement
       g_mutex_unlock (&warningMutex);
       return TRUE;
    case ROUTING_STOPPED: // stopped by user
