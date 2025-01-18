@@ -25,6 +25,7 @@ HELP:             Help html File Name
 CLI_HELP:         Text Help File Name
 SHP:              Shape File Name
 TRACE:            Trace File Name
+LOG:              Log File Name
 VR_DASHBOARD:     Virtual Regatta Dashboard File Name
 VR_DASHB_UTC:     1 if VR Dashboard provide time in UTC. O if local time.
 START_TIME:       Start Time in Hours after befinning of Grib
@@ -33,8 +34,9 @@ RANGE_COG:        Range COG in degrees for Isochrone Calculation
 COG_STEP:         COG Steps in degrees for Isochrone Calculation
 MAX_ISO:          Max number of Isochronesi, Deprecated
 SPECIAL:          Special purpose
-PENALTY0:         Penalty in minutes for virement de bort.
-PENALTY1:         Penalty in minutes for empannage.
+PENALTY0:         Penalty in minutes for Tack (virement de bort).
+PENALTY1:         Penalty in minutes for Gybe (empannage).
+PENALTY2:         Penalty in minutes for Sail change.
 MOTOR_S:          Motor Speed if Threshold done
 THRESHOLD:        Threshold (Sail speed thar lauvhe motor)
 DAY_EFFICIENCY:   Efficiency at day. e.g.: 0.9
@@ -51,6 +53,7 @@ DUMPR:            Dump Route Text File Name
 PAR_INFO:         Parameter Information Text File Name
 OPT:              Optimization Algorithm
 ISOC_DISP:        Isochrone Display
+STEP_ISOC_DISP:   Display or isochrone over n
 COLOR_DISP:       Color Wind Grib Display
 DMS_DISP:         Degree Minutes Second Display 
 WIND_DISP:        Wind Display

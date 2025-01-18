@@ -45,7 +45,6 @@
    <a href="#chap16">16. Bugs ou comportements particuliers</a>
    <a href="#chap17">17. Éléments bibliographiques </a>
    <a href="#chap18">18. Programmation</a>
-   <a href="#chap19">19. Gestion du temps</a>
 
 <p></p>
 
@@ -1573,13 +1572,8 @@ grib_get_data -L &quot;%.2lf %.2lf&quot; -F &quot;%.2lf&quot; -m -999999 -w shor
 		destination (fonction GoalP).</p>
 
 		<h2>16.2. Antemeridian</h2>
-      Lorque le Grib est à cheval sur l'antéméridien (180°), le comportement du logiciel peut ne pas être approprié.
-      Notamment en ce qui concerne la visualisation.
-
-      <h2>16.3. Téléchargements NOAA ou ECMWF</h2>
-      Suite à des téléchargements volumineux, des cas de plantage sont observés. Le téléchargement se fait. Mais il peut être nécessaire de relancer
-      le logiciel. Le nouveau Grib sera bien pris en compte.
-
+      <p>Lorque le Grib est à cheval sur l'antéméridien (180°), le comportement du logiciel peut ne pas être approprié, notamment en ce qui concerne la visualisation.</p>
+      
 <h1 id="chap17">17. Éléments bibliographiques </h1>
 
 		<h2>Livres</h2>
@@ -1917,8 +1911,7 @@ SMTP_SCRIPT:     python3 /home/rr/routing/py/smtp.py  #script python pour l'envo
 
 		<a href="../par/routingwindows.par">../par/routingwindows.par</a></p>
 
-<h1 id="chap19">19. Gestion du temps</h1>
-	<h2>Principes généraux </h2>
+   <h2>18.10 Gestion du temps</h2>
    <p>La gestion du temps est assez complexe et mérite quelques éclaicissements.<p>
    
    <h3>Fichiers Grib </h3>
@@ -1941,8 +1934,25 @@ SMTP_SCRIPT:     python3 /home/rr/routing/py/smtp.py  #script python pour l'envo
    <p>Il s'obtient par l'appel à la fonction suivante&nbsp;:<p>
    <p><code> vOffsetLocalUTC = offsetLocalUTC () </code></p>
 
-   <p><code>theTime</code> est un double qui stocke la valeur du temps exprimée en heures après le début du grib.
+   <p><code>theTime</code> est un double qui stocke la valeur du temps exprimée en heures après le début du grib
    pour l'affichage de la carte météo<p>
+
+   <h2>18.11 Utilitaires pour polaires</h2>
+
+   <p> En mode ligne de commande l'option -p affiche la polaire dont le nom est dans routing.par, l'option -P affiche la polaire de vaques.<p>
+   
+   <p> Le script <code> transpolar </code> transforme le fichier Json fourni par le dashboard de Virtual Regatta en un fichier lisible par jq.</code>  
+   
+   <p> Le script <code> saillist </code> liste les voiles décrites dans le fichier json en question.</code>  
+   
+   <p> Le script <code> jstocsv  </code> basé sur jq transforme la structure Json fournie par le dashboard Virtual Regatta (après transformation avec transpolar) 
+   en n fichiers CSV.<p>
+
+   <p> Le programme <code>composepol.c </code> lit n fichiers CSV et produit </p>
+   <ul>
+      <li>Le fichier polaire résultant (max des valeurs de toutes les polaires):&nbsp; VRrespol.csv</li>
+      <li>Le fichier polaires de voiles donnant l'index de la voile utilisée:&nbsp; VRrespol.sailpol</li>
+   </ul>
 
 </div>
 <div class="notes">
