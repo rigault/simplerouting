@@ -48,6 +48,7 @@ const struct GribService serviceTab [N_WEB_SERVICES] = {
 };
 
 const char *sailName [MAX_N_SAIL] = {"NA", "C0", "HG", "Jib", "LG", "LJ", "Spi", "SS"}; // for sail polars
+const char *colorStr [MAX_N_SAIL] = {"black", "green", "purple", "black", "blue", "yellow", "black", "red"};
 
 /*! list of wayPoint */
 WayPointList wayPoints;
@@ -206,7 +207,7 @@ void removeAllTmpFilesWithPrefix (const char *prefix) {
    }
 
    const gchar *filename = NULL;
-   while ((filename = g_dir_read_name(dir))) {
+   while ((filename = g_dir_read_name (dir))) {
       if (g_str_has_prefix (filename, base_prefix) && g_str_has_suffix(filename, ".tmp")) {
          gchar *filepath = g_build_filename (directory, filename, NULL);
          remove (filepath);
@@ -1075,6 +1076,7 @@ bool readParam (const char *fileName) {
    par.windDisp = 1;
    par.xWind = 1.0;
    par.maxWind = 50.0;
+   par.stepIsocDisp = 1;
    wayPoints.n = 0;
    wayPoints.totOrthoDist = 0.0;
    wayPoints.totLoxoDist = 0.0;
@@ -1220,6 +1222,7 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "PENALTY2:%d", &par.penalty2) > 0);
       else if (sscanf (pLine, "N_SECTORS:%d", &par.nSectors) > 0);
       else if (sscanf (pLine, "ISOC_DISP:%d", &par.style) > 0);
+      else if (sscanf (pLine, "STEP_ISOC_DISP:%d", &par.stepIsocDisp) > 0);
       else if (sscanf (pLine, "COLOR_DISP:%d", &par.showColors) > 0);
       else if (sscanf (pLine, "DMS_DISP:%d", &par.dispDms) > 0);
       else if (sscanf (pLine, "WIND_DISP:%d", &par.windDisp) > 0);
@@ -1360,6 +1363,7 @@ bool writeParam (const char *fileName, bool header, bool password) {
    fprintf (f, "LOG:             %s\n", par.logFileName);
    fprintf (f, "OPT:             %d\n", par.opt);
    fprintf (f, "ISOC_DISP:       %d\n", par.style);
+   fprintf (f, "STEP_ISOC_DISP:  %d\n", par.stepIsocDisp);
    fprintf (f, "COLOR_DISP:      %d\n", par.showColors);
    fprintf (f, "DMS_DISP:        %d\n", par.dispDms);
    fprintf (f, "WIND_DISP:       %d\n", par.windDisp);

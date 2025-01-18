@@ -7,7 +7,7 @@ gcc $CFLAGS -c aisgps.c `pkg-config --cflags glib-2.0`
 gcc $CFLAGS -c grib.c `pkg-config --cflags glib-2.0`
 gcc $CFLAGS -c polar.c `pkg-config --cflags glib-2.0`
 gcc $CFLAGS -c mailutil.c `pkg-config --cflags glib-2.0`
-gcc $CFLAGS -c dashboardVR.c `pkg-config --cflags glib-2.0`
+gcc $CFLAGS -c dashboardVR.c `pkg-config --cflags gtk4`
 gcc $CFLAGS -Wno-format-nonliteral -c rutil.c `pkg-config --cflags glib-2.0` 
 
 #gcc -c show4.c `pkg-config --cflags gtk4`

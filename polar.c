@@ -96,22 +96,24 @@ static bool polarCheck (PolMat *mat, char *report, size_t maxLen) {
    return (report [0] == '\0'); // True if no error found
 }
 
-/*! read polar file and fill poLMat matrix */
-bool readPolar (const char *fileName, PolMat *mat, char *errMessage, size_t maxLen) {
+/*! read polar file and fill poLMat matrix 
+   if check then polarCheck */
+bool readPolar (bool check, const char *fileName, PolMat *mat, char *errMessage, size_t maxLen) {
    FILE *f = NULL;
-   char buffer [MAX_SIZE_LINE];
+   char buffer [MAX_SIZE_TEXT];
    char *pLine = &buffer [0];
    char *strToken;
    double v = 0;
    int c;
-      
+
+   errMessage [0] = '\0';
    mat->nLine = 0;
    mat->nCol = 0;
    if ((f = fopen (fileName, "r")) == NULL) {
       snprintf (errMessage, maxLen,  "Error in readPolar: cannot open: %s\n", fileName);
       return false;
    }
-   while (fgets (pLine, MAX_SIZE_LINE, f) != NULL) {
+   while (fgets (pLine, MAX_SIZE_TEXT, f) != NULL) {
       c = 0;
       if (pLine [0] == '#') continue;                       // ignore if comment
       if (strpbrk (pLine, CSV_SEP_POLAR) == NULL) continue; // ignore if no separator
@@ -132,7 +134,7 @@ bool readPolar (const char *fileName, PolMat *mat, char *errMessage, size_t maxL
          fclose (f);
          return false;
       }
-      mat->nLine+= 1;
+      mat->nLine += 1;
       
       if (mat->nLine >= MAX_N_POL_MAT_LINES) {
          snprintf (errMessage, maxLen, "Error in readPolar: max number of line: %d\n", MAX_N_POL_MAT_LINES);
@@ -141,9 +143,10 @@ bool readPolar (const char *fileName, PolMat *mat, char *errMessage, size_t maxL
       }
       if (mat->nLine == 1) mat->nCol = c; // max
    }
-   mat -> t [0][0] = -1;
+   mat->t [0][0] = -1;
    fclose (f);
-   polarCheck (mat, errMessage, maxLen);
+   if (check)
+      polarCheck (mat, errMessage, maxLen);
    return true;
 }
 

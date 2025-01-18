@@ -40,7 +40,8 @@ static inline double fTwd (double u, double v) {
 
 /*! true wind speed. cf Pythagore */
 static inline double fTws (double u, double v) {
-    return MS_TO_KN * sqrt ((u * u) + (v * v));
+    //return MS_TO_KN * sqrt ((u * u) + (v * v));
+    return MS_TO_KN * hypot (u, v);
 }
 
 /*! return TWA between -180 and 180
@@ -55,7 +56,8 @@ static inline void fAwaAws (double twa, double tws, double sog, double *awa, dou
    double a = tws * sin (DEG_TO_RAD * twa);
    double b = tws * cos (DEG_TO_RAD * twa) + sog;
    *awa = RAD_TO_DEG * atan2 (a, b);
-   *aws = sqrt (a*a + b*b);
+   *aws = hypot (a, b);
+   //*aws = sqrt (a*a + b*b);
 }
 
 /*! return fx : linear interpolation */
@@ -83,42 +85,44 @@ static inline double orthoCap (double lat1, double lon1, double lat2, double lon
 
 /*! return loxodromic distance in nautical miles from origin to destination */
 static inline double loxoDist (double lat1, double lon1, double lat2, double lon2) {
-    // Convert degrees to radians
-    double lat1_rad = DEG_TO_RAD * lat1;
-    double lon1_rad = DEG_TO_RAD * lon1;
-    double lat2_rad = DEG_TO_RAD * lat2;
-    double lon2_rad = DEG_TO_RAD * lon2;
+   // Convert degrees to radians
+   double lat1_rad = DEG_TO_RAD * lat1;
+   double lon1_rad = DEG_TO_RAD * lon1;
+   double lat2_rad = DEG_TO_RAD * lat2;
+   double lon2_rad = DEG_TO_RAD * lon2;
 
-    // Difference in longitude
-    double delta_lon = lon2_rad - lon1_rad;
+   // Difference in longitude
+   double delta_lon = lon2_rad - lon1_rad;
 
-    // Calculate the change in latitude
-    double delta_lat = lat2_rad - lat1_rad;
+   // Calculate the change in latitude
+   double delta_lat = lat2_rad - lat1_rad;
 
-    // Calculate the mean latitude
-    double mean_lat = (lat1_rad + lat2_rad) / 2.0;
+   // Calculate the mean latitude
+   double mean_lat = (lat1_rad + lat2_rad) / 2.0;
 
-    // Calculate the rhumb line distance
-    double q = delta_lat / log(tan(G_PI / 4 + lat2_rad / 2) / tan(G_PI / 4 + lat1_rad / 2));
+   // Calculate the rhumb line distance
+   double q = delta_lat / log(tan(G_PI / 4 + lat2_rad / 2) / tan (G_PI / 4 + lat1_rad / 2));
     
-    // Correct for delta_lat being very small
-    if (isnan(q)) {
-        q = cos(mean_lat);
-    }
+   // Correct for delta_lat being very small
+   if (isnan (q)) {
+      q = cos (mean_lat);
+   }
 
-    // Distance formula
-    return sqrt(delta_lat * delta_lat + (q * delta_lon) * (q * delta_lon)) * EARTH_RADIUS;
+   // Distance formula
+  
+   return hypot (delta_lat, q * delta_lon) * EARTH_RADIUS;
+   // return sqrt (delta_lat * delta_lat + (q * delta_lon) * (q * delta_lon)) * EARTH_RADIUS;
 }
 
 
 /*! return orthodomic distance in nautical miles from origin to destination*/
 static inline double orthoDist (double lat1, double lon1, double lat2, double lon2) {
-    double theta = lon1 - lon2;
-    double distRad = acos(
-        sin(lat1 * DEG_TO_RAD) * sin(lat2 * DEG_TO_RAD) + 
-        cos(lat1 * DEG_TO_RAD) * cos(lat2 * DEG_TO_RAD) * cos(theta * DEG_TO_RAD)
-    );
-    return fabs (60 * RAD_TO_DEG * distRad);
+   double theta = lon1 - lon2;
+   double distRad = acos (
+      sin (lat1 * DEG_TO_RAD) * sin (lat2 * DEG_TO_RAD) + 
+      cos (lat1 * DEG_TO_RAD) * cos (lat2 * DEG_TO_RAD) * cos (theta * DEG_TO_RAD)
+   );
+   return fabs (60 * RAD_TO_DEG * distRad);
 }
 
 /*! find in polar boat speed or wave coeff */

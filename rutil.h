@@ -18,6 +18,7 @@ extern const struct GribService serviceTab [];
 
 /*! polar description */
 extern const char *sailName [];
+extern const char *colorStr [];
 extern PolMat polMat;
 extern PolMat sailPolMat;
 extern PolMat wavePolMat;

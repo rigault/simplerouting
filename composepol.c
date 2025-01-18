@@ -126,7 +126,7 @@ static bool checkConsistency (int nPol) {
    return true;
 }
 
-/*! check after composition the sail Matrix*/
+/*! check after composition the sail Matrix */
 static void countSail (const PolMat *mat) {
    const double EPSILON = 0.01;
    for (int lig = 1; lig < mat->nLine; lig += 1) {
@@ -140,7 +140,7 @@ static void countSail (const PolMat *mat) {
    }
 }
 
-/* write smaill sail report */
+/* write small sail report */
 static void reportSail () {
    char str [MAX_SIZE_NAME];
    int total = 0;

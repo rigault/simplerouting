@@ -340,6 +340,9 @@ typedef struct {
 
 /*! Route description  */
 typedef struct {
+   char   polarFileName [MAX_SIZE_FILE_NAME]; // save the polar name
+   long   dataDate;                         // save Grib date
+   long   dataTime;                         // save Grib time
    int    nIsoc;                            // number of Isochrones
    double isocTimeStep;                     // isoc time step for this route
    int    n;                                // number of steps
@@ -439,6 +442,7 @@ typedef struct {
    int speedDisp;                            // Speed of Display 
    int aisDisp;                              // AIS display
    int shpPointsDisp;                        // display points only for SHP files
+   int stepIsocDisp;                         // display one isochrone over stepIsocDisp
    int penalty0;                             // penalty in minutes for tack
    int penalty1;                             // penalty in minutes fot Gybe
    int penalty2;                             // penalty in minutes for sail change

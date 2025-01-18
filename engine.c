@@ -43,15 +43,16 @@ ChooseDeparture chooseDeparture;               // for choice of departure time
 /*! static global variable. Ff linking issue, remove static */
 static double pOrToPDestCog = 0;               // cog from pOr to pDest.
 
+static int    pId = 1;                          // global ID for points. -1 and 0 are reserved for pOr and pDest
+static double tDeltaCurrent = 0.0;              // delta time in hours between wind zone and current zone
+static double lastBestVmc = 0.0;                // best VMC found up to now
+
 static struct {                                 
    double dd;
    double vmc;
    double nPt;
 } sector [2][MAX_SIZE_ISOC];                    // we keep even and odd last sectors
 
-static int    pId = 1;                          // global ID for points. -1 and 0 are reserved for pOr and pDest
-static double tDeltaCurrent = 0.0;              // delta time in hours between wind zone and current zone
-static double lastBestVmc = 0.0;                // best VMC found up to now
 
 /*! return distance from point X do segment [AB]. Meaning to H, projection of X en [AB] */
 double distSegment (double latX, double lonX, double latA, double lonA, double latB, double lonB) {
@@ -432,6 +433,11 @@ void freeHistoryRoute () {
 static void statRoute (SailRoute *route, double lastStepDuration) {
    Pp p = {0};
    if (route->n == 0) return;
+   gchar *polarFileName = g_path_get_basename (par.polarFileName);
+   g_strlcpy (route->polarFileName, polarFileName, sizeof (route->polarFileName));
+   g_free (polarFileName);
+   route->dataDate = zone.dataDate [0]; // save Grib origin
+   route->dataTime = zone.dataTime [0];
    route->nSailChange = 0;
    route->isocTimeStep = par.tStep;
    route->totDist = route->motorDist = route->tribordDist = route->babordDist = 0;
@@ -598,7 +604,7 @@ bool routeToStr (const SailRoute *route, char *str, size_t maxLen, char *footer,
       route->t[0].toIndexWp,\
       latToStr (route->t[0].lat, par.dispDms, strLat, sizeof (strLat)),\
       lonToStr (route->t[0].lon, par.dispDms, strLon, sizeof (strLon)),\
-      newDate (zone.dataDate [0], (zone.dataTime [0]/100) + route->t[0].time, strDate, sizeof (strDate)),\
+      newDate (route->dataDate, route->dataTime/100 + route->t[0].time, strDate, sizeof (strDate)),\
       strSail,
       motorTribordBabord (route->t[0].motor, route->t[0].amure, shortStr, SMALL_SIZE),\
       ((int) (route->t[0].oCap + 360) % 360), route->t[0].od, route->t[0].sog,\
@@ -620,7 +626,7 @@ bool routeToStr (const SailRoute *route, char *str, size_t maxLen, char *footer,
             route->t[i].toIndexWp,\
             latToStr (route->t[i].lat, par.dispDms, strLat, sizeof (strLat)),\
             lonToStr (route->t[i].lon, par.dispDms, strLon, sizeof (strLon)),\
-            newDate (zone.dataDate [0], (zone.dataTime [0]/100) + route->t[i].time, strDate, sizeof (strDate)), \
+            newDate (route->dataDate, route->dataTime/100 + route->t[i].time, strDate, sizeof (strDate)), \
             fSailName (route->t[i].sail, strSail, sizeof (strSail)),
             motorTribordBabord (route->t[i].motor, route->t[i].amure, shortStr, SMALL_SIZE), \
             ((int) (route->t[i].oCap  + 360) % 360), route->t[i].od, route->t[i].sog,\
@@ -643,15 +649,14 @@ bool routeToStr (const SailRoute *route, char *str, size_t maxLen, char *footer,
    g_strlcat (str, line, maxLen);
    snprintf (line, MAX_SIZE_LINE, " Sail Changes     : %d\n", route->nSailChange);
    g_strlcat (str, line, maxLen);
-   snprintf (line, MAX_SIZE_LINE, " Polar file       : %s\n", par.polarFileName);
+   snprintf (line, MAX_SIZE_LINE, " Polar file       : %s\n", route->polarFileName);
    g_strlcat (str, line, maxLen);
 
    snprintf (footer, maxLenFooter, "%s Arrival: %s     Route length: %d,   Isoc time Step: %.2lf", 
-      competitors.t [competitors.runIndex].name,\
-      newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours + route->duration, strDate, sizeof (strDate)),\
+      competitors.t [route->competitorIndex].name,\
+      newDate (route->dataDate, route->dataTime/100 + route->t[0].time + route->duration, strDate, sizeof (strDate)),\
       route->n,
       route->isocTimeStep);
-   
    return true;
 }
 
@@ -884,7 +889,7 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
    nIsoc += 1;
    //printf ("Routing t = %.2lf, zone: %.2ld\n", t, zone.timeStamp [zone.nTimeStamp-1]);
    while (t < (zone.timeStamp [zone.nTimeStamp - 1]/* + par.tStep*/) && (nIsoc < maxNIsoc)) { // ATT
-      if (route.ret == ROUTING_STOPPED) { // -2
+      if (g_atomic_int_get (&route.ret) == ROUTING_STOPPED) { // -2
          free (tempList);
          return ROUTING_STOPPED; // stopped by user in another thread !!!
       }
@@ -940,6 +945,13 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
 
 /*! global variable initialization for routing */
 static void initRouting (void) {
+   isocArray = NULL;
+   isoDesc = NULL;
+   maxNIsoc = 0;
+   nIsoc = 0;
+   pOrToPDestCog = 0;
+   lastBestVmc = 0.0;
+   memset (sector, 0, sizeof(sector));
    lastClosest = par.pOr;
    tDeltaCurrent = zoneTimeDiff (&currentZone, &zone); // global variable
    par.pOr.id = -1;
@@ -948,15 +960,15 @@ static void initRouting (void) {
    par.pDest.father = 0;
    pId = 1;
    route.n = 0;
-   route.ret = ROUTING_RUNNING;
+   g_atomic_int_set (&route.ret, ROUTING_RUNNING);
    route.destinationReached = false;
-   for (int i = 0; i < maxNIsoc; i++) {
+   /*for (int i = 0; i < maxNIsoc; i++) {
       isoDesc [i].size = 0;
       isoDesc [i].distance = DBL_MAX;
       isoDesc [i].bestVmc = 0;
-   }
-   nIsoc = 0;
+   }*/
 }
+
 
 /*! launch routing wih parameters */
 void *routingLaunch () {
@@ -1022,15 +1034,20 @@ void *routingLaunch () {
 /*! choose best time to reach pDest in minimum time */
 void *bestTimeDeparture () {
    double minDuration = DBL_MAX, maxDuration = 0;
+   int localRet;
    chooseDeparture.bestTime = -1;
    chooseDeparture.count = 0;
    chooseDeparture.tStop = chooseDeparture.tEnd; // default value
 
    for (int t = chooseDeparture.tBegin; t < chooseDeparture.tEnd; t += chooseDeparture.tStep) {
-      //initRouting ();
       par.startTimeInHours = t;
       routingLaunch ();
-      if (route.ret > 0) {
+      localRet = g_atomic_int_get (&route.ret);
+      if (localRet == ROUTING_STOPPED) {
+         g_atomic_int_set (&chooseDeparture.ret, STOPPED);
+         return NULL;
+      }
+      if (localRet > 0) {
          chooseDeparture.t [t] = route.duration;
          if (route.duration < minDuration) {
             minDuration = route.duration;
@@ -1066,6 +1083,7 @@ void *bestTimeDeparture () {
 /*! launch all competitors */
 void *allCompetitors () {
    bool existSolution = false;
+   int localRet;
    for (int i = 0; i < competitors.n; i += 1) // reset eta(s)
       competitors.t [i].strETA [0] = '\0';
    
@@ -1075,14 +1093,19 @@ void *allCompetitors () {
       par.pOr.lat = competitors.t [i].lat;
       par.pOr.lon = competitors.t [i].lon;
       routingLaunch ();
-      if (route.ret < 0) {
-         fprintf (stderr, "In allCompetitors, No solution for competitor: %s with return: %d\n", competitors.t[i].name, route.ret);
+      localRet = g_atomic_int_get (&route.ret);
+      if (localRet == ROUTING_STOPPED) {
+         g_atomic_int_set (&competitors.ret, STOPPED);
+         return NULL;
+      }
+      if (localRet < 0) {
+         fprintf (stderr, "In allCompetitors, No solution for competitor: %s with return: %d\n", competitors.t[i].name, g_atomic_int_get (&route.ret));
          g_strlcpy (competitors.t [i].strETA, "No Solution", MAX_SIZE_DATE); 
          competitors.t [i].duration = HUGE_VAL; // hours
          competitors.t [i].dist = HUGE_VAL;
          continue;
       }
-      newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours + route.duration, 
+      newDate (zone.dataDate [0], zone.dataTime [0] / 100 + par.startTimeInHours + route.duration, 
          competitors.t [i].strETA, MAX_SIZE_DATE); 
       competitors.t [i].duration = route.duration; // hours
       competitors.t [i].duration = route.duration; // hours
@@ -1215,6 +1238,6 @@ void competitorsToStr (CompetitorsList *copyComp, char *buffer, size_t maxLen) {
    }
 
    newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours, strDep, sizeof (strDep)); 
-   snprintf (line, MAX_SIZE_LINE, "Departure Date: %s, Isoc Time Step: %.2lf h\n", strDep, par.tStep);
+   snprintf (line, MAX_SIZE_LINE, "Departure Date: %s, Isoc Time Step: %.2lf %s\n", strDep, par.tStep, route.polarFileName);
    g_strlcat (buffer, line, maxLen);
 }
