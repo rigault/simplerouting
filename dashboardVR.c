@@ -10,10 +10,12 @@
 #include "rtypes.h"
 #include "rutil.h"
 
-#define MAX_N_SHIP_TYPE 2
-#define MAX_STAMINA_MANOEUVRE 3
-#define MAX_TWS_STAMINA 30
-#define MAX_ENERGY_STAMINA 100
+#define MAX_N_SHIP_TYPE          2
+#define MAX_STAMINA_MANOEUVRE    3
+#define MAX_TWS_STAMINA          30
+#define MAX_ENERGY_STAMINA       100
+#define MAX_COL_VR_DASHBOARD     20
+#define MIN_COL_VR_DASHBOARD     11
 
 struct {
    char name [MAX_SIZE_NAME];
@@ -311,7 +313,7 @@ static void formatLine (bool first, char **tokens, const char *strTime, char *li
    report: text
    footer: with metadata
 */
-struct tm dashboardImportParam (const char *filename, CompetitorsList *competitors, 
+struct tm dashboardImportParam (const char *fileName, CompetitorsList *competitors, 
                                 char *report, size_t maxLen, char *footer, size_t maxLenFooter) {
    double lat, lon;
    char line [MAX_SIZE_LINE];
@@ -319,12 +321,13 @@ struct tm dashboardImportParam (const char *filename, CompetitorsList *competito
    int nLine = 0;
    const size_t elemSize [] = {0, 12, 9, 8, 10, 10, 0, 5, 0, 0, 31, 7, 8, 8, 8, 7, 7, 10, 10}; // 0 means not shown
    const size_t elemSizeLen = sizeof (elemSize) / sizeof (size_t);
-   FILE *file = fopen (filename, "r");
+   FILE *file = fopen (fileName, "r");
    struct tm tm0 = {0}; 
    char strDate [MAX_SIZE_NAME], strTime [MAX_SIZE_NAME];
+   int nCol = 0;
 
    if (file == NULL) {
-      snprintf (report, maxLen, "In dashboardFormat, could not open file: %s\n", filename);
+      snprintf (report, maxLen, "In dashboardFormat, could not open file: %s\n", fileName);
       fprintf (stderr, "%s", report);
       return tm0;
    }
@@ -333,28 +336,29 @@ struct tm dashboardImportParam (const char *filename, CompetitorsList *competito
       // Parse the CSV line
       nLine += 1;
       gchar **tokens = g_strsplit (line, ";", -1);
-      if (! tokens)
+      nCol = g_strv_length (tokens);
+      if (! tokens || (nCol > MAX_COL_VR_DASHBOARD))
          continue;
+
       switch (nLine) {
       case 1: 
-         if ((g_strv_length (tokens) > 1) && (strstr (tokens [0], "Name") != NULL))
+         if ((nCol > 1) && (strstr (tokens [0], "Name") != NULL))
             snprintf (footer, maxLenFooter, "%s   ", g_strstrip (tokens [1]));
          break;
       case 3:
-         if ((g_strv_length (tokens) > 1) &&  (strstr (tokens [0], "Export Date") != NULL))
+         if ((nCol > 1) &&  (strstr (tokens [0], "Export Date") != NULL))
             g_strlcpy (strDate, tokens [1], sizeof (strDate));
          break;
       case 5:
-         if ((g_strv_length (tokens) > 11)) {
+         if ((nCol > MIN_COL_VR_DASHBOARD)) {
             formatLine (true, tokens, "UTC", reportLine, sizeof (reportLine), elemSize, elemSizeLen);
             g_strlcat (report, reportLine, maxLen);
          }
          break;
       default:
-         if ((g_strv_length (tokens) > 11)) {
-            g_strstrip (tokens [1]);                        // second column as name
-            if (! analyseCoord (tokens [10], &lat, &lon)) {  // 11th column with lat, lon
-               g_strfreev (tokens);
+         if ((nCol > MIN_COL_VR_DASHBOARD)) {
+            g_strstrip (tokens [1]);                           // second column as name
+            if (! analyseCoord (tokens [10], &lat, &lon)) {    // 11th column with lat, lon
                break;
             }
             // Check if the name exists in the competitors list

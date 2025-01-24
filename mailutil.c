@@ -36,7 +36,7 @@ static size_t payloadSource (void *ptr, size_t size, size_t nmemb, void *userp) 
 }
 
 /*! send using smtp mail with object and messsage to toAddress with python script */
-bool smtpSendPython (const char *toAddress, const char *object, const char *message) {
+static bool smtpSendPython (const char *toAddress, const char *object, const char *message) {
    char commandLine [MAX_SIZE_LINE * 4];
    char newPw [MAX_SIZE_NAME]; // only for Python case 
 
@@ -382,7 +382,7 @@ static int imapRead (const char* imapServer, const char *username, const char *p
 /*! python version for imapGetUnseen */
 static int imapGetUnseenPython (const char *path, char *gribFileName, size_t maxLen) {
    char *fileName;
-   const int MAX_LINES = 10;
+   const int maxLines = 10;
    char line [MAX_SIZE_LINE] = "";
    char buffer[MAX_SIZE_BUFFER] = "\n";
    int n = 0;
@@ -398,7 +398,7 @@ static int imapGetUnseenPython (const char *path, char *gribFileName, size_t max
       fprintf (stderr, "In imapGetUnseenPython, Error popen command: %s\n", command);
       return 0;
    }
-   while ((fgets (line, sizeof(line)-1, fp) != NULL) && (n < MAX_LINES)) {
+   while ((fgets (line, sizeof(line)-1, fp) != NULL) && (n < maxLines)) {
       n += 1;
       printf ("count: %d line: %d: %s", count, n, line);
       g_strlcat (buffer, line, sizeof (buffer));

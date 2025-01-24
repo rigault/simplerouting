@@ -128,7 +128,6 @@ static bool checkConsistency (int nPol) {
 
 /*! check after composition the sail Matrix */
 static void countSail (const PolMat *mat) {
-   const double EPSILON = 0.01;
    for (int lig = 1; lig < mat->nLine; lig += 1) {
       for (int col = 1; col < mat->nCol; col += 1) {
          int v = (int) mat->t [lig][col];

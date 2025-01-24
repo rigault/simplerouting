@@ -385,7 +385,7 @@ static void copyGpsData () {
 /* decode AIS Paylod fields and fill aisRecord hash table */
 static void decodeAisPayload (const char *payload) {
    char bits [1000] = {0};
-   const int MAX_SOG = 1000; 
+   const int maxSog = 1000; 
    
    extractBits (payload, bits);
    printf ("Bits: %s\n", bits);
@@ -439,7 +439,7 @@ static void decodeAisPayload (const char *payload) {
    ship = getRecord (mmsi);   
    if (ship == NULL) return;
 
-   if ((speed >= 0) && (speed < MAX_SOG)) ship->sog = ((double) speed) / 10.0;
+   if ((speed >= 0) && (speed < maxSog)) ship->sog = ((double) speed) / 10.0;
    if (latitude != NIL) ship->lat = ((double) latitude) / 600000.0;
    if (longitude != NIL) ship->lon = ((double) longitude) / 600000.0;
    if ((course >= 0) && (course <= 3600)) ship->cog = ((double) course) / 10.0;

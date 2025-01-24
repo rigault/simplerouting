@@ -1,5 +1,7 @@
 /*! compilation: gcc -c rutil.c `pkg-config --cflags glib-2.0` */
 #define _POSIX_C_SOURCE 200809L // to avoid warning with -std=c11 when using popen function (Posix)
+#define MIN_NAME_LENGTH 3       // for poi. Minimul length to select poi
+
 #include <glib.h>
 #include <curl/curl.h>
 #include <float.h>   
@@ -42,11 +44,13 @@ const struct MailService mailServiceTab [N_MAIL_SERVICES] = {
 };
 
 const struct GribService serviceTab [N_WEB_SERVICES] = {
-   {6, "Time Step 1 hours requires 0.25 Resolution with 5 days max forecast. Time step 3 hours allows max 8 days forecast. Timestep 6 hours for 16 days forecast."}, // NOAA
+   {6, "Time Step 1 hours requires 0.25 Resolution with 5 days max forecast. Time step 3 hours allows 16 days forecast."}, // NOAA
    {3, "Resolution allways 0.25. Time Step min 3 hours with 6 days max forecast. Time step 6 hours and above allow 10 days forecast."}, // ECMWF
    {3, "Resolution allways 0.25. Time Step allways 3 hours. 5 days max => 4.25 days (102 hours) max."} // ARPEGE
 };
 
+
+/*! sail attributes */
 const char *sailName [MAX_N_SAIL] = {"NA", "C0", "HG", "Jib", "LG", "LJ", "Spi", "SS"}; // for sail polars
 const char *colorStr [MAX_N_SAIL] = {"black", "green", "purple", "black", "blue", "yellow", "black", "red"};
 
@@ -84,10 +88,7 @@ Entity *entities = NULL;
 Zone zone;                          // wind
 Zone currentZone;                   // current
 
-FlowP *tGribData [2]= {NULL, NULL};  // wind, current
-
-// start date
-struct tm startInfo =  {0};
+FlowP *tGribData [2] = {NULL, NULL};  // wind, current
 
 const char *METEO_CONSULT_WIND_URL [N_METEO_CONSULT_WIND_URL * 2] = {
    "Atlantic North",   "%sMETEOCONSULT%02dZ_VENT_%02d%02d_Nord_Atlantique.grb",
@@ -132,7 +133,8 @@ void initZone (Zone *zone) {
 int maxTimeRange (int service, int mailService) {
    switch (service) {
    case  NOAA_WIND:
-      return (par.gribTimeStep == 1) ? 120 : (par.gribTimeStep < 6) ? 192 : 384;
+      return 384;
+      // return (par.gribTimeStep == 1) ? 120 : 384;
    case ECMWF_WIND:
       return (par.gribTimeStep < 6) ? 144 : 240;
    case ARPEGE_WIND:
@@ -271,14 +273,14 @@ bool compact (bool full, const char *dir, const char *inFile, const char *shortN
    }
 }
 
-/*! concat all files prefixed by prefix and suffixed 0..max (with step) in fileRes */
-bool concat (const char *prefix, const char *suffix, int step, int max, const char *fileRes) {
+/*! concat all files prefixed by prefix and suffixed 0..limit0 (with step0 the limit0..max with step1) in fileRes */
+bool concat (const char *prefix, const char *suffix, int limit0, int step0, int step1, int max, const char *fileRes) {
    FILE *fRes = NULL;
    if ((fRes = fopen (fileRes, "w")) == NULL) {
       fprintf (stderr, "In concat, Error Cannot write: %s\n", fileRes);
       return false;
    }
-   for (int i = 0; i <= max; i += step) {
+   for (int i = 0; i <= max; i += (i < limit0) ? step0 : step1) {
       char fileName [MAX_SIZE_FILE_NAME];
       snprintf (fileName, sizeof (fileName), "%s%03d%s", prefix, i, suffix);
       FILE *f = fopen (fileName, "rb");
@@ -722,7 +724,6 @@ bool writePoi (const char *fileName) {
 
 /*! give the point refered by its name. return index found, -1 if not found */
 int findPoiByName (const char *name, double *lat, double *lon) {
-    const size_t MIN_NAME_LENGTH = 3;
     if (!name || !lat || !lon) {
         return -1; // Invalid arguments
     }
@@ -796,17 +797,17 @@ int poiToStr (bool portCheck, char *str, size_t maxLen) {
 
 /*! return name of nearest port found in file fileName from lat, lon. return empty string if not found */
 char *nearestPort (double lat, double lon, const char *fileName, char *res, size_t maxLen) {
-   const double MIN_SHOM_LAT = 43.0;
-   const double MAX_SHOM_LAT = 51.0;
-   const double MIN_SHOM_LON = -4.0;
-   const double MAX_SHOM_LON = 3.0;
+   const double minShomLat = 43.0;
+   const double maxShomLat = 51.0;
+   const double minShomLon = -4.0;
+   const double maxShomLon = 3.0;
    double minDist = DBL_MAX;
    FILE *f;
    char str [MAX_SIZE_LINE];
    double latPort, lonPort;
    char portName [MAX_SIZE_NAME];
    res [0] = '\0';
-   if ((lat < MIN_SHOM_LAT) || (lat > MAX_SHOM_LAT) || (lon < MIN_SHOM_LON) || (lon > MAX_SHOM_LON))
+   if ((lat < minShomLat) || (lat > maxShomLat) || (lon < minShomLon) || (lon > maxShomLon))
       return res;
 
    if ((f = fopen (fileName, "r")) == NULL) {
@@ -1069,7 +1070,7 @@ bool readParam (const char *fileName) {
    par.nightEfficiency = 1;
    par.kFactor = 1;
    par.jFactor = 300;
-   par.nSectors = 720;
+   par.nSectors = MAX_N_SECTORS;
    par.style = 1;
    par.showColors =2;
    par.dispDms = 2;
@@ -1122,8 +1123,9 @@ bool readParam (const char *fileName) {
          if (wayPoints.n > MAX_N_WAY_POINT)
             fprintf (stderr, "In readParam, Error: number of wayPoints exceeded; %d\n", MAX_N_WAY_POINT);
          else {
-            if (analyseCoord (strchr (pLine, ':') + 1, &wayPoints.t [wayPoints.n].lat, &wayPoints.t [wayPoints.n].lon))
+            if (analyseCoord (strchr (pLine, ':') + 1, &wayPoints.t [wayPoints.n].lat, &wayPoints.t [wayPoints.n].lon)) {
                wayPoints.n += 1;
+            }
          }
       }
       else if  (strstr (pLine, "COMPETITOR:") != NULL) {
@@ -1266,6 +1268,7 @@ bool readParam (const char *fileName) {
    }
    if (par.constWindTws != 0) initZone (&zone);
    fclose (f);
+   par.nSectors = MIN (par.nSectors, MAX_N_SECTORS);
    return true;
 }
 

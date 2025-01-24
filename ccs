@@ -1,0 +1,6 @@
+#!/bin/bash
+gcc -c stamina.c `pkg-config --cflags gtk4`
+gcc stamina.o -o stamina -std=c11 -lm `pkg-config --cflags --libs gtk4`
+
+
+

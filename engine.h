@@ -7,8 +7,7 @@ extern ChooseDeparture chooseDeparture;         // for choice of departure time
 extern HistoryRouteList historyRoute;           // history of calculated routes
 extern SailRoute route;                         // current route
 
-extern double  distSegment (double latX, double lonX, double latA, double lonA, double latB, double lonB);
-extern void    storeRoute (SailRoute *route, const Pp *pOr, const Pp *pDest, double lastStepDuration);
+extern bool    storeRoute (SailRoute *route, const Pp *pOr, const Pp *pDest, double lastStepDuration);
 extern bool    allIsocToStr (char *str, size_t maxLen);
 extern bool    isoDescToStr (char *str, size_t maxLen);
 extern bool    routeToStr (const SailRoute *route, char *str, size_t maxLen, char *footer, size_t maxLenFooter);

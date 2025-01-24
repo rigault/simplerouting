@@ -57,21 +57,21 @@ void printGrib (const Zone *zone, const FlowP *gribData) {
 
 /* true if all value seem OK */
 static bool checkGrib (const Zone *zone, int iFlow, CheckGrib *check) {
-   const int MAX_UV = 100;
-   const int MAX_W = 20;
+   const int maxUV = 100;
+   const int maxW = 20;
    memset (check, 0, sizeof (CheckGrib));
    for (size_t iGrib = 0; iGrib < zone->nTimeStamp * zone->nbLat * zone->nbLon; iGrib++) {
       if (tGribData [iFlow] [iGrib].u == MISSING) check->uMissing += 1;
-	   else if (fabs (tGribData [iFlow] [iGrib].u) > MAX_UV) check->uStrange += 1;
+	   else if (fabs (tGribData [iFlow] [iGrib].u) > maxUV) check->uStrange += 1;
    
       if (tGribData [iFlow] [iGrib].v == MISSING) check->vMissing += 1;
-	   else if (fabs (tGribData [iFlow] [iGrib].v) > MAX_UV) check->vStrange += 1;
+	   else if (fabs (tGribData [iFlow] [iGrib].v) > maxUV) check->vStrange += 1;
 
       if (tGribData [iFlow] [iGrib].w == MISSING) check->wMissing += 1;
-	   else if ((tGribData [iFlow] [iGrib].w > MAX_W) ||  (tGribData [iFlow] [iGrib].w < 0)) check->wStrange += 1;
+	   else if ((tGribData [iFlow] [iGrib].w > maxW) ||  (tGribData [iFlow] [iGrib].w < 0)) check->wStrange += 1;
 
       if (tGribData [iFlow] [iGrib].g == MISSING) check->gMissing += 1;
-	   else if ((tGribData [iFlow] [iGrib].g > MAX_UV) || (tGribData [iFlow] [iGrib].g < 0)) check->gStrange += 1;
+	   else if ((tGribData [iFlow] [iGrib].g > maxUV) || (tGribData [iFlow] [iGrib].g < 0)) check->gStrange += 1;
 
       if ((tGribData [iFlow] [iGrib].lat > zone->latMax) || (tGribData [iFlow] [iGrib].lat < zone->latMin) ||
          (tGribData [iFlow] [iGrib].lon > zone->lonRight) || (tGribData [iFlow] [iGrib].lon < zone->lonLeft))
@@ -104,9 +104,13 @@ static bool timeIntersectGrib (const Zone *zone1, const Zone *zone2) {
 /*! check if time steps are regular */
 static bool timeStepRegularGrib (const Zone *zone) {
    if (zone->nTimeStamp  < 2) return true;
-   long timeStep = zone->timeStamp [1] - zone->timeStamp [0];
-   for (size_t i = 1; i < zone->nTimeStamp - 1; i++) {
-      if ((zone->timeStamp [i] - zone->timeStamp [i-1]) != timeStep) {
+   for (size_t i = 1; i < zone->intervalLimit; i++) {
+      if ((zone->timeStamp [i] - zone->timeStamp [i-1]) != zone->intervalBegin) {
+         return false;
+      }
+   }
+   for (size_t i = zone->intervalLimit; i < zone->nTimeStamp - 1; i++) {
+      if ((zone->timeStamp [i] - zone->timeStamp [i-1]) != zone->intervalEnd) {
          return false;
       }
    }
@@ -158,8 +162,8 @@ static int consistentGrib (const Zone *zone, int iFlow, double epsilon, int *nLa
 /*! check Grib information and write (add) report in the buffer
     return false if something wrong  */
 bool checkGribInfoToStr (int type, Zone *zone, char *buffer, size_t maxLen) {
-   const double WIND_EPSILON = 0.01;
-   const double CURRENT_EPSILON = 0.1;
+   const double windEpsilon = 0.01;
+   const double currentEpsilon = 0.1;
    CheckGrib sCheck;
    int nVal = 0, nLatSuspects, nLonSuspects;
    bool OK = true;
@@ -210,7 +214,7 @@ bool checkGribInfoToStr (int type, Zone *zone, char *buffer, size_t maxLen) {
       g_strlcat (buffer, str, maxLen);
    }
 
-   nVal = consistentGrib (zone, type, (type == WIND) ? WIND_EPSILON : CURRENT_EPSILON, &nLatSuspects, &nLonSuspects);
+   nVal = consistentGrib (zone, type, (type == WIND) ? windEpsilon : currentEpsilon, &nLatSuspects, &nLonSuspects);
    if ((nLatSuspects > 0) || (nLonSuspects > 0)) {
 	   OK = false;
       snprintf (str, MAX_SIZE_LINE, "n Val suspect Lat: %d, ratio: %.2lf %% \n", nLatSuspects, 100 * (double)nLatSuspects/(double) (nVal));
@@ -587,6 +591,25 @@ static bool readGribLists (const char *fileName, Zone *zone) {
       if (strcmp (zone->shortName[i], "unknown") == 0)
          g_strlcpy (zone->shortName[i], "gust?", 6);
    }
+   zone->intervalLimit = 0;
+   if (zone->nTimeStamp > 1) {
+      zone->intervalBegin = zone->timeStamp [1] - zone->timeStamp [0];
+      zone->intervalEnd = zone->timeStamp [zone->nTimeStamp - 1] - zone->timeStamp [zone->nTimeStamp - 2];
+      for (size_t i = 1; i < zone->nTimeStamp; i++) {
+         if ((zone->timeStamp [i] - zone->timeStamp [i-1]) == zone->intervalEnd) {
+            zone->intervalLimit = i;
+            break;
+         }
+      }
+   }
+   else {
+      zone->intervalBegin = zone->intervalEnd = 3;
+      fprintf (stderr, "In readGribLists, Error nTimeStamp = %zu\n", zone->nTimeStamp);
+      //return false;
+   }
+
+   //printf ("intervalBegin: %ld, intervalEnd: %ld, intervalLimit: %zu\n", 
+      //zone->intervalBegin, zone->intervalEnd, zone->intervalLimit -1); 
    return true;
 }
 
@@ -667,7 +690,6 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
    char shortName [MAX_SIZE_SHORT_NAME];
    size_t lenName;
    const long GUST_GFS = 180;
-   long timeInterval = 0;
    char str [MAX_SIZE_LINE];
    //static int count;
    memset (zone, 0,  sizeof (Zone));
@@ -684,15 +706,6 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
          zone -> nDataDate);
       return false;
    }
-   if (zone->nTimeStamp > 1) {
-      timeInterval = zone->timeStamp [1] - zone->timeStamp [0]; 
-   }
-   else {
-      timeInterval = 3;
-      fprintf (stderr, "In readGribAll, Error nTimeStamp = %zu\n", zone->nTimeStamp);
-      //return false;
-   }
-
 
    if (tGribData [iFlow] != NULL) {
       free (tGribData [iFlow]); 
@@ -726,17 +739,21 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
       //printf ("count ReadGribAll: %d\n", count++);
 
       // Check if a bitmap applies
-      CODES_CHECK(codes_get_long(h, "bitmapPresent", &bitmapPresent), 0);
+      CODES_CHECK(codes_get_long (h, "bitmapPresent", &bitmapPresent), 0);
       if (bitmapPresent) {
-          CODES_CHECK(codes_set_double(h, "missingValue", MISSING), 0);
+          CODES_CHECK(codes_set_double (h, "missingValue", MISSING), 0);
       }
 
       lenName = MAX_SIZE_SHORT_NAME;
-      CODES_CHECK(codes_get_string(h, "shortName", shortName, &lenName), 0);
-      CODES_CHECK(codes_get_long(h, "step", &timeStep), 0);
+      CODES_CHECK(codes_get_string (h, "shortName", shortName, &lenName), 0);
+      CODES_CHECK(codes_get_long (h, "step", &timeStep), 0);
 
       // check timeStep progress well 
-      if ((timeStep != 0) && (timeStep != oldTimeStep) && ((timeStep - oldTimeStep) != timeInterval)) {// check timeStep progress well 
+      if ((timeStep != 0) && (timeStep != oldTimeStep) && 
+          ((timeStep - oldTimeStep) != zone->intervalBegin) && 
+          ((timeStep - oldTimeStep) != zone->intervalEnd)
+         ) { // check timeStep progress well 
+
          zone->allTimeStepOK = false;
          fprintf (stderr, "In readGribAll: All time Step Are Not defined message: %d, timeStep: %ld shortName: %s\n", 
             zone->nMessage, timeStep, shortName);

@@ -16,20 +16,23 @@ extern struct MeteoElmt meteoTab [N_METEO_ADMIN];
 extern const struct MailService mailServiceTab [];
 extern const struct GribService serviceTab [];
 
-/*! polar description */
+/* sail attributes */
 extern const char *sailName [];
 extern const char *colorStr [];
+
+/*! polar description */
 extern PolMat polMat;
 extern PolMat sailPolMat;
 extern PolMat wavePolMat;
 
+/*! parameters desciption */
 extern Par par;
 
 extern char *tIsSea;                   // array of byte. 0 if earth, 1 if sea
 
+/*! Point of Interests and ports descriotion */
 extern Poi tPoi [MAX_N_POI];
 extern int nPoi;
-extern struct tm startInfo;
 
 /*! for shp files */
 extern int    nTotEntities;
@@ -56,7 +59,7 @@ extern double diffTimeBetweenNowAndGribOrigin (long intDate, double nHours);
 extern void   *commandRun (void *data);
 extern bool   compact (bool full, const char *dir, const char *inFile,\
    const char *shortNames, double lonLeft, double lonRight, double latMin, double latMax, const char *outFile);
-extern bool   concat (const char *prefix, const char *suffix, int step, int max, const char *fileRes);
+extern bool concat (const char *prefix, const char *suffix, int limit0, int step0, int step1, int max, const char *fileRes);
 extern bool   isEmpty (const char *str);
 extern char   *formatThousandSep (char *buffer, size_t maxLen, int value);
 extern bool   initSHP (const char* nameFile);

@@ -19,10 +19,10 @@
 #define CSV_SEP_POLAR         ";\t"             // for polar no comma because decimal separator may be comma 
 #define GPS_TIME_OUT          2000000           // 2 seconds
 //#define WORKING_DIR           "/home/rr/routing/"
-#define WORKING_DIR           "" //ATT
+#define WORKING_DIR           "" //ATT          // Default Working Dir if nothing specified in routing.par fike
 #define PARAMETERS_FILE       WORKING_DIR"par/routing.par" // default parameter file
-#define TEMP_FILE_NAME        "routing.tmp"  
-#define PROG_LOGO             "routing.png"  
+#define TEMP_FILE_NAME        "routing.tmp"     // temporary file
+#define PROG_LOGO             "routing.png"     // logo file
 #define MIN_LAT               (-80.0)           // Minimum latitude for getCoord
 #define MAX_LAT               80.0              // Maximum latitude for getCoord
 #define MIN_LON               (-180.0)          // Minimum longitude for getCoord
@@ -30,62 +30,63 @@
 #define MIN_SPEED_FOR_TARGET  5                 // knots. Difficult to explain. See engine.c, optimize()..
 //#define MISSING               (-999999)       // for grib file missing values
 #define MISSING               (0.001)           // for grib file missing values
-#define MS_TO_KN              (3600.0/1852.0)
-#define KN_TO_MS              (1852.0/3600.0)
+#define MS_TO_KN              (3600.0/1852.0)   // conversion meter/second to knots
+#define KN_TO_MS              (1852.0/3600.0)   // conversion knots to meter/second
 #define EARTH_RADIUS          3440.065          // Earth's radius in nautical miles
-#define RAD_TO_DEG            (180.0/G_PI)
-#define DEG_TO_RAD            (G_PI/180.0)
-#define SIZE_T_IS_SEA         (3601 * 1801)
-#define MAX_N_WAY_POINT       10               // Max number of Way Points
+#define RAD_TO_DEG            (180.0/G_PI)      // conversion radius to degree
+#define DEG_TO_RAD            (G_PI/180.0)      // conversion degree to radius
+#define SIZE_T_IS_SEA         (3601 * 1801)     // size of size is sea 
+#define MAX_N_WAY_POINT       10                // Max number of Way Points
 #define PROG_WEB_SITE         "http://www.orange.com"  
-#define PROG_NAME             "routing"  
+#define PROG_NAME             "routing"         
 #define PROG_VERSION          "0.1"  
 #define PROG_AUTHOR           "René Rigault"
 #define DESCRIPTION           "Routing calculates best route from pOr (Origin) to pDest (Destination) \
    taking into account grib files and boat polars"
 
-#define MILLION               1000000
-#define NIL                   (-100000)
-#define MAX_N_DAYS_WEATHER    16               // Max number od days for weather forecast
-#define MAX_SIZE_ISOC         50000            // max number of point in an isochrone
-#define MAX_N_ISOC            (384 + 1) * 4    // Max Hours in 16 days * 4 times per hours max (tSep = 15 mn) required for STATIC way
-#define MAX_N_POL_MAT_COLS    128
-#define MAX_N_POL_MAT_LINES   128
-#define MAX_SIZE_LINE         256		         // max size of pLine in text files
-#define MAX_SIZE_STD          1024		         // max size of lines standard
-#define MAX_SIZE_LINE_BASE64  1024              // max size of line in base64 mail file
-#define MAX_SIZE_TEXT         2048		         // max size of text
-#define MAX_SIZE_MESSAGE      2048		         // max size of a mail message
-#define MAX_SIZE_URL          1024		         // max size of a URL
-#define MAX_SIZE_DATE         32                // max size of a string with date inside
-#define MAX_SIZE_BUFFER       1000000
-#define MAX_N_TIME_STAMPS     512
-#define MAX_N_DATA_DATE       4                // 1 in practise
-#define MAX_N_DATA_TIME       4                // 1 in practise
-#define MAX_N_SHORT_NAME      64
-#define MAX_N_GRIB_LAT        1024
-#define MAX_N_GRIB_LON        2048
-#define MAX_SIZE_SHORT_NAME   16
-#define MAX_SIZE_NAME         64
-#define MAX_SIZE_NUMBER       64                // max size of string represnting a number
-#define MAX_SIZE_FILE_NAME    128               // max size of pLine in text files
-#define MAX_SIZE_DIR_NAME     192               // max size of directory name
-#define MAX_N_SHP_FILES       4                 // max number of shape file
-#define MAX_N_POI             4096              // max number of poi in poi file
+#define MILLION               1000000           // Million !
+#define NIL                   (-100000)         // for routing return when unreacheable
+#define MAX_N_DAYS_WEATHER    16                // Max number od days for weather forecast
+#define MAX_SIZE_ISOC         100000            // Max number of point in an isochrone
+#define MAX_N_ISOC            (384 + 1) * 4     // Max Hours in 16 days * 4 times per hours Max (tSep = 15 mn) required for STATIC way
+#define MAX_N_POL_MAT_COLS    128               // Max number of column in polar
+#define MAX_N_POL_MAT_LINES   128               // Max number of lines in polar
+#define MAX_SIZE_LINE         256		         // Max size of pLine in text files
+#define MAX_SIZE_STD          1024		         // Max size of lines standard
+#define MAX_SIZE_LINE_BASE64  1024              // Max size of line in base64 mail file
+#define MAX_SIZE_TEXT         2048		         // Max size of text
+#define MAX_SIZE_MESSAGE      2048		         // Max size of a mail message
+#define MAX_SIZE_URL          1024		         // Max size of a URL
+#define MAX_SIZE_DATE         32                // Max size of a string with date inside
+#define MAX_SIZE_BUFFER       1000000           // big buffer for malloc
+#define MAX_N_TIME_STAMPS     512               // Max number of time stamps in Grib file
+#define MAX_N_DATA_DATE       4                 // Max number of date in grib file. 1 in practise
+#define MAX_N_DATA_TIME       4                 // Max number of time date in egrib file. 1 in practise
+#define MAX_N_SHORT_NAME      64                // Max number of short name in grib file
+#define MAX_N_GRIB_LAT        1024              // Max umber of latitudes in grib file
+#define MAX_N_GRIB_LON        2048              // Max number of longitudes in grib file
+#define MAX_SIZE_SHORT_NAME   16                // Max size of string representing very short name
+#define MAX_SIZE_NAME         64                // Max size of string representing a name
+#define MAX_SIZE_NUMBER       64                // Max size of string representing a number
+#define MAX_SIZE_FILE_NAME    128               // Max size of pLine in text files
+#define MAX_SIZE_DIR_NAME     192               // Max size of directory name
+#define MAX_N_SHP_FILES       4                 // Max number of shape file
+#define MAX_N_POI             4096              // Max number of poi in poi file
 #define SMALL_SIZE            5                 // for short string
-#define MAX_SIZE_POI_NAME     64                // max size of city name
-#define MAX_SIZE_COUNTRY_CODE 3                 // max size of country code
-#define MAX_HISTORY_ROUTE     10                // max number of history route stored
+#define MAX_SIZE_POI_NAME     64                // Max size of city name
+#define MAX_SIZE_COUNTRY_CODE 3                 // Max size of country code
+#define MAX_HISTORY_ROUTE     10                // Max number of history route stored
 #define GPSD_TCP_PORT         "2947"            // TCP port for gps demon
-#define MAX_SIZE_FORBID_ZONE  100               // max size per forbidden zone
-#define MAX_N_FORBID_ZONE     10                // max nummber of forbidden zones
+#define MAX_SIZE_FORBID_ZONE  100               // Max size per forbidden zone
+#define MAX_N_FORBID_ZONE     10                // Max nummber of forbidden zones
 #define N_METEO_ADMIN         4                 // administration: Weather Service US, DWD, etc
 #define N_MAIL_SERVICES       9                 // for mailServiceTab size
 #define N_WEB_SERVICES        3                 // for service Tab size (NOAA and ECMWF and ARPEGE)
 #define MAX_INDEX_ENTITY      512               // for shp. Index.
-#define MAX_N_COMPETITORS     10                // Number max of competitors
+#define MAX_N_COMPETITORS     10                // Number Max of competitors
 #define MAX_SIZE_SHIP_NAME    21                // see AIS specificatiions
-#define MAX_N_SAIL            8                 // max number of sails in sailName table
+#define MAX_N_SAIL            8                 // Max number of sails in sailName table
+#define MAX_N_SECTORS         1000              // Max number of sectors for optimization of sectors
 
 enum {NOAA_WIND, ECMWF_WIND, ARPEGE_WIND, MAIL, MAIL_SAILDOCS_CURRENT}; // NOAA or ECMWF for web download or MAIL. Specific for current
 enum {GPS_INDEX, AIS_INDEX};                    // for NMEA USB serial port reading
@@ -205,13 +206,13 @@ typedef struct {
 typedef struct {
    double lat;
    double lon;
-   double u;                                 // east west wind or current in meter/s
-   double v;                                 // north south component of wind or current in meter/s
-   double w;                                 // waves height WW3 model
-   double g;                                 // wind speed gust
-   double msl;                               // mean sea level pressure
-   double prate;                             // precipitation rate
-} FlowP;                                     // ether wind or current
+   double u;                  // east west wind or current in meter/s
+   double v;                  // north south component of wind or current in meter/s
+   double w;                  // waves height WW3 model
+   double g;                  // wind speed gust
+   double msl;                // mean sea level pressure
+   double prate;              // precipitation rate
+} FlowP;                      // either wind or current
 
 /*! zone description */
 typedef struct {
@@ -234,13 +235,15 @@ typedef struct {
    size_t nTimeStamp;
    size_t nDataDate;
    size_t nDataTime;
-   double time0Grib;                      // time of the first forecast in grib in hours
+   double time0Grib;          // time of the first forecast in grib in hours
    size_t nShortName;
    char   shortName [MAX_N_SHORT_NAME][MAX_SIZE_SHORT_NAME];
-   //char** shortName;
    long   timeStamp [MAX_N_TIME_STAMPS];
    long   dataDate [MAX_N_DATA_DATE];
    long   dataTime [MAX_N_DATA_TIME];
+   long   intervalBegin;
+   long   intervalEnd;
+   size_t intervalLimit;
 } Zone;
 
 /*! Point in isochrone */

@@ -81,25 +81,6 @@ void optionManage (char option) {
       printf ("Orthodist1 : %.2lf,   Orthodist2: %.2lf\n", orthoDist (lat, lon, lat2, lon2), orthoDist (lat2, lon2, lat, lon));
       printf ("Loxodist1  : %.2lf,   Loxodist2 : %.2lf\n", loxoDist(lat, lon, lat2, lon2), loxoDist (lat2, lon2, lat, lon));
       break;
-   case 'd': // distance
-      while (true) {
-         double latA, lonA, latB, lonB, latX, lonX, res;
-         printf ("Lat A: "); 
-         if (scanf ("%lf", &latA) < 1) break;
-         printf ("Lon A: "); 
-         if (scanf ("%lf", &lonA) < 1) break;
-         printf ("Lat B: "); 
-         if (scanf ("%lf", &latB) < 1) break;
-         printf ("Lon B: "); 
-         if (scanf ("%lf", &lonB) < 1) break;
-         printf ("Lat X: "); 
-         if (scanf ("%lf", &latX) < 1) break;
-         printf ("Lon X: "); 
-         if (scanf ("%lf", &lonX) < 1) break;
-         res =  distSegment (latX, lonX, latA, lonA, latB, lonB);
-         printf ("Distance from X to [AB]: %.2lf\n", res);
-      }
-      break;
    case 'g': // grib
       if (par.mostRecentGrib) {// most recent grib will replace existing grib
          snprintf (directory, sizeof (directory), "%sgrib/", par.workingDir); 
