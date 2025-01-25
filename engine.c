@@ -42,12 +42,12 @@ static double pOrToPDestCog = 0.0;              // cog from pOr to pDest.
 static int    pId = 1;                          // global ID for points. -1 and 0 are reserved for pOr and pDest
 static double tDeltaCurrent = 0.0;              // delta time in hours between wind zone and current zone
 
-typedef struct {                                 
+static struct {                                 
    double dd;
    double vmc;
    double nPt;
-} Sector;                                      
-Sector sectorHist [MAX_N_SECTORS];              // we keep an history  
+} sector [2][MAX_SIZE_ISOC];                    // we keep even and odd last sectors
+
 
 /*! return distance from point X do segment [AB]. Meaning to H, projection of X en [AB] */
 static double distSegment (double latX, double lonX, double latA, double lonA, double latB, double lonB) {
@@ -105,10 +105,12 @@ static inline int findFirst (int nIsoc) {
 }
 
 /*! initialization of sector */
-static inline void initSector (Sector *sector) {
-   sector->dd = DBL_MAX;
-	sector->vmc = 0;
-   sector->nPt = 0;
+static inline void initSector (int nIsoc, int nMax) {
+   for (int i = 0; i < nMax; i++) {
+      sector [nIsoc][i].dd = DBL_MAX;
+	   sector [nIsoc][i].vmc = 0;
+      sector [nIsoc][i].nPt = 0;
+   }
 }
 
 /*! reduce the size of Isolist 
@@ -122,7 +124,6 @@ static inline int forwardSectorOptimize (const Pp *pOr, const Pp *pDest, int nIs
    double alpha, theta;
    double thetaStep = 360.0 / par.nSectors;
    double focalLat, focalLon; // center of sectors
-   Sector sector [MAX_N_SECTORS];
    const double denominator = cos (DEG_TO_RAD * (pOr->lat + pDest->lat)/2);
 
    if (denominator < epsilon * epsilon) { // really small !
@@ -152,11 +153,12 @@ static inline int forwardSectorOptimize (const Pp *pOr, const Pp *pDest, int nIs
 
    isoDesc [nIsoc].focalLat = focalLat;
    isoDesc [nIsoc].focalLon = focalLon;
+   const int currentSector = nIsoc % 2;
+   const int previousSector = (nIsoc - 1) % 2;
   
-   for (int i = 0; i < par.nSectors; i += 1) {
-      initSector (&sector [i]);
+   initSector (nIsoc % 2, par.nSectors);
+   for (int i = 0; i < par.nSectors; i++)
       optIsoc [i].lat = DBL_MAX;
-   }
 
    // all points are distributed in sectors
    for (int i = 0; i < isoLen; i += 1) {
@@ -164,46 +166,47 @@ static inline int forwardSectorOptimize (const Pp *pOr, const Pp *pDest, int nIs
       theta = pOrToPDestCog - alpha;
       theta = fmod (theta + 360.0, 360.0);
       iSector = round ((360.0 - theta) / thetaStep);
-		if ((isoList [i].dd < sector [iSector].dd) && (isoList [i].vmc > sector [iSector].vmc)) {
-         sector [iSector].dd = isoList [i].dd;
-         sector [iSector].vmc = isoList [i].vmc;
+		if ((isoList [i].dd < sector [currentSector][iSector].dd) && (isoList [i].vmc > sector [currentSector] [iSector].vmc)) {
+         sector [currentSector][iSector].dd = isoList [i].dd;
+         sector [currentSector][iSector].vmc = isoList [i].vmc;
          optIsoc [iSector] = isoList [i];
       }
-      sector [iSector].nPt += 1;
+      sector [currentSector][iSector].nPt += 1;
    }
    // we keep only sectors that match conditions (not empty, vmc not too bad, kFactor dependant condition)
    k = 0;
    for (iSector = 0; iSector < par.nSectors; iSector++) {
-      bool weKeep = false; // do we keep this sector ?
-      if ((sector [iSector].dd < DBL_MAX - 1) 
-         && (sector [iSector].vmc > 0.6 * isoDesc [nIsoc-1].bestVmc) 
-         && (sector [iSector].vmc < pOr-> dd * 1.1)) {
+      bool weKeep = false;
+      if ((sector [currentSector][iSector].dd < DBL_MAX - 1)                        // not empty
+         && (sector [currentSector][iSector].vmc > 0.6 * isoDesc [nIsoc-1].bestVmc) // VMC not too bad
+         && (sector [currentSector][iSector].vmc < pOr->dd * 1.1)) {                // DD is not behind pOr ! 
+
          switch (par.kFactor) {
          case 0:
             weKeep = true;
             break;
          case 1:
-            weKeep = (sector [iSector].vmc >= sectorHist [iSector].vmc);
+            weKeep = (sector [currentSector][iSector].vmc >= sector [previousSector][iSector].vmc); // Best !  
             //if (!weKeep) printf ("case 1: strange VMC nIsoc: %d iSector: %d\n", nIsoc, iSector); 
             break;
          case 2:
-            weKeep = (sector [iSector].dd <= sectorHist [iSector].dd);
+            weKeep = sector [currentSector][iSector].dd <= sector [previousSector][iSector].dd;
             //if (!weKeep) printf ("case 2: strange DD nIsoc: %d iSector: %d\n", nIsoc, iSector); 
             break;
-         case 3:
-            weKeep = (sector [iSector].vmc >= sectorHist [iSector].vmc) && \
-                     (sector [iSector].dd <= sectorHist [iSector].dd);
+         case 3:  
+            weKeep = (sector [currentSector][iSector].vmc >= sector [previousSector][iSector].vmc) && 
+                     (sector [currentSector][iSector].dd <= sector [previousSector][iSector].dd);
             //if (!weKeep) printf ("case 3: strange VMC and DD nIsoc: %d iSector: %d\n", nIsoc, iSector); 
             break;
          case 4:
-            weKeep = (sector [iSector].vmc >= sectorHist [iSector].vmc) || \
-                     (sector [iSector].dd <= sectorHist [iSector].dd);
+            weKeep = (sector [currentSector][iSector].vmc >= sector [previousSector][iSector].vmc) || 
+                     (sector [currentSector][iSector].dd <= sector [previousSector][iSector].dd);
             //if (!weKeep) printf ("case 4: strange VMC or DD nIsoc: %d iSector: %d\n", nIsoc, iSector); 
          default:;
          }
       
           // no wind, no change, we keep anyway
-         if (fabs (sector [iSector].dd - sectorHist[iSector].dd) < epsilon) {
+         if ((fabs (sector [currentSector][iSector].dd - sector [previousSector][iSector].dd)) < epsilon) {
             weKeep = true;
             //printf ("No wind, we keep nIsoc: %d, iSector:%d \n", nIsoc, iSector);
          } 
@@ -211,13 +214,10 @@ static inline int forwardSectorOptimize (const Pp *pOr, const Pp *pDest, int nIs
             optIsoc [k] = optIsoc [iSector];
             optIsoc [k].sector = iSector;
 	         k += 1;
-            sectorHist [iSector].dd =  MIN (sectorHist [iSector].dd,  sector [iSector].dd);
-	         sectorHist [iSector].vmc = MAX (sectorHist [iSector].vmc, sector [iSector].vmc);
-            sectorHist [iSector].nPt = MAX (sectorHist [iSector].nPt, sector [iSector].nPt);
          }
       }
    }
-   return k; 
+   return k;
 }
 
 /*! choice of algorithm used to reduce the size of Isolist */
@@ -893,6 +893,7 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
    pOrToPDestCog = orthoCap (pOr->lat, pOr->lon, pDest->lat, pDest->lon);
    pDest->toIndexWp = toIndexWp;
    tempList [0] = *pOr;             // list with just one element;
+   initSector (nIsoc % 2, par.nSectors); 
 
    if (goalP (pOr, pOr, pDest, t, dt, &timeToReach, &distance, &motor, &amure, &sail)) {
       pDest->father = pOr->id;
@@ -984,6 +985,7 @@ static void initRouting (void) {
    maxNIsoc = 0;
    nIsoc = 0;
    pOrToPDestCog = 0;
+   memset (sector, 0, sizeof(sector));
    lastClosest = par.pOr;
    tDeltaCurrent = zoneTimeDiff (&currentZone, &zone); // global variable
    par.pOr.id = -1;
@@ -994,9 +996,8 @@ static void initRouting (void) {
    route.n = 0;
    g_atomic_int_set (&route.ret, ROUTING_RUNNING);
    route.destinationReached = false;
-   for (int i = 0; i < par.nSectors; i += 1)
-      initSector (&sectorHist [i]);
 }
+
 
 /*! launch routing wih parameters */
 void *routingLaunch () {

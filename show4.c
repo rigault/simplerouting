@@ -195,7 +195,7 @@ static char   selectedPort [MAX_SIZE_NAME];
 static GThread *gloThread;                         // global var for threads
 static GMutex warningMutex;                        // mutex for warnin message
 static char   statusbarWarningStr [MAX_SIZE_TEXT]; // global var to store warning string
-static struct tm     startInfo =  {0};             // start date
+static struct tm startInfo =  {0};                 // start date
 
 static struct {
    char firstLine [MAX_SIZE_LINE];                 // first line for displayText
@@ -5836,6 +5836,7 @@ static void virtualRegDashboardImport () {
    }
    snprintf (title, MAX_SIZE_LINE, "Virtual Regatta Dump: %s", fileName);
    startInfo = dashboardImportParam (fileName, &competitors, buffer, MAX_SIZE_BUFFER, footer, sizeof (footer)); 
+   par.startTimeInHours = getDepartureTimeInHour (&startInfo); 
    par.pOr.lat = competitors.t [0].lat;
    par.pOr.lon = competitors.t [0].lon;
    competitors.runIndex = 0;
