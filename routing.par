@@ -1,64 +1,85 @@
+DESC:            Routing parameters. See also docpar.txt for documentation
 WD:              /home/rr/routing/
-POI:             geo/poi.csv
-PORT:            geo/port.csv
-POR:             35.86,-41.37
-PDEST:           52.23,-19.42
-TRACE:           trace/2024Bidon.csv
-#CGRIB:           grib/bug.grb
-CGRIB:           grib/reference.grb2
-MOST_RECENT_GRIB:0
+ALLWAYS_SEA:     1
+POI:             /home/rr/routing/geo/poi.csv
+PORT:            /home/rr/routing/geo/port.csv
+POR:             46.41,-1.99 #46°24'48"N,001°59'09"W
+PDEST:           46.49,-1.79 #46°29'24"N,001°47'24"W
+PDEST_NAME:        Les Sables d'Olonne
+COMPETITOR:         0; 46°24'48"N,001°59'09"W; pistache-guezy
+COMPETITOR:         4; 45°46'31"N,006°16'11"W; Zipé
+TRACE:           /home/rr/routing/trace/2024VG.csv
+CGRIB:           /home/rr/routing/grib/NOAA-2025-01-26-00Z-01-120.grb
+MOST_RECENT_GRIB:1
 GRIB_RESOLUTION: 0.25
-GRIB_TIME_STEP:  3
-GRIB_TIME_MAX:   192
-TIDES:           geo/portprinc.csv
-POLAR:           pol/DufourGVSpyAsym.pol
-WAVE_POL:        pol/polwave.csv
-ISSEA:           geo/issea.txt
-MID_COUNTRY:     geo/midcodes.txt
+GRIB_TIME_STEP:  1
+GRIB_TIME_MAX:   72
+POLAR:           /home/rr/routing/pol/VRrespol.csv
+WAVE_POL:        /home/rr/routing/pol/polwave.csv
+ISSEA:           /home/rr/routing/geo/issea.txt
+MID_COUNTRY:     /home/rr/routing/geo/midcodes.txt
+TIDES:           /home/rr/routing/geo/portprinc.csv
 HELP:            file:///home/rr/routing/helpdir/index.html
-CLI_HELP:        helpdir/clihelp.txt
-SHP:             geo/land-polygons-complete-4326/land_polygons.shp
-START_TIME:      11.00
-T_STEP:          1
-RANGE_COG:       90
-COG_STEP:        5
-MAX_ISO:         385
+CLI_HELP:        /home/rr/routing/helpdir/clihelp.txt
+VR_DASHBOARD:    /home/rr/routing/VRdashboard/Vendée Globe 2024_654.1_Fleet_01_26_2025_1422.csv
+VR_STAMINA:      78.00
+VR_DASHB_UTC:    0
+SHP:             /home/rr/routing/geo/land-polygons-complete-4326/land_polygons.shp
+START_TIME:      13.35
+T_STEP:          0.25
+RANGE_COG:       120
+COG_STEP:        1
 SPECIAL:         0
 PENALTY0:        5
 PENALTY1:        5
+PENALTY2:        5
 MOTOR_S:         6.00
-THRESHOLD:       4.00
-DAY_EFFICIENCY:  0.85
-NIGHT_EFFICIENCY:0.75
-X_WIND:          1.10
+THRESHOLD:       0.00
+DAY_EFFICIENCY:  1.00
+NIGHT_EFFICIENCY:1.00
+X_WIND:          1.00
 MAX_WIND:        45.00
-DUMPI:           isoc/routing.isoc
-DUMPR:           rte/routing.rte
-PAR_INFO:        helpdir/docpar.txt
+CONST_WAVE:      0.10
+DUMPI:           /home/rr/routing/isoc/routing.isoc
+DUMPR:           /home/rr/routing/rte/routing.rte
+PAR_INFO:        /home/rr/routing/helpdir/docpar.txt
+LOG:             /home/rr/routing/routing.log
 OPT:             1
 ISOC_DISP:       3
-COLOR_DISP:      2
-DMS_DISP:        2
-WIND_DISP:       1
+STEP_ISOC_DISP:  1
+COLOR_DISP:      0
+DMS_DISP:        3
+WIND_DISP:       2
 INFO_DISP:       0
-AVR_OR_GUST_DISP:1
+INDICATOR_DISP:  0
 CURRENT_DISP:    1
 WAVE_DISP:       1
-GRID_DISP:       1
+GRID_DISP:       0
+LEVEL_POI_DISP:  2
 SPEED_DISP:      1
 AIS_DISP:        1
+SHP_POINTS_DISP: 0
 TECHNO_DISP:     1
-MAX_THETA:       90.00
-J_FACTOR:        300
+J_FACTOR:        0
 K_FACTOR:        1
-N_SECTORS:       720
+N_SECTORS:       360
+PYTHON:          1
+CURL_SYS:        0
 SMTP_SCRIPT:     python3 /home/rr/routing/py/smtp.py
 IMAP_TO_SEEN:    python3 /home/rr/routing/py/imaptoseen.py
 IMAP_SCRIPT:     python3 /home/rr/routing/py/imap.py
-#WEBKIT:          /home/rr/routing/webkit/mywebkit
 WEBKIT:          google-chrome
-EDITOR:          gedit
-SPREADSHEET:     gedit
-NMEA:            /dev/ttyACM0 13
-NMEA:            /dev/ttyUSB0 15
+SMTP_SERVER:     smtps://smtp.orange.fr
+SMTP_USER_NAME:  meteoinfoforrr@orange.fr
+IMAP_SERVER:     imap.orange.fr
+IMAP_USER_NAME:  rene.rigault@wanadoo.fr
+IMAP_MAIL_BOX:   inbox/meteoinfoforrr@orange.fr
+FORBID_ZONE:     43°21'00"N,009°36'24"W; 43°10'30"N,009°44'00"W; 42°52'48"N,009°44'00"W; 42°52'48"N,010°13'51"W; 43°18'57"N,010°13'51"W; 
+FORBID_ZONE:     17°45'00"N,025°21'00"W; 14°40'00"N,025°25'00"W; 14°32'00"N,022°50'00"W; 15°58'00"N,022°08'00"W; 17°42'00"N,022°40'00"W; 
+FORBID_ZONE:     40°54'00"N,028°34'00"W; 40°00'00"N,031°50'00"W; 37°35'00"N,031°51'24"W; 36°20'24"N,025°35'36"W; 36°37'36"N,024°13'00"W; 37°48'36"N,023°50'00"W; 
+FORBID_ZONE:     56°00'00"S,156°00'00"E; 56°00'00"S,170°30'00"E; 58°00'00"S,177°00'00"E; 58°30'00"S,177°00'00"E; 80°00'00"S,177°00'00"E; 80°00'00"S,156°00'00"E; 56°00'00"S,156°00'00"E; 
+FORBID_ZONE:     58°30'00"S,179°00'00"W; 55°00'00"S,145°00'00"W; 59°42'00"S,084°57'00"W; 59°17'00"S,074°35'00"W; 58°21'00"S,066°44'00"W; 80°00'00"S,066°44'00"W; 80°00'00"S,179°00'00"W; 
+FORBID_ZONE:     46°00'00"S,017°18'00"E; 48°00'00"S,035°00'00"E; 51°00'00"S,069°30'00"E; 49°00'00"S,096°00'00"E; 46°00'00"S,100°18'00"E; 46°00'00"S,115°45'00"E; 49°00'00"S,120°00'00"E; 50°00'00"S,150°00'00"E; 56°00'00"S,154°30'00"E; 80°00'00"S,154°30'00"E; 80°00'00"S,017°18'00"E; 
+FORBID_ZONE:     58°03'00"S,064°33'00"W; 54°06'00"S,054°53'00"W; 45°08'00"S,049°48'00"W; 43°54'00"S,044°39'00"W; 44°07'00"S,034°09'00"W; 80°00'00"S,034°09'00"W; 80°00'00"S,064°33'00"W; 
+FORBID_ZONE:     21°30'00"S,039°45'00"W; 21°56'00"S,039°14'00"W; 23°00'00"S,040°13'12"W; 23°34'39"S,041°00'54"W; 23°28'60"S,041°38'00"W; 
 MAIL_PW:         Mongouarou$001
