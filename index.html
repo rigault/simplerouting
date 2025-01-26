@@ -384,34 +384,36 @@ VRdashboard
 		<p>La production du fichier exécutable nécessite les fichiers
 		sources .c et .h suivants&nbsp;:</p>
 <pre>
-engine.c
-option.c
-rutil.c
-grib.c
-polar.c
 aisgps.c
-mailutil.c
-editor.c
 dashboardVR.c
+displaytext.c
+editor.c
+engine.c
+grib.c
+mailutil.c
+option.c
+polar.c
+rutil.c
 show4.c
 
-rtypes.h
-inline.h
-engine.h
-option.h
-rutil.h
-grib.h
-polar.h
 aisgps.h
-mailutil.h
-editor.h
 dashboardVR.h
+displaytext.h
+editor.h
+engine.h
+grib.h
+inline.h
+mailutil.h
+option.h
+polar.h
+rtypes.h
+rutil.h
 </pre>
 Ainsi que les fichiers&nbsp;:
 <pre>
 ccall4
-MakeFile
 docshow
+MakeFile
 </pre>
       <p> La commande de compilation et d’édition des liens est dans le
 		fichier shell exécutable&nbsp;:</p>
@@ -1665,42 +1667,22 @@ grib_get_data -L &quot;%.2lf %.2lf&quot; -F &quot;%.2lf&quot; -m -999999 -w shor
             <td>inline.h</td><td>Définition des petites fonctions inline incluses dans les fichiers .c</td>
          </tr>
          <tr>
-            <td>options.c</td><td>Gestion des options du mode CLI (command Line Interface).</td>
-         </tr>
-         <tr>
-            <td>engine.c</td><td>Cœur du programme avec calcul des isochrones.</td>
-         </tr>
-         <tr>
-            <td>engine.h</td><td>Interface de engine (prototypes des fonctions externes).</td>
-         </tr>
-         <tr>
             <td>aisgps.c</td><td>Gestion du GPS et de l'AIS.</td>
          </tr>
          <tr>
             <td>aisgps.h</td><td>Interface de aisgps (prototypes des fonctions externes).</td>
          </tr>
          <tr>
-            <td>rutil.c</td><td>Fonctions utiles non graphiques ne dépendant pas de GTK4.</td>
+            <td>dashboardVR.c</td><td>Utilitaires pour Virtual Regatta Dashboard</td>
          </tr>
          <tr>
-            <td>rutil.h</td><td>Interface de rutil (prototypes des fonctions externes).</td>
-         <tr>
-         <tr>
-            <td>grib.c</td><td>Lecture des fichiers Grib et utilitaires Grib.</td>
+            <td>dashboardVR.h</td><td>Interface de dashboardVR (prototypes des fonctions externes).</td>
          </tr>
          <tr>
-            <td>grib.h</td><td>Interface de grib (prototypes des fonctions externes).</td>
-         <tr>
-         <tr>
-            <td>polar.c</td><td>Lectures des fichiers polaires et utilitaires associés.</td>
+            <td>displaytext.c</td><td>Afficheur de texte et fichier (dump).</td>
          </tr>
          <tr>
-            <td>polar.h</td><td>Interface de polar (prototypes des fonctions externes).</td>
-         <tr>
-            <td>mailutil.c</td><td>Interface pour la gestion mail.</td>
-         </tr>
-         <tr>
-            <td>mailutil.h</td><td>Interface de mailutil (prototypes des fonctions externes).</td>
+            <td>displaytext.h</td><td>Interface de displaytext (prototypes des fonctions externes).</td>
          </tr>
          <tr>
             <td>editor.c</td><td>Petit éditeur de texte intégré.</td>
@@ -1709,11 +1691,40 @@ grib_get_data -L &quot;%.2lf %.2lf&quot; -F &quot;%.2lf&quot; -m -999999 -w shor
             <td>editor.h</td><td>Interface de editor (prototypes des fonctions externes).</td>
          </tr>
          <tr>
-            <td>dashboardVR.c</td><td>Utilitaires pour Virtual Regatta Dashboard</td>
+            <td>engine.c</td><td>Cœur du programme avec calcul des isochrones.</td>
          </tr>
          <tr>
-            <td>dashboardVR.h</td><td>Interface de dashboardVR (prototypes des fonctions externes).</td>
+            <td>engine.h</td><td>Interface de engine (prototypes des fonctions externes).</td>
          </tr>
+         <tr>
+            <td>grib.c</td><td>Lecture des fichiers Grib et utilitaires Grib.</td>
+         </tr>
+         <tr>
+            <td>grib.h</td><td>Interface de grib (prototypes des fonctions externes).</td>
+         <tr>
+         <tr>
+            <td>mailutil.c</td><td>Interface pour la gestion mail.</td>
+         </tr>
+         <tr>
+            <td>mailutil.h</td><td>Interface de mailutil (prototypes des fonctions externes).</td>
+         </tr>
+         <tr>
+            <td>option.c</td><td>Gestion des options du mode CLI (command Line Interface).</td>
+         </tr>
+         <tr>
+            <td>option.h</td><td>Interface de option (prototypes des fonctions externes).</td>
+         </tr>
+         <tr>
+            <td>rutil.c</td><td>Fonctions utiles non graphiques ne dépendant pas de GTK4.</td>
+         </tr>
+         <tr>
+            <td>rutil.h</td><td>Interface de rutil (prototypes des fonctions externes).</td>
+         <tr>
+         <tr>
+            <td>polar.c</td><td>Lectures des fichiers polaires et utilitaires associés.</td>
+         </tr>
+         <tr>
+            <td>polar.h</td><td>Interface de polar (prototypes des fonctions externes).</td>
          <tr>
             <td>show4.c</td><td>Le main et les interfaces graphiques s'appuyant sur GTK4.</td>
          </tr>
@@ -1735,10 +1746,9 @@ grib_get_data -L &quot;%.2lf %.2lf&quot; -F &quot;%.2lf&quot; -m -999999 -w shor
       <p>Les fonctions et <code>typedef</code> sont précédés de commentaires interprétables par Doxygen et précisant la nature du typedef ou de la fonction.</p>
       <code>/*! Description */</code>
 
-		<p>Les <code>#define</code> et les <code>const</code> sont en majuscule avec _ comme séparateur</p>
+		<p>Les <code>#define</code> sont en majuscules avec _ comme séparateur</p>
 <pre>		
 <code>#define MAX_N_ISOC 512</code>
-<code>const int X_TOP = 1;</code>
 </pre>
 
 		<p>Les noms des variables et fonction sont en minuscules, en utilidant la notation camel.</p>
@@ -1760,6 +1770,7 @@ myInt = 10;
 double myDouble = 10.5;
 double myOtherDouble = 10.0;
 myBool = false;
+const int xTop = 1;
 </code>
 </pre>
 
@@ -1772,7 +1783,7 @@ myBool = false;
 
       <p> gcc analyser est également utilisé.</p>
 
-		<p> Voir le fichier check.</p>
+		<p> Voir le fichier ccheck.</p>
 
 		<h2>18.4. Fenêtres et boites de dialogue</h2>
 
