@@ -351,7 +351,7 @@ bool initSHP (const char* nameFile) {
       return false;
    }
 
-   SHPGetInfo(hSHP, &nEntities, &nShapeType, minBound, maxBound);
+   SHPGetInfo (hSHP, &nEntities, &nShapeType, minBound, maxBound);
    printf ("Geo nEntities  : %d, nShapeType: %d\n", nEntities, nShapeType);
    printf ("Geo limits     : %.2lf, %.2lf, %.2lf, %.2lf\n", minBound[0], minBound[1], maxBound[0], maxBound[1]);
 
@@ -1078,6 +1078,7 @@ bool readParam (const char *fileName) {
    par.xWind = 1.0;
    par.maxWind = 50.0;
    par.stepIsocDisp = 1;
+   par.staminaVR = 100.0;
    wayPoints.n = 0;
    wayPoints.totOrthoDist = 0.0;
    wayPoints.totLoxoDist = 0.0;
@@ -1175,6 +1176,7 @@ bool readParam (const char *fileName) {
          g_strstrip (pLine);
          buildRootName (pLine, par.dashboardVR, sizeof (par.dashboardVR));
       }
+      else if (sscanf (pLine, "VR_STAMINA:%lf", &par.staminaVR) > 0);
       else if (sscanf (pLine, "VR_DASHB_UTC:%d", &par.dashboardUTC) > 0);
       else if (sscanf (pLine, "HELP:%255s", par.helpFileName) > 0); // full link required
       else if (sscanf (pLine, "CURL_SYS:%d", &par.curlSys) > 0);
@@ -1267,6 +1269,7 @@ bool readParam (const char *fileName) {
       par.pOr.lon = competitors.t [0].lon;
    }
    if (par.constWindTws != 0) initZone (&zone);
+   par.staminaVR = CLAMP (par.staminaVR, 0.0, 100.0);
    fclose (f);
    par.nSectors = MIN (par.nSectors, MAX_N_SECTORS);
    return true;
@@ -1328,6 +1331,7 @@ bool writeParam (const char *fileName, bool header, bool password) {
    fprintf (f, "HELP:            %s\n", par.helpFileName);
    fprintf (f, "CLI_HELP:        %s\n", par.cliHelpFileName);
    fprintf (f, "VR_DASHBOARD:    %s\n", par.dashboardVR);
+   fprintf (f, "VR_STAMINA:      %.2lf\n", par.staminaVR);
    fprintf (f, "VR_DASHB_UTC:    %d\n", par.dashboardUTC);
 
    for (int i = 0; i < par.nShpFiles; i++)

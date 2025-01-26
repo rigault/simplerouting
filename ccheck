@@ -14,3 +14,4 @@ gcc -fanalyzer -c mailutil.c `pkg-config --cflags gtk4`
 gcc -fanalyzer -c dashboardVR.c `pkg-config --cflags gtk4`
 gcc -fanalyzer -c show4.c `pkg-config --cflags gtk4`
 gcc -fanalyzer -c editor.c `pkg-config --cflags gtk4 gtksourceview-5`
+gcc -fanalyzer -c displaytext.c `pkg-config --cflags gtk4 gtksourceview-5`

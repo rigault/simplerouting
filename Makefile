@@ -1,5 +1,5 @@
-routing: show4.o option.o rutil.o grib.o polar.o engine.o aisgps.o mailutil.o editor.o dashboardVR.o
-	gcc show4.o option.o rutil.o grib.o polar.o engine.o aisgps.o mailutil.o editor.o dashboardVR.o -o routing -std=c11 -lcurl -lshp -leccodes -lm `pkg-config --cflags --libs gtk4 gtksourceview-5`
+routing: show4.o option.o rutil.o grib.o polar.o engine.o aisgps.o mailutil.o editor.o dashboardVR.o displaytext.o
+	gcc show4.o option.o rutil.o grib.o polar.o engine.o aisgps.o mailutil.o editor.o dashboardVR.o displaytext.o -o routing -std=c11 -lcurl -lshp -leccodes -lm `pkg-config --cflags --libs gtk4 gtksourceview-5`
 
 show4.o: show4.c rtypes.h option.h rutil.h grib.h polar.h engine.h aisgps.h mailutil.h editor.h dashboardVR.h
 	gcc -c show4.c `pkg-config --cflags gtk4`
@@ -29,7 +29,10 @@ editor.o: editor.c
 	gcc -c editor.c `pkg-config --cflags gtk4 gtksourceview-5`
 
 dashboardVR.o: dashboardVR.c rtypes.h rutil.h
-	gcc -c dashboardVR.c `pkg-config --cflags glib-2.0`
+	gcc -c dashboardVR.c `pkg-config --cflags gtk4`
+
+displaytext.o: displaytext.c rtypes.h
+	gcc -c displaytext.c `pkg-config --cflags gtk4`
 
 clean:
 	rm -f *.o

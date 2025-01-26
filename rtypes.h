@@ -3,6 +3,10 @@
 . Type definitions with typedef
 */
 
+#define STAMINA_SHIP 0                        // Virtual Regatta shop index
+#define STAMINA_SAIL 2                        // Virtual Regatta index for sail change
+#define STAMINA_TACK 0                        // Virtual Regatta intex for tack or Gybe
+#define STAMINA_FULL_PACK 1                   // Virtual regatta full pack 
 #define N_METEO_CONSULT_WIND_URL    6
 #define N_METEO_CONSULT_CURRENT_URL 6
 #define METEO_CONSULT_WIND_DELAY    5  // nb hours after time run to get new grib
@@ -292,6 +296,7 @@ typedef struct {
 
 /*! Point for Sail Route  */
 typedef struct {
+   double stamina; // for virtual Regatta stamina managemnt
    double lat;
    double lon;
    int    id;
@@ -347,7 +352,7 @@ typedef struct {
    long   dataDate;                         // save Grib date
    long   dataTime;                         // save Grib time
    int    nIsoc;                            // number of Isochrones
-   double isocTimeStep;                     // isoc time step for this route
+   double isocTimeStep;                     // isoc time step for this route in hours
    int    n;                                // number of steps
    double calculationTime;                  // compute time to calculate the route
    double lastStepDuration;                 // in hours
@@ -368,9 +373,9 @@ typedef struct {
    double maxWave;                          // max wave of the route
    double maxSog;                           // max Speed Over Ground
    int    competitorIndex;                  // index of competitor. See CompetitorsList.
-   int    nSailChange;
-   SailPoint *t;                            // array of points (maxNIsoc + 1)
-   //SailPoint t [MAX_N_ISOC + 1];            // idem STATIC
+   int    nSailChange;                      // stat: number of sail chage
+   int    nAmureChange;                     // stat: number of amure change
+   SailPoint *t;                            // array of points (maxNIsoc + 0), dynamic allocation
 } SailRoute;
 
 /*! History Route description  */
@@ -421,6 +426,7 @@ typedef struct {
    char tidesFileName [MAX_SIZE_FILE_NAME];  // list of ports witht lat, lon fo tides
    char logFileName [MAX_SIZE_FILE_NAME];    // log the runs
    char dashboardVR [MAX_SIZE_FILE_NAME];    // Virtual Regatta dashboard thanks to plugin 
+   double staminaVR;                         // Init stamina
    int nShpFiles;                            // number of Shp files
    double startTimeInHours;                  // time of beginning of routing after time0Grib
    Pp pOr;                                   // point of origine

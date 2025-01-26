@@ -55,7 +55,7 @@ static double fPenalty (int shipIndex, int type, double tws, double energy, doub
 }
 
 /*! return point loss with manoeuvre types. Depends on tws and fullPack */
-static double fPointLoss (int shipIndex, int type, double tws, bool fullPack) {
+double fPointLoss (int shipIndex, int type, double tws, bool fullPack) {
    const double fPCoeff = (type == 2 && fullPack) ? 0.8 : 1;
    double loss = (type == 2) ? 0.2 : 0.1;
    double cShip = shipParam [shipIndex].cShip;
@@ -67,7 +67,7 @@ static double fPointLoss (int shipIndex, int type, double tws, bool fullPack) {
 }
 
 /*! return type in second to get bacl on energy point */
-static double fTimeToRecupOnePoint (double tws) {
+double fTimeToRecupOnePoint (double tws) {
    const double timeToRecupLow = 5;   // minutes
    const double timeToRecupHigh = 15; // minutes
    double fTws = 1.0 - cos (G_PI * (fmin (tws, 30.0)/30.0));
@@ -124,7 +124,7 @@ static void onTwsValueChanged (GtkScale *scale, gpointer data) {
 /*! Callback Energy change */
 static void onEnergyValueChanged (GtkScale *scale, gpointer data) {
    GtkWidget *label = GTK_WIDGET (data);
-   shipData.energy = round (gtk_range_get_value (GTK_RANGE (scale)));
+   par.staminaVR = shipData.energy = round (gtk_range_get_value (GTK_RANGE (scale)));
    char *strInfo = g_strdup_printf ("%02.0lf ", shipData.energy);
    gtk_label_set_text (GTK_LABEL(label), strInfo);
    calculation ();
@@ -179,6 +179,8 @@ void staminaCalculator (GtkApplication *application) {
    gtk_widget_set_halign (label, GTK_ALIGN_START);
    gtk_grid_attach (GTK_GRID (grid), label, 0, 2, 1, 1);
    GtkWidget *energyScale = gtk_scale_new_with_range (GTK_ORIENTATION_HORIZONTAL, 0, MAX_ENERGY_STAMINA, 1);
+   gtk_range_set_value (GTK_RANGE(energyScale), par.staminaVR);
+   gtk_scale_set_value_pos (GTK_SCALE(energyScale), GTK_POS_TOP);
    gtk_widget_set_size_request (energyScale, 150, -1);  // Adjust GtkScale size
    gtk_grid_attach (GTK_GRID(grid), energyScale, 1, 2, 2, 1);
    GtkWidget *energyInfo = gtk_label_new ("");

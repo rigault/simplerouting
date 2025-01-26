@@ -44,6 +44,7 @@
 #include "mailutil.h"
 #include "editor.h"
 #include "dashboardVR.h"
+#include "displaytext.h"
 
 #ifdef _WIN32
 static const bool windowsOS = true;
@@ -196,11 +197,6 @@ static GThread *gloThread;                         // global var for threads
 static GMutex warningMutex;                        // mutex for warnin message
 static char   statusbarWarningStr [MAX_SIZE_TEXT]; // global var to store warning string
 static struct tm startInfo =  {0};                 // start date
-
-static struct {
-   char firstLine [MAX_SIZE_LINE];                 // first line for displayText
-   char *gloBuffer;                                // for filtering in displayText ()
-} dispTextDesc;
 
 /*! struct for animation */
 static struct {
@@ -549,214 +545,6 @@ static void openMap (GSimpleAction *action, GVariant *parameter, gpointer *data)
    else
       snprintf (command, MAX_SIZE_LINE, "%s %s?lat=%.4lf\\&lon=%.4lf\\&zoom=%.2lf", par.webkit, OSM_URL[comportement], lat, lon, zoom);
    g_thread_new ("openMap", commandRun, command);
-}
-
-/*! Filter function for displayText. Return buffer with filtered text and number of lines (-1 if problem) */
-static int filterText (GtkTextBuffer *buffer, const char *filter) {
-   GtkTextIter start, end;
-   char **lines = NULL;
-   GRegex *regex = NULL;
-   GError *error = NULL;
-   int count = 0;
-
-   // Compile the regular expression if a filter is provided
-   if (filter != NULL) {
-      regex = g_regex_new (filter, G_REGEX_CASELESS, 0, &error);
-      if (error != NULL) {
-         fprintf (stderr, "In filterText: Error compiling regex: %s\n", error->message);
-         g_clear_error (&error);
-         return -1;
-      }
-   }
-
-   // Clear the buffer
-   gtk_text_buffer_get_start_iter (buffer, &start);
-   gtk_text_buffer_get_end_iter (buffer, &end);
-   gtk_text_buffer_set_text (buffer, "", -1);
-
-   // Split the input text
-   lines = g_strsplit (dispTextDesc.gloBuffer, "\n", -1);
-   if (lines == NULL) {
-      fprintf (stderr, "In filterText: g_strsplit failed\n");
-      if (regex != NULL) {
-         g_regex_unref (regex);
-      }
-      return -1;
-   }
-
-   // Process each line
-   for (int i = 0; lines [i] != NULL; i++) {
-      if ((!isEmpty (lines [i])) && ((filter == NULL) || g_regex_match (regex, lines[i], 0, NULL))) {
-         gtk_text_buffer_insert_at_cursor (buffer, lines[i], -1);
-         gtk_text_buffer_insert_at_cursor (buffer, "\n", -1);
-         count++;
-      }
-   }
-
-   // Free resources
-   if (regex != NULL) {
-      g_regex_unref (regex);
-   }
-   g_strfreev (lines);
-
-   return count;
-}
-
-/*! for displayText filtering */
-static void onFilterEntryChanged (GtkEditable *editable, gpointer userData) {
-   GtkTextBuffer *buffer = (GtkTextBuffer *) userData;
-   if (editable == NULL)
-      filterText (buffer, NULL);
-   else {
-      const char *filter = gtk_editable_get_text (editable);
-      filterText (buffer, filter);
-   }
-}
-
-/*! for first line decorated */
-static GtkWidget *createDecoratedLabel (const char *text) {
-   GtkWidget *label = gtk_label_new (NULL);
-   char *markup = g_markup_printf_escaped (\
-      "<span foreground='red' font_family='monospace'><b>%s</b></span>", text);
-
-   gtk_label_set_markup (GTK_LABEL(label), markup);
-   gtk_label_set_xalign (GTK_LABEL(label), 0.0);     // Align to the left
-   gtk_widget_set_halign (label, GTK_ALIGN_FILL);    // Ensure the label fills the available horizontal space
-   gtk_widget_set_hexpand (label, TRUE);             // Allow the label to expand horizontally
-   g_free (markup);
-   return label;
-}
-
-/* first line of text and return pos of second line */
-static char *extractFirstLine (const char *text, char* strFirstLine, size_t maxLen) {
-   const char *firstLineEnd = strchr (text, '\n');
-
-   if (firstLineEnd == NULL) {             // no newline. First line is empty
-      strFirstLine [0] = '\0';             // Null-terminate the string
-      return NULL;
-   }
-   size_t length = (size_t) (firstLineEnd - text);         // length of first line
-   if (length >= maxLen) length = maxLen - 1;              // make sure no overflow
-   g_strlcpy (strFirstLine, text, length + 1);
-   return (char *) (firstLineEnd + 1);
-}
-
-/*! Callback semicolon replace  */
-static void onCheckBoxSemiColonToggled (GtkWidget *checkbox, gpointer userData) {
-   GtkTextBuffer *buffer = (GtkTextBuffer *) userData;
-   char *strBuffer = g_strdup (dispTextDesc.gloBuffer);
-
-   if (! gtk_check_button_get_active ((GtkCheckButton *) checkbox))
-      g_strdelimit (strBuffer, ";", ' ');
-   gtk_text_buffer_set_text (buffer, strBuffer, -1);
-   g_free (strBuffer);
-}
-
-/*! paste button for displayText */
-static void onPasteButtonClicked (GtkButton *button, gpointer userData) {
-   const char *strBuffer = (const char *) userData;
-   char *strClipBoard = g_strdup_printf ("%s\n%s", dispTextDesc.firstLine, strBuffer);
-
-   GdkDisplay *display = gdk_display_get_default();
-   GdkClipboard *clipboard = gdk_display_get_clipboard(display);
-   gdk_clipboard_set_text(clipboard, strClipBoard);
-   g_free (strClipBoard);
-}
-
-/*! display text with monospace police and filtering function using regular expression 
-   first line is decorated */
-static void displayText (guint width, guint height, const char *text, size_t maxLen, const char *title, const char *statusStr) {
-   char *ptSecondLine = extractFirstLine (text, dispTextDesc.firstLine, sizeof (dispTextDesc.firstLine));
-   if (ptSecondLine == NULL) {
-      fprintf (stderr, "In displayText: no first line\n");
-      return;
-   }
-   char *tempBuffer = realloc (dispTextDesc.gloBuffer, maxLen);
-   if (tempBuffer == NULL) {
-    fprintf (stderr, "In displayText: realloc failed\n");
-    return;
-   }
-   dispTextDesc.gloBuffer = tempBuffer;
-
-   g_strlcpy (dispTextDesc.gloBuffer, ptSecondLine, maxLen);
-   
-   GtkWidget *textWindow = gtk_application_window_new (app);
-   gtk_window_set_title (GTK_WINDOW (textWindow), title);
-   gtk_window_set_default_size (GTK_WINDOW (textWindow), width, height);
-
-   g_signal_connect (window, "destroy", G_CALLBACK(onParentDestroy), textWindow);
-   
-   GtkWidget *vBox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 5);
-   gtk_window_set_child (GTK_WINDOW (textWindow), vBox);
-
-   GtkWidget *hBox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 5);
-   GtkWidget *filterLabel = gtk_label_new ("Filter: ");
-   GtkEntryBuffer *filterBuffer = gtk_entry_buffer_new ("", -1);
-   GtkWidget *filterEntry = gtk_entry_new_with_buffer (filterBuffer);
-
-   // button copy
-   GtkWidget *copyButton = gtk_button_new_from_icon_name ("edit-copy");
-   g_signal_connect (copyButton, "clicked", G_CALLBACK (onPasteButtonClicked), (gpointer) dispTextDesc.gloBuffer);
-   
-   GtkWidget *firstLine = createDecoratedLabel (dispTextDesc.firstLine);
-
-   GtkWidget *scrolled_window = gtk_scrolled_window_new ();
-   gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolled_window), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
-   gtk_widget_set_hexpand (scrolled_window, TRUE);
-   gtk_widget_set_vexpand (scrolled_window, TRUE);
-   
-   GtkWidget *textView = gtk_text_view_new();
-   gtk_text_view_set_monospace (GTK_TEXT_VIEW(textView), TRUE);
-   
-   // read only text
-   gtk_text_view_set_editable (GTK_TEXT_VIEW(textView), FALSE);
-   gtk_text_view_set_cursor_visible (GTK_TEXT_VIEW (textView), FALSE);
-   gtk_text_view_set_wrap_mode (GTK_TEXT_VIEW (textView), GTK_WRAP_WORD_CHAR);
-   gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scrolled_window), textView);
-
-   GtkTextBuffer *buffer = gtk_text_view_get_buffer (GTK_TEXT_VIEW(textView));
-   // gtk_text_buffer_insert_at_cursor (buffer, ptSecondLine, -1);
-   gtk_text_buffer_set_text (buffer, ptSecondLine, -1);
-
-   //checkbox: "replace ;"
-   GtkWidget *checkboxSemiColonRep = gtk_check_button_new_with_label ("SemiColon visible");
-   gtk_check_button_set_active ((GtkCheckButton *) checkboxSemiColonRep, 1);
-   
-   g_signal_connect(G_OBJECT(checkboxSemiColonRep), "toggled", G_CALLBACK (onCheckBoxSemiColonToggled), buffer);
-
-   // status bar at the bottom
-   GtkWidget *statusbarText = gtk_label_new (statusStr);
-   gtk_label_set_xalign(GTK_LABEL (statusbar), 0);      // left justified
-   
-   gtk_box_append (GTK_BOX (hBox), filterLabel);
-   gtk_box_append (GTK_BOX (hBox), filterEntry);
-   gtk_box_append (GTK_BOX (hBox), checkboxSemiColonRep);
-   gtk_box_append (GTK_BOX (hBox), copyButton);
-
-   gtk_box_append (GTK_BOX (vBox), hBox);
-   gtk_box_append (GTK_BOX (vBox), firstLine);
-   gtk_box_append (GTK_BOX (vBox), scrolled_window);
-   gtk_box_append (GTK_BOX (vBox), statusbarText);
-
-   onFilterEntryChanged (NULL, buffer);   
-   g_signal_connect (filterEntry, "changed", G_CALLBACK (onFilterEntryChanged), buffer);
-
-   gtk_window_present (GTK_WINDOW (textWindow));
-}
-
-/*! display file using dispLay text */
-static void displayFile (const char *fileName, const char *title) {
-   GError *error = NULL;
-   char *content = NULL;
-   gsize length;
-   if (g_file_get_contents (fileName, &content, &length, &error)) {
-      displayText (1800, 400, content, length, title, fileName);
-      g_free (content);
-   }
-   else {
-      fprintf (stderr, "In displayFile reading: %s, %s\n", fileName, error->message); 
-      g_clear_error(&error);
-   }
 }
 
 /*! set display lonLeft, lonRight according to displayed antemeridian */
@@ -1305,16 +1093,16 @@ static void circle (cairo_t *cr, double lon, double lat, double red, double gree
 
 /*! draw the boat or cat or ... */
 static void showUnicode (cairo_t *cr, const char *unicode, double x, double y) {
-   PangoLayout *layout = pango_cairo_create_layout(cr);
+   PangoLayout *layout = pango_cairo_create_layout (cr);
    PangoFontDescription *desc = pango_font_description_from_string ("DejaVuSans 16");
-   pango_layout_set_font_description(layout, desc);
-   pango_font_description_free(desc);
+   pango_layout_set_font_description (layout, desc);
+   pango_font_description_free (desc);
 
-   pango_layout_set_text(layout, unicode, -1);
+   pango_layout_set_text (layout, unicode, -1);
 
    cairo_move_to (cr, x, y);
-   pango_cairo_show_layout(cr, layout);
-   g_object_unref(layout);
+   pango_cairo_show_layout (cr, layout);
+   g_object_unref (layout);
 }
 
 /*! draw all isochrones stored in isocArray as points */
@@ -1444,9 +1232,7 @@ static int findIndexInRoute (SailRoute *route, double t) {
    for (i = 0; i < route->n; i++) {
       if (route->t[i].time > t) break;
    }
-   if ((t - route->t[i-1].time) < (route->t[i].time - t))
-      return i - 1;
-   else return i;
+   return ((t - route->t[i-1].time) < (route->t[i].time - t)) ? i - 1 : i;
 }
 
 /*! find index in route just before now  
@@ -1532,11 +1318,11 @@ static void focusOnPointInRoute (cairo_t *cr, SailRoute *route)  {
 /* set color of route according to motor and amure */
 static inline void routeColor (cairo_t *cr, bool motor, int amure) {
    if (motor) 
-      CAIRO_SET_SOURCE_RGB_RED(cr);
+      CAIRO_SET_SOURCE_RGB_RED (cr);
    else {
       if (amure == BABORD) 
-         CAIRO_SET_SOURCE_RGB_BLACK(cr);
-      else CAIRO_SET_SOURCE_RGB_GRAY(cr);
+         CAIRO_SET_SOURCE_RGB_BLACK (cr);
+      else CAIRO_SET_SOURCE_RGB_GRAY (cr);
    }
 } 
 
@@ -2582,6 +2368,7 @@ static void onScaleValueChanged (GtkScale *scale, gpointer userData){
 static void onPolarLeftClickEvent (GtkGestureClick *gesture, int n_press, double x, double y, gpointer userData) {
    PolMat *ptMat = (polarType == WAVE_POLAR) ? &wavePolMat : &polMat; 
    double twa = round (RAD_TO_DEG * atan2 (x - polarCenterX, polarCenterY - y));
+   char *str;
    //printf ("tws: %.2lf, angle: %.2lf \n", selectedTws, twa); 
    GtkWidget *polarPopupWindow = gtk_popover_new ();
    gtk_widget_set_parent (polarPopupWindow, polarDrawingArea);
@@ -2591,9 +2378,13 @@ static void onPolarLeftClickEvent (GtkGestureClick *gesture, int n_press, double
    gtk_popover_set_has_arrow ((GtkPopover*) polarPopupWindow, FALSE);
    gtk_popover_set_pointing_to ((GtkPopover*) polarPopupWindow, &rect);
 
-   double speed = findPolar (twa, selectedTws, *ptMat);
+   double val = findPolar (twa, selectedTws, *ptMat);
 
-   char *str = g_strdup_printf ("TWS: %.2lf Kn\nTWA: %.2lf°\nSpeed: %.2lf Kn", selectedTws, twa, speed);
+   if (polarType == WAVE_POLAR)
+      str = g_strdup_printf ("TWS: %.2lf Kn\nTWA: %.2lf°\nAjust: %.2lf%%", selectedTws, twa, val);
+   else 
+      str = g_strdup_printf ("TWS: %.2lf Kn\nTWA: %.2lf°\nSpeed: %.2lf Kn", selectedTws, twa, val);
+
    GtkWidget *label = gtk_label_new (str);
    gtk_popover_set_child ((GtkPopover*) polarPopupWindow, label);
    g_free (str);
@@ -2641,9 +2432,11 @@ static void polarDraw () {
    GtkWidget *filter_combo = create_filter_combo (polarType);
   
    GtkWidget *dumpButton = gtk_button_new_from_icon_name ("x-office-spreadsheet-symbolic");
+   gtk_widget_set_tooltip_text (dumpButton, "Dump");
    g_signal_connect (G_OBJECT (dumpButton), "clicked", G_CALLBACK (polarDump), NULL);
    
    GtkWidget *editButton = gtk_button_new_from_icon_name ("document-edit-symbolic");
+   gtk_widget_set_tooltip_text (editButton, "Edit");
    g_signal_connect (G_OBJECT (editButton), "clicked", G_CALLBACK (onEditButtonPolarClicked), NULL);
    
    // radio button for bezier or segment choice
@@ -2663,6 +2456,7 @@ static void polarDraw () {
       fprintf (stderr, "In polarDrow, Strange maxScale: %d\n", maxScale);
    }
    GtkWidget *scale = gtk_scale_new_with_range (GTK_ORIENTATION_HORIZONTAL, 0, MAX (1, maxScale), 1);
+   gtk_widget_set_tooltip_text (scale, "Select TWS value");
    gtk_scale_set_value_pos(GTK_SCALE(scale), GTK_POS_TOP);
    gtk_range_set_value(GTK_RANGE(scale), selectedTws);
    gtk_widget_set_size_request (scale, 300, -1);  // Adjust GtkScale size
@@ -3474,7 +3268,7 @@ static void isocDump () {
    }
    allIsocToStr (buffer, length); 
    snprintf (footer, sizeof (footer), "Number of isochrones: %d", nIsoc); 
-   displayText (750, 400, buffer, strlen (buffer), "Isochrones", footer);
+   displayText (app, 750, 400, buffer, strlen (buffer), "Isochrones", footer);
    free (buffer);
 }
 
@@ -3493,7 +3287,7 @@ static void isocDescDump () {
    }
    if (isoDescToStr (buffer, length)) {
       snprintf (footer, sizeof (footer), "Number of isochrones: %d", nIsoc); 
-      displayText (750, 400, buffer, strlen (buffer), "Isochrone Descriptor", footer);
+      displayText (app, 750, 400, buffer, strlen (buffer), "Isochrone Descriptor", footer);
    }
    else infoMessage ("Not enough space", GTK_MESSAGE_ERROR);
    free (buffer);
@@ -3612,7 +3406,7 @@ static void traceDump () {
    char str [MAX_SIZE_FILE_NAME];
    char title [MAX_SIZE_LINE];
    snprintf (title, MAX_SIZE_LINE, "Trace Info: %s", par.traceFileName);
-   displayFile (buildRootName (par.traceFileName, str, sizeof (str)), title);
+   displayFile (app, buildRootName (par.traceFileName, str, sizeof (str)), title);
 }
 
 /* call back for openScenario */
@@ -3648,7 +3442,7 @@ static void poiDump () {
    }
    count = poiToStr (true, buffer, MAX_SIZE_BUFFER);
    snprintf (footer, sizeof (footer), "Number of Points Of Interest: %d,    Number of visible: %d", nPoi, count);
-   displayText (800, 600, buffer, strlen (buffer), "POI Finder", footer);
+   displayText (app, 800, 600, buffer, strlen (buffer), "POI Finder", footer);
    free (buffer);
 }
 
@@ -3667,7 +3461,7 @@ static void polygonDump () {
    }
    polygonToStr (buffer, MAX_SIZE_BUFFER);
    snprintf (footer, sizeof (footer), "Number of Polygons: %d", par.nForbidZone);
-   displayText (800, 600, buffer, strlen (buffer), "Polygons", footer);
+   displayText (app, 800, 600, buffer, strlen (buffer), "Polygons", footer);
    free (buffer);
 }
 
@@ -3696,7 +3490,7 @@ static void competitorsDump () {
    competitorsToStr (copy, buffer, MAX_SIZE_BUFFER);
    snprintf (footer, sizeof (footer), "Number of Competitors: %d", competitors.n);
    logReport (competitors.n);
-   displayText (1400, 400, buffer, strlen (buffer), "Competitors Dashboard", footer);
+   displayText (app, 1400, 400, buffer, strlen (buffer), "Competitors Dashboard", footer);
    free (buffer);
 }
 
@@ -3718,12 +3512,12 @@ static void historyRteDump (gpointer userData) {
    routeToStr (&historyRoute.r[k], buffer, MAX_SIZE_BUFFER, footer, sizeof (footer)); 
    int cIndex = MAX (0, historyRoute.r[k].competitorIndex);
    snprintf (title, MAX_SIZE_LINE, "History: %2d %s", k, competitors.t [cIndex].name);
-   displayText (1400, 400, buffer, strlen (buffer), title, footer);
+   displayText (app, 1600, 600, buffer, strlen (buffer), title, footer);
    free (buffer);
 }
 
 /*! display history of routes */
-static void rteHistory () {
+static void routeHistory () {
    char str [MAX_SIZE_LINE];
    GtkWidget *itemHist; 
    GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 5);
@@ -3753,7 +3547,7 @@ static void rteHistory () {
 }
 
 /*! display the report of route calculation */
-static void rteReport () {
+static void routeReport () {
    if (route.n <= 0)
       infoMessage ("No route calculated", GTK_MESSAGE_WARNING);
    else {
@@ -3873,7 +3667,7 @@ static void simulationReport () {
 static void onRoutegramEvent (GtkDrawingArea *area, cairo_t *cr, \
    int width, int height, gpointer userData) {
 
-#define MAX_VAL_ROUTE 3
+#define MAX_VAL_ROUTE 4
    int x, y;
    char str [MAX_SIZE_LINE], strDate [MAX_SIZE_LINE];
    const int legendXLeft = width - 80;
@@ -3899,8 +3693,8 @@ static void onRoutegramEvent (GtkDrawingArea *area, cairo_t *cr, \
    cairo_set_line_width (cr, 1);
    cairo_set_font_size (cr, 12);
 
-   const char *libelle [MAX_VAL_ROUTE] = {"Wind", "Gust", "Waves"}; 
-   double colors [MAX_VAL_ROUTE] [3] = {{0, 0, 1}, {1, 0, 0}, {0, 1, 0}}; // blue red green
+   const char *libelle [MAX_VAL_ROUTE] = {"Wind", "Gust", "Waves", "Staminai"}; 
+   double colors [MAX_VAL_ROUTE] [3] = {{0, 0, 1}, {1, 0, 0}, {0, 1, 0}, {1.0, 165.0/255.0, 0.0}}; // blue red green orange
    drawLegend (cr, legendXLeft, legendYTop, colors, libelle, MAX_VAL_ROUTE);
 
    // Draw horizontal line with arrow
@@ -4115,6 +3909,19 @@ static void onRoutegramEvent (GtkDrawingArea *area, cairo_t *cr, \
          cairo_show_text (cr, sailName [sail % MAX_N_SAIL]);
       }
    }
+   //draw stamina
+   if ((sailPolMat.nCol != 0) && (sailPolMat.nLine != 0)) { //stamina information exist 
+      CAIRO_SET_SOURCE_RGB_ORANGE (cr);
+      for (int i = 0; i < route.n; i ++) {
+         x = xLeft + xk * i * par.tStep;
+         y = yBottom - yk * ((int) route.t[i].stamina) / 10;
+         if (i == 0) cairo_move_to (cr, x, y);
+         else cairo_line_to (cr, x, y);
+      }
+      if (route.destinationReached) 
+         cairo_line_to (cr, lastX, yBottom - yk * lastW);
+      cairo_stroke(cr);
+   }
 }
 
 /*! represent routegram */
@@ -4156,7 +3963,7 @@ static void routeDump () {
    routeToStr (&route, buffer, MAX_SIZE_BUFFER, footer, sizeof (footer)); 
    snprintf (line, sizeof (line), "%s %s", (route.destinationReached) ? "Destination reached" :\
       "Destination unreached. Route to best point", competitors.t [competitors.runIndex].name);
-   displayText (1400, 400, buffer, strlen (buffer), line, footer);
+   displayText (app, 1600, 600, buffer, strlen (buffer), line, footer);
    free (buffer);
 }
 
@@ -4164,7 +3971,7 @@ static void routeDump () {
 static void parDump () {
    char str [MAX_SIZE_FILE_NAME];
    writeParam (buildRootName (TEMP_FILE_NAME, str, sizeof (str)), true, false);
-   displayFile (str, "Parameters dump");  // content of parameters
+   displayFile (app, str, "Parameters dump");  // content of parameters
 }
 
 /* call back after poi edit */
@@ -4574,7 +4381,7 @@ static void aisDump () {
    }
    int count = aisToStr (buffer, MAX_SIZE_BUFFER);
    snprintf (footer, sizeof (footer), "Number of AIS points: %d", count);
-   displayText (-1, 600, buffer, strlen (buffer), "AIS Finder", footer);
+   displayText (app, -1, 600, buffer, strlen (buffer), "AIS Finder", footer);
    free (buffer);
 }
 
@@ -4632,7 +4439,7 @@ static void helpParam () {
    char title [MAX_SIZE_LINE];
    char str [MAX_SIZE_FILE_NAME];
    snprintf (title, MAX_SIZE_LINE, "Parameter Info: %s", par.parInfoFileName);
-   displayFile (buildRootName (par.parInfoFileName, str, sizeof (str)), title); // info help about parameters
+   displayFile (app, buildRootName (par.parInfoFileName, str, sizeof (str)), title); // info help about parameters
 }
 
 /*! launch help HTML file */
@@ -5765,7 +5572,7 @@ static void checkGribDump () {
    }
    checkGribToStr (buffer, MAX_SIZE_BUFFER);
    if (buffer [0] != '\0') {
-      displayText (750, 400, buffer, strlen (buffer), "Grib Wind and Current Consistency", "Consistency");
+      displayText (app, 750, 400, buffer, strlen (buffer), "Grib Wind and Current Consistency", "Consistency");
    }
    else
       infoMessage ("All is correct", GTK_MESSAGE_INFO);
@@ -5841,7 +5648,7 @@ static void virtualRegDashboardImport () {
    par.pOr.lon = competitors.t [0].lon;
    competitors.runIndex = 0;
    
-   displayText (1800, 500, buffer, strlen (buffer), title, footer);
+   displayText (app, 1800, 500, buffer, strlen (buffer), title, footer);
    free (buffer);
 }
 
@@ -6452,6 +6259,7 @@ static void change () {
    gtk_label_set_xalign(GTK_LABEL(labelNumber), 0.0);
    
    GtkWidget *levelVisible = gtk_scale_new_with_range (GTK_ORIENTATION_HORIZONTAL, 1, MAX_LEVEL_POI_VISIBLE, 1);
+   gtk_widget_set_tooltip_text (levelVisible, "Select Visibility level");
    gtk_range_set_value (GTK_RANGE(levelVisible), par.maxPoiVisible);
    gtk_scale_set_value_pos (GTK_SCALE(levelVisible), GTK_POS_TOP);
    gtk_widget_set_size_request (levelVisible, 200, -1);  // Ajuster la largeur du GtkScale
@@ -6467,6 +6275,7 @@ static void change () {
    gtk_label_set_xalign (GTK_LABEL(labelSpeedDisplay), 0.0);
    
    GtkWidget *levelSpeedDisplay = gtk_scale_new_with_range (GTK_ORIENTATION_HORIZONTAL, 0, MAX_N_ANIMATION - 1, 1);
+   gtk_widget_set_tooltip_text (levelSpeedDisplay, "Select Speed");
    gtk_range_set_value (GTK_RANGE(levelSpeedDisplay), par.speedDisp);
    gtk_scale_set_value_pos (GTK_SCALE(levelSpeedDisplay), GTK_POS_TOP);
    gtk_widget_set_size_request (levelSpeedDisplay, 200, -1);  // Ajuster la largeur du GtkScale
@@ -7323,13 +7132,14 @@ static void cliActivated (GSimpleAction *action, GVariant *parameter, GApplicati
    char str [MAX_SIZE_FILE_NAME];
    char title [MAX_SIZE_LINE];
    snprintf (title, MAX_SIZE_LINE, "Parameter Info: %s", par.cliHelpFileName);
-   displayFile (buildRootName (par.cliHelpFileName, str, sizeof (str)), title);
+   displayFile (app, buildRootName (par.cliHelpFileName, str, sizeof (str)), title);
 }
 
-/*! create a button within toolBox, with an icon and a callback function */
-static void createButton (GtkWidget *toolBox, const char *iconName, void *callBack) { 
+/*! create a button within toolBox, with an icon, tool tip description and a callback function */
+static void createButton (GtkWidget *toolBox, const char *iconName, const char *description, void *callBack) { 
    GtkWidget *button = gtk_button_new_from_icon_name (iconName);
    g_signal_connect (button, "clicked", G_CALLBACK (callBack), NULL);
+   gtk_widget_set_tooltip_text (button, description);
    gtk_box_append (GTK_BOX (toolBox), button);
 }
 
@@ -7391,19 +7201,19 @@ static void appActivate (GApplication *application) {
 
    GtkWidget *toolBox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 5);
 
-   createButton (toolBox, "system-run", onRunButtonClicked);
-   createButton (toolBox, "starred", onChooseDepartureButtonClicked);
-   createButton (toolBox, "preferences-system", change);
-   createButton (toolBox, "zoom-in", onZoomInButtonClicked);
-   createButton (toolBox, "zoom-out", onZoomOutButtonClicked);
-   createButton (toolBox, "zoom-original", onZoomOriginalButtonClicked);
-   createButton (toolBox, "pan-start-symbolic", onLeftButtonClicked);
-   createButton (toolBox, "pan-up-symbolic", onUpButtonClicked);
-   createButton (toolBox, "pan-down-symbolic", onDownButtonClicked);
-   createButton (toolBox, "pan-end-symbolic", onRightButtonClicked);
-   createButton (toolBox, "find-location-symbolic", onCenterMap);
-   createButton (toolBox, "edit-select-all", paletteDraw);
-   createButton (toolBox, "applications-engineering-symbolic", testSelection);
+   createButton (toolBox, "system-run", "Launch Routing", onRunButtonClicked);
+   createButton (toolBox, "starred", "Choose Best Departure Time", onChooseDepartureButtonClicked);
+   createButton (toolBox, "preferences-system", "Change Parameters", change);
+   createButton (toolBox, "zoom-in", "Zoom In", onZoomInButtonClicked);
+   createButton (toolBox, "zoom-out", "Zoom Out", onZoomOutButtonClicked);
+   createButton (toolBox, "zoom-original", "Zoom Original", onZoomOriginalButtonClicked);
+   createButton (toolBox, "pan-start-symbolic", "Left", onLeftButtonClicked);
+   createButton (toolBox, "pan-up-symbolic", "Up", onUpButtonClicked);
+   createButton (toolBox, "pan-down-symbolic", "Down", onDownButtonClicked);
+   createButton (toolBox, "pan-end-symbolic", "End", onRightButtonClicked);
+   createButton (toolBox, "find-location-symbolic", "Center", onCenterMap);
+   createButton (toolBox, "edit-select-all", "Palette", paletteDraw);
+   createButton (toolBox, "applications-engineering-symbolic", "Test Tools", testSelection);
    
    GtkWidget *gpsInfo = gtk_label_new (" GPS Info coming...");
    gtk_box_append (GTK_BOX (toolBox), gpsInfo);
@@ -7421,15 +7231,16 @@ static void appActivate (GApplication *application) {
 
    // Create controlTimebar (Global Variable)
    GtkWidget *controlTimeBar = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 5);
-   createButton (controlTimeBar, "media-playback-pause", onStopButtonClicked);
-   createButton (controlTimeBar, "media-playback-start", onPlayButtonClicked);
-   createButton (controlTimeBar, "media-playlist-repeat", onLoopButtonClicked);
-   createButton (controlTimeBar, "media-seek-backward", onRewardButtonClicked);
-   createButton (controlTimeBar, "media-seek-forward", onForwardButtonClicked);
-   createButton (controlTimeBar, "emblem-urgent", onNowButtonClicked);
+   createButton (controlTimeBar, "media-playback-pause", "Pause", onStopButtonClicked);
+   createButton (controlTimeBar, "media-playback-start", "Start", onPlayButtonClicked);
+   createButton (controlTimeBar, "media-playlist-repeat", "Loop", onLoopButtonClicked);
+   createButton (controlTimeBar, "media-seek-backward", "Back", onRewardButtonClicked);
+   createButton (controlTimeBar, "media-seek-forward", "Forward", onForwardButtonClicked);
+   createButton (controlTimeBar, "emblem-urgent", "Now", onNowButtonClicked);
  
    // GtkScale widget creation
    timeScale = gtk_scale_new_with_range (GTK_ORIENTATION_HORIZONTAL, 0, MAX_TIME_SCALE, 1);
+   gtk_widget_set_tooltip_text (timeScale, "Select Time");
    gtk_widget_set_size_request (timeScale, 800, -1);  // Adjust GtkScale size
    // Disable focusable for the scale to avoid keyboard interactions
    gtk_widget_set_focusable (GTK_WIDGET (timeScale), FALSE);
@@ -7550,12 +7361,12 @@ static void appStartup (GApplication *application) {
    createAction ("orthoReport", niceWayPointReport);
    createAction ("routeGram", routeGram);
    createAction ("sailRoute", routeDump);
-   createAction ("sailReport", rteReport);
+   createAction ("sailReport", routeReport);
    createAction ("simulationReport", simulationReport);
    createAction ("dashboard", dashboard);
 
    createAction ("historyReset", historyReset);
-   createAction ("sailHistory", rteHistory);
+   createAction ("sailHistory", routeHistory);
 
    createAction ("poiDump", poiDump);
    createAction ("poiEdit", poiEdit);
@@ -7744,10 +7555,10 @@ static void appStartup (GApplication *application) {
 
 /*! clean all resources */
 static void cleanAll () {
+   freeDisplayTextResources ();
    g_hash_table_destroy (aisTable);
    freeSHP ();
    free (tIsSea);
-   free (dispTextDesc.gloBuffer);
    free (isoDesc);
    free (isocArray);
    free (route.t);

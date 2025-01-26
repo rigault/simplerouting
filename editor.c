@@ -330,7 +330,9 @@ bool myEditor (GtkApplication *app, const char **fileNames, int fileCount, const
    gtk_box_append (GTK_BOX (toolbar), searchEntry);
 
    GtkWidget *searchClicButton = gtk_button_new_from_icon_name ("edit-find");
+   gtk_widget_set_tooltip_text (searchClicButton, "Find");
    GtkWidget *pasteButton = gtk_button_new_from_icon_name ("edit-copy");
+   gtk_widget_set_tooltip_text (pasteButton, "Copy the content");
    gtk_box_append (GTK_BOX (toolbar), searchClicButton);
    gtk_box_append (GTK_BOX (toolbar), pasteButton);
 
