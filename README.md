@@ -38,6 +38,7 @@ Typiquement :
 - `MAX_WIND` : Vitesse maximale de vent. Le routage privilégiera une route évitant les vents dont la vitesse excède ce seuil.
 - `PENALTY0` : Nombre de minutes perdues lors d’un virement de bord.
 - `PENALTY1` : Nombre de minutes perdues lors d’un empannage.
+- `PENALTY2` : Nombre de minutes perdues lors d’un changement de voile.
 - `RANGE_COG` : Amplitude de -90° à +90° par rapport à la route directe vers la destination.
 - `COG_STEP` : Granularité (exemple : 5 degrés).
 
