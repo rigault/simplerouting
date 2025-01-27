@@ -94,6 +94,7 @@ static const bool windowsOS = false;
 #define MAX_LEVEL_POI_VISIBLE 5              // for point of interest visibility
 #define SEP_WIDTH             40             // separator in menus
 #define MAX_VISIBLE_SHORTNAME 10             // for gribInfo. Maximum number of shortname displayed
+#define YELLOW                5              // consistency with colorStr
 
 #define CAIRO_SET_SOURCE_RGB_BLACK(cr)             cairo_set_source_rgb (cr,0,0,0)
 #define CAIRO_SET_SOURCE_RGB_WHITE(cr)             cairo_set_source_rgb (cr,1.0,1.0,1.0)
@@ -173,7 +174,7 @@ static int    gloStatusMailRequest = 0;            // global status of grib mail
 static char   sysAdminPw [MAX_SIZE_NAME];          // sysadmin password for reseting NMEA ports (Unix)
 static char   parameterFileName [MAX_SIZE_FILE_NAME];
 static int    selectedPol = 0;                     // select polar to draw. 0 = all
-static double selectedTws = 0;                     // selected TWS for polar draw
+static double selectedTws = 0.0;                   // selected TWS for polar draw
 static double polarCenterX;                        // center of polar x
 static double polarCenterY;                        // center of polar y
 static guint  gribMailTimeout;
@@ -229,6 +230,7 @@ static GtkApplication *app;
 
 static GtkWidget *waitWindow = NULL;        // window for wait message
 static GtkWidget *statusbar = NULL;         // the status bar
+static GtkWidget *polStatusbar = NULL;      // polar status bar
 static GtkWidget *window = NULL;            // main Window 
 static GtkWidget *polarDrawingArea = NULL;  // polar
 static GtkWidget *drawing_area = NULL;      // main window
@@ -2090,7 +2092,8 @@ static void getPolarXYbyCol (int type, int l, int c, double width, \
 
 /*! Draw polar from polar matrix */
 static void drawPolarBySelectedTws (cairo_t *cr, int polarType, PolMat *ptMat,
-   double selectedTws, double width, double height, double radiusFactor) {
+            double selectedTws, double width, double height, double radiusFactor) {
+
    char line [MAX_SIZE_LINE];
    double x, y, x1, x2, y1, y2, vmgAngle, vmgSpeed;
    cairo_set_line_width (cr, 5);
@@ -2206,14 +2209,29 @@ static void cbPolarFilterDropDown (GObject *dropDown, GParamSpec *pspec, gpointe
       gtk_widget_queue_draw (polarDrawingArea);
 }
 
+/*! create label with background color based index */
+GtkWidget *createLabelWithBackGroundColor (int index, const char *str) {
+   GtkWidget *label = gtk_label_new (str);
+   if (index < 0 || index >= MAX_N_SAIL)
+      index = 7; // red
+   // black foreground if yellow background
+   char *foreGroundColor = g_strdup_printf ("%s",  (index == YELLOW) ? "black" : "white");
+   char *pango_markup = g_strdup_printf ("<span background='%s' foreground='%s' weight='bold' font_family='monospace'> %s </span>", \
+                        colorStr [index], foreGroundColor, str);
+   gtk_label_set_markup (GTK_LABEL (label), pango_markup);
+   g_free (pango_markup);
+   return label;
+} 
+
 /*! create label with color based index */
 GtkWidget *createLabelWithColor (int index, const char *str) {
    GtkWidget *label = gtk_label_new (str);
    if (index < 0 || index >= MAX_N_SAIL)
       index = 7; // red
-   char *pango_markup = g_strdup_printf ("<span foreground='%s' weight='bold' font_family='monospace'> %s </span>", colorStr [index], str);
+   char *pango_markup = g_strdup_printf ("<span background='white' foreground='%s' weight='bold' font_family='monospace'> %s </span>", \
+                        colorStr [index], str);
    gtk_label_set_markup (GTK_LABEL (label), pango_markup);
-   g_free(pango_markup);
+   g_free (pango_markup);
    return label;
 } 
 
@@ -2241,64 +2259,75 @@ static GtkWidget *create_filter_combo (int type) {
 static void polarDumpWithParam (int polarType, const PolMat *ptMat, const char *title) {
    GtkWidget *label;
    char str [MAX_SIZE_LINE] = "";
+   bool legend = false;
+   int line;
    GtkWidget *dumpWindow = gtk_application_window_new (app);
-   gtk_window_set_title (GTK_WINDOW(dumpWindow), title);
+
+   gtk_window_set_title (GTK_WINDOW (dumpWindow), title);
    g_signal_connect (window, "destroy", G_CALLBACK (onParentDestroy), dumpWindow);
    // g_signal_connect (G_OBJECT(dumpWindow), "destroy", G_CALLBACK (gtk_window_destroy), NULL);
 
    // Scroll 
    GtkWidget *scrolled_window = gtk_scrolled_window_new ();
-   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window),
-                                   GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW (scrolled_window),
+                                  GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
    gtk_window_set_child (GTK_WINDOW (dumpWindow), (GtkWidget *) scrolled_window);
-   gtk_widget_set_size_request (scrolled_window, 800, 400);
 
    // grid creation
    GtkWidget *grid = gtk_grid_new();   
    gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scrolled_window), (GtkWidget *) grid);
 
-   for (int line = 0; line < ptMat->nLine; line++) {
+   for (line = 0; line < ptMat->nLine; line++) {
       for (int col = 0; col < ptMat->nCol; col++) {
 	      if ((col == 0) && (line == 0)) {
             g_strlcpy (str, (polarType == WAVE_POLAR) ? "Angle/Height" : "TWA/TWS", sizeof (str));
             label = createLabelWithColor (-1, str); // red
          }
          else if ((col == 0) || (line == 0)) {
-            snprintf (str, sizeof (str), "%2.0f", ptMat->t [line][col]);
+            snprintf (str, sizeof (str), "%.0f", ptMat->t [line][col]);
             label = createLabelWithColor (-1, str); // red
          }
-         else { // col =! 0 and line != 0
-            if (polarType == SAIL_POLAR) {
-               int val = (int) ptMat->t [line][col];
-               fSailName (val, str, sizeof (str));
-               label = createLabelWithColor (val, str);
-            }
-            else { //either WAVE_POLAR or POLAR (WIND)
-               snprintf (str, sizeof (str), "%6.2f", ptMat->t [line][col]);
-               label = gtk_label_new (str);
-            }
+         else { 
+               //either WAVE_POLAR or POLAR (WIND)
+               snprintf (str, sizeof (str), "%4.1f", ptMat->t [line][col]);
+               if ((polarType == WIND) && (sailPolMat.nLine != 0) && (sailPolMat.nCol != 0)) {
+                  legend = true;
+                  int val = (int) sailPolMat.t [line][col];
+                  label = createLabelWithBackGroundColor (val, str);
+               } 
+               else {
+                  label = gtk_label_new (str);
+               }
          }
 	      gtk_grid_attach (GTK_GRID (grid), label, col, line, 1, 1);
          //gtk_widget_set_size_request (label, MAX_TEXT_LENGTH, -1);
       }
    }
+   if (legend) {
+      label = gtk_label_new (""); // blank line
+	   gtk_grid_attach (GTK_GRID (grid), label, 0, line + 1, 1, 1);
+      for (int i = 0; i < MAX_N_SAIL; i += 1) {
+         fSailName (i, str, sizeof (str));
+         label = createLabelWithBackGroundColor (i, str);
+	      gtk_grid_attach (GTK_GRID (grid), label, i + 1, line + 2, 1, 1);
+      }
+   }
+   // Get grid preferred size
+   GtkRequisition preferredSize;
+   gtk_widget_get_preferred_size (grid, NULL, &preferredSize);
+   gtk_widget_set_size_request (scrolled_window, MIN (preferredSize.width + 20, 1400), preferredSize.height + 20);
+
    gtk_window_present (GTK_WINDOW (dumpWindow));
 }
 
 /*! display polar matrix */
 static void polarDump () {
-   char sailPolFileName [MAX_SIZE_NAME] = "";
    if (polarType == WAVE_POLAR)
       polarDumpWithParam (WAVE_POLAR, &wavePolMat, par.wavePolFileName);
-   else {
-      if ((sailPolMat.nCol != 0) && (sailPolMat.nLine != 0)) { 
-         newFileNameSuffix (par.polarFileName, "sailpol", sailPolFileName, sizeof (sailPolFileName));
-         polarDumpWithParam (SAIL_POLAR, &sailPolMat, sailPolFileName);
-      }
+   else 
       polarDumpWithParam (WIND_POLAR, &polMat, par.polarFileName);
-   }
 }
-      
+
 /*! callback function after polar edit */
 static void cbPolarEdit (void *) {
    char sailPolFileName [MAX_SIZE_NAME] = "";
@@ -2381,7 +2410,7 @@ static void onPolarLeftClickEvent (GtkGestureClick *gesture, int n_press, double
    double val = findPolar (twa, selectedTws, *ptMat);
 
    if (polarType == WAVE_POLAR)
-      str = g_strdup_printf ("TWS: %.2lf Kn\nTWA: %.2lf°\nAjust: %.2lf%%", selectedTws, twa, val);
+      str = g_strdup_printf ("TWS: %.2lf Kn\nTWA: %.2lf°\nAdjust: %.2lf%%", selectedTws, twa, val);
    else 
       str = g_strdup_printf ("TWS: %.2lf Kn\nTWA: %.2lf°\nSpeed: %.2lf Kn", selectedTws, twa, val);
 
@@ -2389,13 +2418,39 @@ static void onPolarLeftClickEvent (GtkGestureClick *gesture, int n_press, double
    gtk_popover_set_child ((GtkPopover*) polarPopupWindow, label);
    g_free (str);
    
-   gtk_widget_set_visible (polarPopupWindow, true);
+   gtk_widget_set_visible (polarPopupWindow, TRUE);
 }
 
-/*! Callback  associated to mouse left release event */
+/*! Callback associated to mouse left release event */
 static void onPolarLeftReleaseEvent (GtkGestureClick *gesture, int n_press, double x, double y, gpointer userData) {
    printf ("Polar Left Release\n");
    gtk_widget_queue_draw (polarDrawingArea);
+}
+
+
+/*! Callback associated to mouse motion in polar drawing area, creating update of polar status bar  */
+static gboolean onPolarMotionEvent (GtkEventControllerMotion *controller, double x, double y, gpointer userData) {
+   PolMat *ptMat = (polarType == WAVE_POLAR) ? &wavePolMat : &polMat; 
+   double twa = round (RAD_TO_DEG * atan2 (x - polarCenterX, polarCenterY - y));
+   char *str;
+   char strSail [MAX_SIZE_NAME] = "";            
+   double val = findPolar (twa, selectedTws, *ptMat);
+
+   if (polarType == WAVE_POLAR) {
+      str = g_strdup_printf ("TWS: %7.2lf Kn, TWA: %7.2lf°, Adjust: %7.2lf%%", selectedTws, twa, val);
+   }
+   else { 
+      if ((sailPolMat.nCol != 0) && (sailPolMat.nLine != 0)) { // sail information exist
+         int sail = closestInPolar (twa, selectedTws, sailPolMat);   
+         fSailName (sail, strSail, sizeof (strSail));
+         str = g_strdup_printf ("TWS: %7.2lf Kn, TWA: %7.2lf°, Speed: %7.2lf Kn,    %s", selectedTws, twa, val, strSail);
+      }
+      else
+         str = g_strdup_printf ("TWS: %7.2lf Kn, TWA: %7.2lf°, Speed: %7.2lf Kn", selectedTws, twa, val);
+   }
+
+   gtk_label_set_text (GTK_LABEL (polStatusbar), str);
+   return TRUE;
 }
 
 /*! Draw polar from polar file */
@@ -2403,7 +2458,6 @@ static void polarDraw () {
    char line [MAX_SIZE_LINE] = "Polar: "; 
    char sStatus [MAX_SIZE_LINE];
    PolMat *ptMat = (polarType == WAVE_POLAR) ? &wavePolMat : &polMat; 
-   selectedTws = 0;
    if ((ptMat->nCol == 0) || (ptMat->nLine == 0)) {
       infoMessage ("No polar information", GTK_MESSAGE_ERROR);
       return;
@@ -2457,12 +2511,17 @@ static void polarDraw () {
    }
    GtkWidget *scale = gtk_scale_new_with_range (GTK_ORIENTATION_HORIZONTAL, 0, MAX (1, maxScale), 1);
    gtk_widget_set_tooltip_text (scale, "Select TWS value");
-   gtk_scale_set_value_pos(GTK_SCALE(scale), GTK_POS_TOP);
-   gtk_range_set_value(GTK_RANGE(scale), selectedTws);
+   gtk_scale_set_value_pos (GTK_SCALE (scale), GTK_POS_TOP);
+   gtk_range_set_value (GTK_RANGE(scale), selectedTws);
    gtk_widget_set_size_request (scale, 300, -1);  // Adjust GtkScale size
    GtkWidget *scaleLabel = gtk_label_new ("");
    g_signal_connect (scale, "value-changed", G_CALLBACK (onScaleValueChanged), scaleLabel);
    onScaleValueChanged (GTK_SCALE (scale), scaleLabel);
+
+   // Create event controller for mouse motion
+   GtkEventController *motionController = gtk_event_controller_motion_new ();
+   g_signal_connect (motionController, "motion", G_CALLBACK (onPolarMotionEvent), NULL);
+   gtk_widget_add_controller (polarDrawingArea, motionController);
 
    // Create left clic manager
    GtkGesture *click_gesture_left = gtk_gesture_click_new ();
@@ -2470,7 +2529,7 @@ static void polarDraw () {
    gtk_widget_add_controller (polarDrawingArea, GTK_EVENT_CONTROLLER (click_gesture_left));
    g_signal_connect (click_gesture_left, "pressed", G_CALLBACK (onPolarLeftClickEvent), NULL);
    // Left clic release 
-   g_signal_connect(click_gesture_left, "released", G_CALLBACK(onPolarLeftReleaseEvent), polarDrawingArea);
+   g_signal_connect (click_gesture_left, "released", G_CALLBACK(onPolarLeftReleaseEvent), polarDrawingArea);
   
    GtkWidget *hBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
    gtk_box_append (GTK_BOX (hBox), filter_combo);
@@ -2486,7 +2545,7 @@ static void polarDraw () {
    // status bar creation 
    snprintf (sStatus, sizeof (sStatus), "nCol: %2d   nLig: %2d   max: %2.2lf", \
       ptMat->nCol, ptMat->nLine, maxValInPol (ptMat));
-   GtkWidget *polStatusbar = gtk_label_new (sStatus);
+   polStatusbar = gtk_label_new (sStatus);
 
    gtk_box_append (GTK_BOX (vBox), hBox);
    gtk_box_append (GTK_BOX (vBox), polarDrawingArea);
@@ -3910,7 +3969,7 @@ static void onRoutegramEvent (GtkDrawingArea *area, cairo_t *cr, \
       }
    }
    //draw stamina
-   if ((sailPolMat.nCol != 0) && (sailPolMat.nLine != 0)) { //stamina information exist 
+   if (par.staminaVR >= 0) { // stamina information exist 
       CAIRO_SET_SOURCE_RGB_ORANGE (cr);
       for (int i = 0; i < route.n; i ++) {
          x = xLeft + xk * i * par.tStep;
@@ -7267,7 +7326,7 @@ static void appActivate (GApplication *application) {
    gtk_drawing_area_set_draw_func (GTK_DRAWING_AREA (drawing_area), drawGribCallback, NULL, NULL);
 
    // Create event controller for mouse motion
-   GtkEventController *motion_controller = gtk_event_controller_motion_new();
+   GtkEventController *motion_controller = gtk_event_controller_motion_new ();
    g_signal_connect (motion_controller, "motion", G_CALLBACK (onMotionEvent), NULL);
    gtk_widget_add_controller (drawing_area, motion_controller);
 
@@ -7296,7 +7355,7 @@ static void appActivate (GApplication *application) {
    gtk_widget_add_controller (window, key_controller); // window and not drawing_area required !!!
    g_signal_connect (key_controller, "key-pressed", G_CALLBACK (onKeyEvent), NULL);
 
-   // Connext signal notiy to detect change in window (e.g. fullsceren)
+   // Connext signal notiy to detect change in window (e.g. fullscreen)
    g_signal_connect (window, "notify", G_CALLBACK (onFullscreenNotify), NULL);
 
    g_timeout_add_seconds (GPS_TIME_INTERVAL, updateGpsCallback, gpsInfo);

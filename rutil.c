@@ -52,7 +52,7 @@ const struct GribService serviceTab [N_WEB_SERVICES] = {
 
 /*! sail attributes */
 const char *sailName [MAX_N_SAIL] = {"NA", "C0", "HG", "Jib", "LG", "LJ", "Spi", "SS"}; // for sail polars
-const char *colorStr [MAX_N_SAIL] = {"black", "green", "purple", "black", "blue", "yellow", "black", "red"};
+const char *colorStr [MAX_N_SAIL] = {"black", "green", "purple", "gray", "blue", "yellow", "orange", "red"};
 
 /*! list of wayPoint */
 WayPointList wayPoints;
