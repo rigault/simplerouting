@@ -37,7 +37,7 @@ const struct MailService mailServiceTab [N_MAIL_SERVICES] = {
    {"query@saildocs.com", "Saildocs Wind ICON",     "ICON",   4, "WIND,MSLP,WAVES", "Min time step: 3 hours, 7.5 days max forecast for 00Z and 12Z, 5 days for 6Z and 18Z"},
    {"query@saildocs.com", "Saildocs Wind ARPEGE",   "ARPEGE", 0, "", "Not available yet"},
    {"query@saildocs.com", "Saildocs Wind Arome",    "AROME",  0, "", "Not available yet"}, 
-   {"query@saildocs.com", "Saildocs Current RTOFS", "RTOFS",  2, "CURRENT", "Min time step: 6 hours. 8 days max forecast."},
+   {"query@saildocs.com", "Saildocs Current RTOFS", "RTOFS",  2, "CURRENT", "Min time step: 3 hours with 3 days forecast, 6 hours for 8 days max forecast."},
    {"weather@mailasail.com","MailaSail Wind GFS",    "",      2, "GRD,WAVE", "Resolution allways 1 degree. Min time step: 3 hours with 8 days max forecast. Time Step: 12 hours for 10 days forcast" },
    {""                     ,"Not Applicable"    ,    "",      0, "NONE", ""}
    // {"gmngrib@globalmarinenet.net", "GlobalMarinet GFS", "", ""} // Does not work well
@@ -46,9 +46,9 @@ const struct MailService mailServiceTab [N_MAIL_SERVICES] = {
 const struct GribService serviceTab [N_WEB_SERVICES] = {
    {6, "Time Step 1 hours requires 0.25 Resolution with 5 days max forecast. Time step 3 hours allows 16 days forecast."}, // NOAA
    {3, "Resolution allways 0.25. Time Step min 3 hours with 6 days max forecast. Time step 6 hours and above allow 10 days forecast."}, // ECMWF
-   {3, "Resolution allways 0.25. Time Step allways 3 hours. 5 days max => 4.25 days (102 hours) max."} // ARPEGE
+   {3, "Resolution allways 0.25. Time Step allways 3 hours. 5 days max => 4.25 days (102 hours) max."}, // ARPEGE
+   {6, "Resolution allways 0.01. Time Step 1 hour recommanded. 2 days (48 hours) max forecast."} // AROME
 };
-
 
 /*! sail attributes */
 const char *sailName [MAX_N_SAIL] = {"NA", "C0", "HG", "Jib", "LG", "LJ", "Spi", "SS"}; // for sail polars
@@ -139,6 +139,8 @@ int maxTimeRange (int service, int mailService) {
       return (par.gribTimeStep < 6) ? 144 : 240;
    case ARPEGE_WIND:
       return 102;
+   case AROME_WIND:
+      return 48;
    case MAIL:
       switch (mailService) {
       case SAILDOCS_GFS:
@@ -169,6 +171,8 @@ int maxTimeRange (int service, int mailService) {
 
 /*! evaluate number of shortnames according to service and id mail, mailService */
 int howManyShortnames (int service, int mailService) { 
+   if ((service > N_WEB_SERVICES) || ((service == MAIL) && (mailService > N_MAIL_SERVICES)))
+      return 0;
    return (service == MAIL) ? mailServiceTab [mailService].nShortNames : serviceTab [service].nShortNames; 
 }
 
@@ -235,42 +239,34 @@ void *commandRun (void *data) {
    return NULL;
 }
 
-/*! treatment for NOAA or ECMWF files. Select shortnames and subregion defined by lon and lat values and produce output file
+/*! treatment for ECMWF or ARPEGE or AROME files. Select shortnames and subregion defined by lon and lat values and produce output file
    return true if all OK */
-bool compact (bool full, const char *dir, const char *inFile, const char *shortNames, double lonLeft, double lonRight, double latMin, double latMax, const char *outFile) {
+bool compact (const char *dir, const char *inFile, const char *shortNames, double lonLeft, double lonRight, double latMin, double latMax, const char *outFile) {
    FILE *fs;
+   const char* tempCompact = "compacted.tmp";
    char command [MAX_SIZE_LINE];
    char fullFileName [MAX_SIZE_LINE];
-   snprintf (command, MAX_SIZE_LINE, "grib_copy -w shortName=%s %s %s%s", shortNames, inFile, dir, "inter0.tmp");
+   snprintf (command, MAX_SIZE_LINE, "grib_copy -w shortName=%s %s %s%s", shortNames, inFile, dir, tempCompact);
    if ((fs = popen (command, "r")) == NULL) {
       fprintf (stderr, "In compact, Error popen call: %s\n", command);
       return false;
    }
    pclose (fs);
 
-   snprintf (fullFileName, MAX_SIZE_LINE, "%s%s", dir, "inter0.tmp");
+   snprintf (fullFileName, MAX_SIZE_LINE, "%s%s", dir, tempCompact);
    if (access (fullFileName, F_OK) != 0) {
       fprintf (stderr, "In compact, Error: file does no exist: %s\n", fullFileName);
       return false;
    }
 
-   if (! full) {
-      if (rename (fullFileName, outFile) != 0) {
-         fprintf (stderr, "In compact, Error rename to: %s\n", outFile);
-         return false;
-      }
-      return true;
+   snprintf (command, MAX_SIZE_LINE, "wgrib2 %s%s -small_grib %.0lf:%.0lf %.0lf:%.0lf %s >/dev/null", 
+      dir, tempCompact, lonLeft, lonRight, latMin, latMax, outFile);
+   if ((fs = popen (command, "r")) == NULL) {
+      fprintf (stderr, "In compact, Error popen call: %s\n", command);
+      return false;
    }
-   else {
-      snprintf (command, MAX_SIZE_LINE, "wgrib2 %s%s -small_grib %.0lf:%.0lf %.0lf:%.0lf %s >/dev/null", 
-         dir, "inter0.tmp", lonLeft, lonRight, latMin, latMax, outFile);
-      if ((fs = popen (command, "r")) == NULL) {
-         fprintf (stderr, "In compact, Error popen call: %s\n", command);
-         return false;
-      }
-      pclose (fs);
-      return true;
-   }
+   pclose (fs);
+   return true;
 }
 
 /*! concat all files prefixed by prefix and suffixed 0..limit0 (with step0 the limit0..max with step1) in fileRes */
@@ -559,7 +555,7 @@ char *buildRootName (const char *fileName, char *rootName, size_t maxLen) {
 /*! get file size */
 long getFileSize (const char *fileName) {
     struct stat st;
-    if (stat(fileName, &st) == 0) {
+    if (stat (fileName, &st) == 0) {
         return st.st_size;
     } else {
         fprintf (stderr, "In getFileSize, Error: %s\n", fileName);
@@ -982,7 +978,7 @@ void polygonToStr (char *buffer, size_t maxLen) {
          lonToStr(forbidZones[i].points[j].lon, par.dispDms, strLon, sizeof(strLon));
          char *coord = g_strdup_printf("%12s; %12s\n", strLat, strLon);
          g_strlcat (buffer, coord, maxLen);
-         g_free(coord);
+         g_free (coord);
         }
     }
 }
@@ -1268,7 +1264,6 @@ bool readParam (const char *fileName) {
       par.pOr.lat = competitors.t [0].lat;
       par.pOr.lon = competitors.t [0].lon;
    }
-   if (par.constWindTws != 0) initZone (&zone);
    par.staminaVR = CLAMP (par.staminaVR, 0.0, 100.0);
    fclose (f);
    par.nSectors = MIN (par.nSectors, MAX_N_SECTORS);
@@ -1353,14 +1348,14 @@ bool writeParam (const char *fileName, bool header, bool password) {
    fprintf (f, "MAX_WIND:        %.2lf\n", par.maxWind);
 
    if (par.constWave != 0)
-      fprintf (f, "CONST_WAVE:      %.2lf\n", par.constWave);
+      fprintf (f, "CONST_WAVE:      %.6lf\n", par.constWave);
 
    if (par.constWindTws != 0) {
-      fprintf (f, "CONST_WIND_TWS:  %.2lf\n", par.constWindTws);
+      fprintf (f, "CONST_WIND_TWS:  %.6lf\n", par.constWindTws);
       fprintf (f, "CONST_WIND_TWD:  %.2lf\n", par.constWindTwd);
    }
    if (par.constCurrentS != 0) {
-      fprintf (f, "CONST_CURRENT_S: %.2lf\n", par.constCurrentS);
+      fprintf (f, "CONST_CURRENT_S: %.6f\n", par.constCurrentS);
       fprintf (f, "CONST_CURRENT_D: %.2lf\n", par.constCurrentD);
    }
 
@@ -1417,6 +1412,48 @@ bool writeParam (const char *fileName, bool header, bool password) {
    return true;
 }
 
+/*! build object and body of grib mail */
+bool buildGribMail (int type, double lat1, double lon1, double lat2, double lon2, char *object,  char *body, size_t maxLen) {
+   int i;
+   char temp [MAX_SIZE_LINE];
+   
+   lon1 = lonCanonize (lon1);
+   lon2 = lonCanonize (lon2);
+   
+   if ((lon1 > 0) && (lon2 < 0)) { // zone crossing antimeridien
+      printf ("In buildGribMail: Tentative to cross antemeridian !\n");
+      // lon2 = 179.0;
+   }
+   if (setlocale (LC_ALL, "C") == NULL) {                // very important for printf decimal numbers
+      fprintf (stderr, "In buildGribMail, Error: setlocale failed");
+      return false;
+   }
+   
+   if (type != MAILASAIL) {
+      snprintf (body, maxLen, "send %s:%d%c,%d%c,%d%c,%d%c|%.2lf,%.2lf|0,%d..%d|%s",\
+         mailServiceTab [type].service,\
+         (int) fabs (round(lat1)), (lat1 > 0) ? 'N':'S', (int) fabs (round(lat2)), (lat2 > 0) ? 'N':'S',\
+		   (int) fabs (round(lon1)), (lon1 > 0) ? 'E':'W', (int) fabs (round(lon2)), (lon2 > 0) ? 'E':'W',\
+		   par.gribResolution, par.gribResolution, par.gribTimeStep, par.gribTimeMax,\
+         mailServiceTab [type].suffix);
+      snprintf (object, maxLen, "grib");
+   }
+   else { // MAILASAIL:
+      //printf ("smtp mailasail python\n");
+      snprintf (object, maxLen, "grib gfs %d%c:%d%c:%d%c:%d%c ",
+         (int) fabs (round(lat1)), (lat1 > 0) ? 'N':'S', (int) fabs (round(lon1)), (lon1 > 0) ? 'E':'W',\
+         (int) fabs (round(lat2)), (lat2 > 0) ? 'N':'S', (int) fabs (round(lon2)), (lon2 > 0) ? 'E':'W');
+      for (i = 0; i < par.gribTimeMax; i+= par.gribTimeStep) {
+         snprintf (temp, MAX_SIZE_LINE, "%d,", i);
+	      g_strlcat (object, temp, maxLen);
+      }
+      snprintf (temp, MAX_SIZE_LINE, "%d %s", i, mailServiceTab [type].suffix);
+      g_strlcat (object, temp, maxLen);
+      snprintf (body, maxLen, "grib");
+   }
+   return true;
+}
+
 /*! URL for METEO Consult Wind delay hours before now at closest time run 0Z, 6Z, 12Z, or 18Z 
 	return time run  type : WIND or CURRENT, i : zone index, delay: nb of hours to get a run */
 int buildMeteoConsultUrl (int type, int i, int delay, char *url, size_t maxLen) {
@@ -1438,7 +1475,8 @@ int buildMeteoConsultUrl (int type, int i, int delay, char *url, size_t maxLen) 
    return time run or -1 if error*/
 int buildGribUrl (int typeWeb, int topLat, int leftLon, int bottomLat, int rightLon, int step, int step2, char *url, size_t maxLen) {
    char fileName [MAX_SIZE_FILE_NAME];
-   time_t meteoTime = time (NULL) - (3600 * ((typeWeb == NOAA_WIND) ? NOAA_DELAY: ECMWF_DELAY));
+   time_t meteoTime = time (NULL) - (3600 * ((typeWeb == NOAA_WIND) ? NOAA_DELAY : 
+                                             (typeWeb == ECMWF_WIND) ? ECMWF_DELAY : METEO_FRANCE_DELAY));
    struct tm * timeInfos = gmtime (&meteoTime);  // time x hours ago
    // printf ("Delay: %d hours ago: %s\n", delay [type], asctime (timeInfos));
    int yy = timeInfos->tm_year + 1900;
@@ -1446,36 +1484,45 @@ int buildGribUrl (int typeWeb, int topLat, int leftLon, int bottomLat, int right
    int dd = timeInfos->tm_mday;
    int hh;
    char startUrl [MAX_SIZE_LINE];
-   const int resolution = (par.gribResolution == 0.25 || typeWeb == ARPEGE_WIND) ? 25 : 50; // 25 mean 0.25 degree, 50 for 0.5 degree
-
-   int rightLonNew = ((leftLon > 0) && (rightLon < 0)) ? rightLon + 360 : rightLon;
+   int resolution;
+   const int rightLonNew = ((leftLon > 0) && (rightLon < 0)) ? rightLon + 360 : rightLon;
 
    switch (typeWeb) {
    case NOAA_WIND:
+      resolution = (par.gribResolution == 0.25) ? 25 : 50;
       hh = (timeInfos->tm_hour / 6) * 6;    // select 0 or 6 or 12 or 18
       snprintf (startUrl, sizeof (startUrl), "%sfilter_gfs_0p%d.pl?", NOAA_ROOT_GRIB_URL, resolution);
 
       if (resolution == 25) // resolution = 0.25
          snprintf (fileName, sizeof (fileName), "gfs.t%02dz.pgrb2.0p25.f%03d", hh, step);
-      else                  // resolution = 0.25
+      else                  // resolution = 0.50
          snprintf (fileName, sizeof (fileName), "gfs.t%02dz.pgrb2full.0p50.f%03d", hh, step);
 
       snprintf (url, maxLen, "%sdir=/gfs.%4d%02d%02d/%02d/atmos&file=%s&%s&subregion=&toplat=%d&leftlon=%d&rightlon=%d&bottomlat=%d", 
-            startUrl, yy, mm, dd, hh, fileName, NOAA_GENERAL_PARAM_GRIB_URL, topLat, 
-            leftLon, rightLonNew, bottomLat);
+                startUrl, yy, mm, dd, hh, fileName, NOAA_GENERAL_PARAM_GRIB_URL, topLat, 
+                leftLon, rightLonNew, bottomLat);
       break;
    case ECMWF_WIND:
+      resolution = (par.gribResolution == 0.25) ? 25 : 50;
       hh = (timeInfos->tm_hour / 12) * 12;    // select 0 or 12
-      // example of directory; https://data.ecmwf.int/forecasts/20240806/00z/ifs/0p25/oper/
-      // example of filename : 20240806000000-102h-oper-fc.grib2
-      snprintf (url, maxLen, "%s%4d%02d%02d/%02dz/ifs/0p25/oper/%4d%02d%02d%02d0000-%dh-oper-fc.grib2",\
-          ECMWF_ROOT_GRIB_URL, yy, mm, dd, hh, yy, mm, dd, hh, step); 
+      // Ex: https://data.ecmwf.int/forecasts/20240806/00z/ifs/0p25/oper/20240806000000-102h-oper-fc.grib2
+      //     https://data.ecmwf.int/forecasts/20250128/00z/ifs/0p25/oper/20250128000000-1h-oper-fc.grib2
+      snprintf (fileName, sizeof (fileName), "%4d%02d%02d%02d0000-%dh-oper-fc.grib2", yy, mm, dd, hh, step);
+      snprintf (url, maxLen, "%s%4d%02d%02d/%02dz/ifs/0p25/oper/%s", ECMWF_ROOT_GRIB_URL, yy, mm, dd, hh, fileName); 
       break;
    case ARPEGE_WIND:
+      resolution = 25; // 0.25 degree
       hh = (timeInfos->tm_hour / 6) * 6;    // select 0 or 6 or 12 or 18
-      // "https://object.data.gouv.fr/meteofrance-pnt/pnt/2024-12-24T12:00:00Z/arpege/025/SP1/arpege__025__SP1__000H024H__2024-12-24T12:00:00Z.grib2"
-      snprintf (fileName, sizeof (fileName), "arpege__0%d__SP1__%03dH%03dH__%4d-%02d-%02dT%02d:00:00Z.grib2", resolution, step, step2, yy, mm, dd, hh);
-      snprintf (url, maxLen, "%s%4d-%02d-%02dT%02d:00:00Z/arpege/0%d/SP1/%s", ARPEGE_ROOT_GRIB_URL, yy, mm, dd, hh, resolution, fileName);
+      // Ex: https://object.data.gouv.fr/meteofrance-pnt/pnt/2024-12-24T12:00:00Z/arpege/025/SP1/arpege__025__SP1__000H024H__2024-12-24T12:00:00Z.grib
+      snprintf (fileName, sizeof (fileName), "arpege__%03d__SP1__%03dH%03dH__%4d-%02d-%02dT%02d:00:00Z.grib2", resolution, step, step2, yy, mm, dd, hh);
+      snprintf (url, maxLen, "%s%4d-%02d-%02dT%02d:00:00Z/arpege/%03d/SP1/%s", METEO_FRANCE_ROOT_GRIB_URL, yy, mm, dd, hh, resolution, fileName);
+      break;
+   case AROME_WIND:
+      resolution = 1; // here this means 0.1 degree
+      hh = (timeInfos->tm_hour / 6) * 6;    // select 0 or 6 or 12 or 18
+      // Ex: https://object.data.gouv.fr/meteofrance-pnt/pnt/2025-01-28T12:00:00Z/arome/001/HP1/arome__001__HP1__00H__2025-01-28T12:00:00Z.grib2
+      snprintf (fileName, sizeof (fileName), "arome__%03d__HP1__%02dH__%4d-%02d-%02dT%02d:00:00Z.grib2", resolution, step, yy, mm, dd, hh);
+      snprintf (url, maxLen, "%s%4d-%02d-%02dT%02d:00:00Z/arome/%03d/HP1/%s", METEO_FRANCE_ROOT_GRIB_URL, yy, mm, dd, hh, resolution, fileName);
       break;
    default:
       fprintf (stderr, "In buildGribUrl Error typeWeb not found: %d\n", typeWeb);
@@ -1782,49 +1829,5 @@ void initWayPoints (void) {
    wayPoints.totLoxoDist = 0;
    wayPoints.t [0].lat = par.pDest.lat;
    wayPoints.t [0].lon = par.pDest.lon;
-}
-
-/*! build object and body of grib mail */
-bool buildGribMail (int type, double lat1, double lon1, double lat2, double lon2, char *object,  char *body, size_t maxLen) {
-   int i;
-   char temp [MAX_SIZE_LINE];
-   
-   lat1 = floor (lat1);
-   lat2 = ceil (lat2);
-   lon1 = floor (lonCanonize (lon1));
-   lon2 = ceil (lonCanonize (lon2));
-   
-   if ((lon1 > 0) && (lon2 < 0)) { // zone crossing antimeridien
-      printf ("In buildGribMail: Tentative to cross antemeridian !\n");
-      // lon2 = 179.0;
-   }
-   if (setlocale (LC_ALL, "C") == NULL) {                // very important for printf decimal numbers
-      fprintf (stderr, "In buildGribMail, Error: setlocale failed");
-      return false;
-   }
-   
-   if (type != MAILASAIL) {
-      snprintf (body, maxLen, "send %s:%d%c,%d%c,%d%c,%d%c|%.2lf,%.2lf|0,%d,..%d|%s",\
-         mailServiceTab [type].service,\
-         (int) fabs (round(lat1)), (lat1 > 0) ? 'N':'S', (int) fabs (round(lat2)), (lat2 > 0) ? 'N':'S',\
-		   (int) fabs (round(lon1)), (lon1 > 0) ? 'E':'W', (int) fabs (round(lon2)), (lon2 > 0) ? 'E':'W',\
-		   par.gribResolution, par.gribResolution, par.gribTimeStep, par.gribTimeMax,\
-         mailServiceTab [type].suffix);
-      snprintf (object, maxLen, "grib");
-   }
-   else { //MAILASAIL:
-      //printf ("smtp mailasail python\n");
-      snprintf (object, maxLen, "grib gfs %d%c:%d%c:%d%c:%d%c ",
-         (int) fabs (round(lat1)), (lat1 > 0) ? 'N':'S', (int) fabs (round(lon1)), (lon1 > 0) ? 'E':'W',\
-         (int) fabs (round(lat2)), (lat2 > 0) ? 'N':'S', (int) fabs (round(lon2)), (lon2 > 0) ? 'E':'W');
-      for (i = 0; i < par.gribTimeMax; i+= par.gribTimeStep) {
-         snprintf (temp, MAX_SIZE_LINE, "%d,", i);
-	      g_strlcat (object, temp, maxLen);
-      }
-      snprintf (temp, MAX_SIZE_LINE, "%d %s", i, mailServiceTab [type].suffix);
-      g_strlcat (object, temp, maxLen);
-      snprintf (body, maxLen, "grib");
-   }
-   return true;
 }
 

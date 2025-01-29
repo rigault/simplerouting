@@ -6,6 +6,9 @@
 #include <stdio.h>
 #include "rtypes.h"
 
+#define  MAX_DISPLAY_WIDTH       1800
+#define  MAX_DISPLAY_HEIGHT      800
+
 struct {
    char firstLine [MAX_SIZE_LINE];                 // first line for displayText
    char *gloBuffer;                                // for filtering in displayText ()
@@ -81,8 +84,7 @@ static void onFilterEntryChanged (GtkEditable *editable, gpointer userData) {
 /*! for first line decorated */
 static GtkWidget *createDecoratedLabel (const char *text) {
    GtkWidget *label = gtk_label_new (NULL);
-   char *markup = g_markup_printf_escaped (\
-      "<span foreground='red' font_family='monospace'><b>%s</b></span>", text);
+   char *markup = g_markup_printf_escaped ("<span foreground='red' font_family='monospace'><b>%s</b></span>", text);
 
    gtk_label_set_markup (GTK_LABEL(label), markup);
    gtk_label_set_xalign (GTK_LABEL(label), 0.0);     // Align to the left
@@ -129,8 +131,7 @@ static void onPasteButtonClicked () {
 
 /*! display text with monospace police and filtering function using regular expression 
    first line is decorated */
-void displayText (GtkApplication *app, guint width, guint height, \
-     const char *text, size_t maxLen, const char *title, const char *statusStr) {
+void displayText (GtkApplication *app, const char *text, size_t maxLen, const char *title, const char *statusStr) {
 
    char *ptSecondLine = extractFirstLine (text, dispTextDesc.firstLine, sizeof (dispTextDesc.firstLine));
    if (ptSecondLine == NULL) {
@@ -148,7 +149,7 @@ void displayText (GtkApplication *app, guint width, guint height, \
    
    GtkWidget *textWindow = gtk_application_window_new (app);
    gtk_window_set_title (GTK_WINDOW (textWindow), title);
-   gtk_window_set_default_size (GTK_WINDOW (textWindow), width, height);
+   //gtk_window_set_default_size (GTK_WINDOW (textWindow), width, height);
 
    // g_signal_connect (window, "destroy", G_CALLBACK(onParentDestroy), textWindow);
    
@@ -208,20 +209,23 @@ void displayText (GtkApplication *app, guint width, guint height, \
    onFilterEntryChanged (NULL, buffer);   
    g_signal_connect (filterEntry, "changed", G_CALLBACK (onFilterEntryChanged), buffer);
 
+   // Get size requested for text
+   PangoContext *pango_context = gtk_widget_get_pango_context(textView);
+   PangoLayout *layout = pango_layout_new(pango_context);
+   pango_layout_set_text(layout, ptSecondLine, -1);
+
+   int textWidth, textHeight;
+   pango_layout_get_pixel_size (layout, &textWidth, &textHeight);
+   g_object_unref(layout);
+
+   // Adjust window size 
+   guint finalWidth = MIN (textWidth + 50, MAX_DISPLAY_WIDTH);
+   guint finalHeight = MIN (textHeight + 100, MAX_DISPLAY_HEIGHT); 
+
+   gtk_window_set_default_size (GTK_WINDOW(textWindow), finalWidth, finalHeight);
+
    gtk_window_present (GTK_WINDOW (textWindow));
 }
 
-/*! display file using dispLay text */
-void displayFile (GtkApplication *app, const char *fileName, const char *title) {
-   GError *error = NULL;
-   char *content = NULL;
-   gsize length;
-   if (g_file_get_contents (fileName, &content, &length, &error)) {
-      displayText (app, 1800, 400, content, length, title, fileName);
-      g_free (content);
-   }
-   else {
-      fprintf (stderr, "In displayFile reading: %s, %s\n", fileName, error->message); 
-      g_clear_error(&error);
-   }
-}
+
+

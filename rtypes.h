@@ -12,12 +12,13 @@
 #define METEO_CONSULT_WIND_DELAY    5  // nb hours after time run to get new grib
 #define METEO_CONSULT_CURRENT_DELAY 12
 #define NOAA_DELAY                  4
+#define METEO_FRANCE_DELAY          6
 #define ECMWF_DELAY                 8
 #define METEO_CONSULT_ROOT_GRIB_URL "https://static1.mclcm.net/mc2020/int/cartes/marine/grib/"
 #define NOAA_ROOT_GRIB_URL          "https://nomads.ncep.noaa.gov/cgi-bin/"
 #define NOAA_GENERAL_PARAM_GRIB_URL "var_GUST=on&var_PRMSL=on&var_PRATE=on&var_UGRD=on&var_VGRD=on&lev_10_m_above_ground=on&lev_surface=on&lev_mean_sea_level=on"
 #define ECMWF_ROOT_GRIB_URL         "https://data.ecmwf.int/forecasts/"
-#define ARPEGE_ROOT_GRIB_URL        "https://object.data.gouv.fr/meteofrance-pnt/pnt/"
+#define METEO_FRANCE_ROOT_GRIB_URL  "https://object.data.gouv.fr/meteofrance-pnt/pnt/"
 #define N_MAX_NMEA_PORTS      3
 #define CSV_SEP               ",;\t"            // general separators for CSV files
 #define CSV_SEP_POLAR         ";\t"             // for polar no comma because decimal separator may be comma 
@@ -85,14 +86,16 @@
 #define MAX_N_FORBID_ZONE     10                // Max nummber of forbidden zones
 #define N_METEO_ADMIN         4                 // administration: Weather Service US, DWD, etc
 #define N_MAIL_SERVICES       9                 // for mailServiceTab size
-#define N_WEB_SERVICES        3                 // for service Tab size (NOAA and ECMWF and ARPEGE)
+#define N_WEB_SERVICES        4                 // for service Tab size (NOAA, ECMWF, ARPEGE and AROME)
 #define MAX_INDEX_ENTITY      512               // for shp. Index.
 #define MAX_N_COMPETITORS     10                // Number Max of competitors
 #define MAX_SIZE_SHIP_NAME    21                // see AIS specificatiions
 #define MAX_N_SAIL            8                 // Max number of sails in sailName table
 #define MAX_N_SECTORS         1000              // Max number of sectors for optimization of sectors
 
-enum {NOAA_WIND, ECMWF_WIND, ARPEGE_WIND, MAIL, MAIL_SAILDOCS_CURRENT}; // NOAA or ECMWF for web download or MAIL. Specific for current
+// NOAA or ECMWF or ARPEGE or AROME for web download or MAIL. Specific for current
+enum {NOAA_WIND, ECMWF_WIND, ARPEGE_WIND, AROME_WIND, MAIL, MAIL_SAILDOCS_CURRENT}; 
+
 enum {GPS_INDEX, AIS_INDEX};                    // for NMEA USB serial port reading
 enum {WIND, CURRENT};                           // for grib information, either WIND or CURRENT
 enum {WIND_POLAR, WAVE_POLAR, SAIL_POLAR};      // for polar information, either WIND or WAVE or SAIL

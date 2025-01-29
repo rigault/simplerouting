@@ -25,14 +25,14 @@ static bool strtodNew (const char *str, double *v) {
       return false;
    if (!isNumber (str))
       return false;
-   char *mutableStr = g_strdup(str);
+   char *mutableStr = g_strdup (str);
    g_strdelimit (mutableStr, ",", '.');
 
    char *endptr;
    *v = strtod (mutableStr, &endptr);
    if (endptr == mutableStr)
       return false;
-   g_free(mutableStr);
+   g_free (mutableStr);
    
    return true;
 }

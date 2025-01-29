@@ -254,8 +254,9 @@ static int buildNextIsochrone (const Pp *pOr, const Pp *pDest, const Pp *isoList
       if (!isInZone (isoList [k].lat, isoList [k].lon, &zone) && (par.constWindTws == 0))
          continue;
       findWindGrib (isoList [k].lat, isoList [k].lon, t, &u, &v, &gust, &w, &twd, &tws);
-      if (tws > par.maxWind)
+      if (tws > par.maxWind) {
          continue; // avoid location where wind speed too high...
+      }
       findCurrentGrib (isoList [k].lat, isoList [k].lon, t - tDeltaCurrent, &uCurr, &vCurr, &currTwd, &currTws);
       vDirectCap = orthoCap (isoList [k].lat, isoList [k].lon, pDest->lat, pDest->lon);
       directCog = ((int)(vDirectCap / par.cogStep)) * par.cogStep;
@@ -275,7 +276,7 @@ static int buildNextIsochrone (const Pp *pOr, const Pp *pDest, const Pp *isoList
          }
          else {
             sog = efficiency * findPolar (twa, tws * par.xWind, polMat);
-            newPt.sail = closestInPolar (twa, tws * par.xWind, sailPolMat); 
+            newPt.sail = closestInPolar (twa,  tws * par.xWind, sailPolMat); 
          } 
          newPt.motor = motor;
          if ((w > 0) && ((waveCorrection = findPolar (twa, w, wavePolMat)) > 0)) {
@@ -710,16 +711,15 @@ bool routeToStr (const SailRoute *route, char *str, size_t maxLen, char *footer,
             MS_TO_KN * route->t[i].g, awa, aws, route->t[i].w, route->t[i].stamina);
       g_strlcat (str, line, maxLen);
    }
-   
-   snprintf (line, MAX_SIZE_LINE, " Avr %71s  %5.2lf             %7.2lf %7.2lf       %7.2lf %7.2lf\n", " ", \
-      route->avrSog, route->avrTws, MS_TO_KN * route->avrGust, sumAws / route->n, route->avrWave); 
+  
+   g_strlcat (str, "\n \n", maxLen); 
+   snprintf (line, MAX_SIZE_LINE, " Avr/Max SOG      : %.2lf/%.2lf Kn\n", route->avrSog, route->maxSog);
    g_strlcat (str, line, maxLen);
-   snprintf (line, MAX_SIZE_LINE, " Max %71s  %5.2lf             %7.2lf %7.2lf       %7.2lf %7.2lf\n", " ", \
-      route->maxSog, route->maxTws, MS_TO_KN * route->maxGust, maxAws, route->maxWave); 
+   snprintf (line, MAX_SIZE_LINE, " Avr/Max Tws      : %.2lf/%.2lf Kn\n", route->avrTws, route->maxTws); 
    g_strlcat (str, line, maxLen);
-   snprintf (line, MAX_SIZE_LINE, "\n Total distance   : %7.2lf NM,   Motor distance: %.2lf NM\n", route->totDist, route->motorDist);
+   snprintf (line, MAX_SIZE_LINE, " Total/Motor Dist.: %.2lf/%.2lf NM\n", route->totDist, route->motorDist);
    g_strlcat (str, line, maxLen);
-   snprintf (line, MAX_SIZE_LINE, " Total Duration   : %s, Motor Duration: %s\n", \
+   snprintf (line, MAX_SIZE_LINE, " Total/Motor Dur. : %s/%s Hours\n", \
       durationToStr (route->duration, strDur, sizeof (strDur)), durationToStr (route->motorDuration, strMot, sizeof (strMot)));
    g_strlcat (str, line, maxLen);
    snprintf (line, MAX_SIZE_LINE, " Sail Changes     : %d\n", route->nSailChange);
@@ -1246,7 +1246,7 @@ void logReport (int n) {
    gchar *polarFileName = g_path_get_basename (par.polarFileName);
    gchar *gribFileName = g_path_get_basename (par.gribFileName);
 
-   fprintf (f, "%04d/%02d/%02d %02d:%02d:%02d; %.2lf; %d; %c; %d; %s; %s; %s; %s, %s; %s; %.2lf, %3d°, %s, %s\n",
+   fprintf (f, "%04d/%02d/%02d %02d:%02d:%02d; %.2lf; %d; %c; %d; %s; %s; %s; %s; %s; %s; %.2lf; %3d°; %s; %s\n",
         timeInfos->tm_year+1900, timeInfos->tm_mon+1, timeInfos->tm_mday,
         timeInfos->tm_hour, timeInfos->tm_min, timeInfos->tm_sec,
         par.tStep, n, (route.destinationReached) ? 'R' : 'U',
@@ -1267,7 +1267,7 @@ void logReport (int n) {
    fclose (f);
 }
    
-/*! translate competitors strct in a string  */
+/*! translate competitors struct in a string  */
 void competitorsToStr (CompetitorsList *copyComp, char *buffer, size_t maxLen) {
    char strDep [MAX_SIZE_DATE];
    char strDelay [MAX_SIZE_LINE], strMainDelay [MAX_SIZE_LINE];

@@ -84,7 +84,7 @@ void optionManage (char option) {
    case 'g': // grib
       if (par.mostRecentGrib) {// most recent grib will replace existing grib
          snprintf (directory, sizeof (directory), "%sgrib/", par.workingDir); 
-         mostRecentFile (directory, ".csv", par.gribFileName, sizeof (par.gribFileName));
+         mostRecentFile (directory, ".gr", par.gribFileName, sizeof (par.gribFileName));
       }
       printf ("Grib File Name: %s\n", par.gribFileName);
       readGribAll (par.gribFileName, &zone, WIND);
@@ -154,10 +154,9 @@ void optionManage (char option) {
       }
       break;
    case 'r': // routing
-      initZone (&zone);
       if (par.mostRecentGrib) {// most recent grib will replace existing grib
          snprintf (directory, sizeof (directory), "%sgrib/", par.workingDir); 
-         mostRecentFile (directory, ".csv", par.gribFileName, sizeof (par.gribFileName));
+         mostRecentFile (directory, ".gr", par.gribFileName, sizeof (par.gribFileName));
       }
       initScenarioOption ();
       routingLaunch ();

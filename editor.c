@@ -112,7 +112,7 @@ static void searchAndHighlight (GtkSourceBuffer *buffer, const gchar *text, GLis
       gtk_text_buffer_get_iter_at_offset (GTK_TEXT_BUFFER(buffer), &matchEndIter, end_offset);
 
       // Ajouter la correspondance à la liste
-      *matches = g_list_prepend (*matches, g_strdup(current_pos));
+      *matches = g_list_prepend (*matches, g_strdup (current_pos));
 
       // Appliquer le tag de surbrillance
       if (GTK_IS_TEXT_TAG(highlightTag)) {
@@ -177,7 +177,7 @@ static void onMySearchClicked (GtkButton *button, gpointer user_data) {
 
    // print matches
    searchAndHighlight (data->buffer, searchText, &data->matches);
-   printf ("Search completed for text: %s\n", searchText);
+   // printf ("Search completed for text: %s\n", searchText);
 }
 
 /*! Save the file with modifications */
@@ -351,7 +351,7 @@ bool myEditor (GtkApplication *app, const char **fileNames, int fileCount, const
 
       char *content = g_malloc (fileSize + 1);
       size_t readSize = fread (content, 1, fileSize, file);
-      fclose(file);
+      fclose (file);
 
       if (readSize != fileSize) {
          fprintf (stderr, "In editor, Error reading file: %s\n", fileName);

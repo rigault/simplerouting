@@ -57,7 +57,7 @@ extern double offsetLocalUTC (void);
 extern void   initStart (struct tm *start);
 extern double diffTimeBetweenNowAndGribOrigin (long intDate, double nHours);
 extern void   *commandRun (void *data);
-extern bool   compact (bool full, const char *dir, const char *inFile,\
+extern bool   compact (const char *dir, const char *inFile,\
    const char *shortNames, double lonLeft, double lonRight, double latMin, double latMax, const char *outFile);
 extern bool concat (const char *prefix, const char *suffix, int limit0, int step0, int step1, int max, const char *fileRes);
 extern bool   isEmpty (const char *str);

@@ -114,7 +114,7 @@ bool smtpSend (const char *toAddress, const char *object, const char *message) {
    if (res != CURLE_OK) {
        fprintf (stderr, "In smtpSend: Error sending email: %s\n", curl_easy_strerror(res));
    } else {
-       printf ("In smtpSend: email sent to: %s object:%s body:%s\n", toAddress, object, message);
+       printf ("In smtpSend: email sent to: %s object: %s body: %s\n", toAddress, object, message);
    }
 
    // cleaning
@@ -215,7 +215,7 @@ static char* extractFilename (const char *filename) {
             if (end) {
                *end = '\0'; // Terminate
             }
-            filenameFound = g_strdup(start); // Copy filename
+            filenameFound = g_strdup (start); // Copy filename
             break;
          }
       }
@@ -451,6 +451,7 @@ int imapGetUnseen (const char* imapServer, const char *username,
    }
    else {
       writeErrorMessage (tempFileName, MAX_N_ERROR_MESSAGE);
+      g_free (extractedName);
       return 0;          // Error: Message found with no gribfile name inside
    }
    snprintf (gribFileName, maxLen, "%s/%s", path, extractedName);
@@ -494,3 +495,4 @@ int imapGetUnseen (const char* imapServer, const char *username,
 
    return 1;
 }
+

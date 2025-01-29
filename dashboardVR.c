@@ -234,7 +234,7 @@ void staminaCalculator (GtkApplication *application) {
    gtk_window_present (GTK_WINDOW (staminaWindow));
 }
 
-/*! copy src to dest with and padding */
+/*! copy src to dest with padding */
 static void strncpyPad (char *dest, const char *src, size_t n) {
     //snprintf (dest, n + 1, "%s;", src); 
     g_strlcpy (dest, src, n + 1);
@@ -266,8 +266,8 @@ struct tm getTmTime (const char *strDate, const char *strTime) {
    tm0.tm_mon = strtol (dateTokens [0], NULL, 10) - 1;
    tm0.tm_mday = strtol (dateTokens [1], NULL, 10);
    tm0.tm_hour = strtol (timeTokens [0], NULL, 10);
-   tm0.tm_min   = strtol (timeTokens [1], NULL, 10);
-   tm0.tm_sec   = strtol (timeTokens [2], NULL, 10);
+   tm0.tm_min = strtol (timeTokens [1], NULL, 10);
+   tm0.tm_sec = strtol (timeTokens [2], NULL, 10);
 
    if (!par.dashboardUTC)
       tm0.tm_sec -= offsetLocalUTC () ;            // to get UTC time if not already UTC

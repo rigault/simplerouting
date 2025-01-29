@@ -19,6 +19,8 @@
 #include "rutil.h"
 #include "inline.h"
 
+#define  EPSILON 0.001        // for G_APPROX_VALUE
+
 /*! return difference in hours between two zones (current zone and Wind zone) */
 double zoneTimeDiff (const Zone *zone1, const Zone *zone0) {
    if (zone1->wellDefined && zone0->wellDefined) {
@@ -196,13 +198,13 @@ bool checkGribInfoToStr (int type, Zone *zone, char *buffer, size_t maxLen) {
          zone->nbLon * zone->nbLat, zone->numberOfValues);
       g_strlcat (buffer, str, maxLen);
    }
-   if ((zone->lonRight - zone->lonLeft) != (zone->lonStep * (zone->nbLon - 1))) {
+   if (! G_APPROX_VALUE (zone->lonRight - zone->lonLeft, zone->lonStep * (zone->nbLon - 1), EPSILON)) {
 	   OK = false;
       snprintf (str, MAX_SIZE_LINE, "Expected difference between lonLeft and lonRight is %.2lf, found: %.2lf\n",\
          (zone->lonStep * (zone->nbLon - 1)), zone->lonRight - zone->lonLeft);
       g_strlcat (buffer, str, maxLen);
    }
-   if ((zone->latMax - zone->latMin) != (zone->latStep * (zone->nbLat - 1))) {
+   if (! G_APPROX_VALUE (zone->latMax - zone->latMin, zone->latStep * (zone->nbLat - 1), EPSILON)) {
 	   OK = false;
       snprintf (str, MAX_SIZE_LINE, "Expected difference between latMax and latMin is %.2lf, found: %.2lf\n",\
          (zone->latStep * (zone->nbLat - 1)), zone->latMax - zone->latMin);
@@ -468,6 +470,14 @@ static bool findFlow (double lat, double lon, double t, double *rU, double *rV, 
 /*! use findflow to get wind and waves */
 void findWindGrib (double lat, double lon, double t, double *u, double *v, \
    double *gust, double *w, double *twd, double *tws ) {
+
+   /**twd = 0;
+   *tws = 5;
+   *w = 0;
+   *gust = 5;
+	*u = - KN_TO_MS * par.constWindTws * sin (DEG_TO_RAD * par.constWindTwd);
+	*v = - KN_TO_MS * par.constWindTws * cos (DEG_TO_RAD * par.constWindTwd);
+   return;*/
 
    double msl, prate;
    if (par.constWindTws != 0) {
@@ -748,19 +758,17 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
       CODES_CHECK(codes_get_string (h, "shortName", shortName, &lenName), 0);
       CODES_CHECK(codes_get_long (h, "step", &timeStep), 0);
 
-      // check timeStep progress well 
-      if ((timeStep != 0) && (timeStep != oldTimeStep) && 
-          ((timeStep - oldTimeStep) != zone->intervalBegin) && 
-          ((timeStep - oldTimeStep) != zone->intervalEnd)
+      long progressTime = timeStep - oldTimeStep;
+
+      // check timeStep move well. This test is not very useful.
+      if ((timeStep != 0) && (progressTime > 0) &&  // progressTime may regress. ARPEGE case
+          (progressTime != zone->intervalBegin) && 
+          (progressTime != zone->intervalEnd)
          ) { // check timeStep progress well 
 
          zone->allTimeStepOK = false;
-         fprintf (stderr, "In readGribAll: All time Step Are Not defined message: %d, timeStep: %ld shortName: %s\n", 
-            zone->nMessage, timeStep, shortName);
-         //free (tGribData [iFlow]); 
-         //tGribData [iFlow] = NULL;
-         //fclose (f);
-         //return false;
+         fprintf (stderr, "In readGribAll: All time Step Are Not defined message: %d, timeStep: %ld, oldTimeStep: %ld, shortName: %s\n", 
+            zone->nMessage, timeStep, oldTimeStep, shortName);
       }
       oldTimeStep = timeStep;
 
@@ -816,8 +824,10 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
       codes_handle_delete (h);
       iter = NULL;
       h = NULL;
+      // printf ("nMessage: %d\n", zone->nMessage);
       zone->nMessage += 1;
    }
+   // printf ("readGribAll:%s done.\n", fileName);
  
    fclose (f);
    zone->wellDefined = true;
