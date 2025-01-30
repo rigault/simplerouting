@@ -1235,6 +1235,8 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "SPEED_DISP:%d", &par.speedDisp) > 0);
       else if (sscanf (pLine, "AIS_DISP:%d", &par.aisDisp) > 0);
       else if (sscanf (pLine, "TECHNO_DISP:%d", &par.techno) > 0);
+      else if (sscanf (pLine, "CLOSEST_DISP:%d", &par.closestDisp) > 0);
+      else if (sscanf (pLine, "FOCAL_DISP:%d", &par.focalDisp) > 0);
       else if (sscanf (pLine, "SHP_POINTS_DISP:%d", &par.shpPointsDisp) > 0);
       else if (sscanf (pLine, "WEBKIT:%255[^\n]", par.webkit) > 0)
          g_strstrip (par.webkit);
@@ -1379,6 +1381,8 @@ bool writeParam (const char *fileName, bool header, bool password) {
    fprintf (f, "AIS_DISP:        %d\n", par.aisDisp);
    fprintf (f, "SHP_POINTS_DISP: %d\n", par.shpPointsDisp);
    fprintf (f, "TECHNO_DISP:     %d\n", par.techno);
+   fprintf (f, "CLOSEST_DISP:    %d\n", par.closestDisp);
+   fprintf (f, "FOCAL_DISP:      %d\n", par.focalDisp);
    fprintf (f, "J_FACTOR:        %d\n", par.jFactor);
    fprintf (f, "K_FACTOR:        %d\n", par.kFactor);
    fprintf (f, "N_SECTORS:       %d\n", par.nSectors);
@@ -1431,6 +1435,7 @@ bool buildGribMail (int type, double lat1, double lon1, double lat2, double lon2
    
    if (type != MAILASAIL) {
       snprintf (body, maxLen, "send %s:%d%c,%d%c,%d%c,%d%c|%.2lf,%.2lf|0,%d..%d|%s",\
+
          mailServiceTab [type].service,\
          (int) fabs (round(lat1)), (lat1 > 0) ? 'N':'S', (int) fabs (round(lat2)), (lat2 > 0) ? 'N':'S',\
 		   (int) fabs (round(lon1)), (lon1 > 0) ? 'E':'W', (int) fabs (round(lon2)), (lon2 > 0) ? 'E':'W',\

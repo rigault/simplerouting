@@ -91,7 +91,7 @@ static const bool windowsOS = false;
 #define RAIN_MULTIPLICATOR    100000         // for rain display kg m-2 s-1
 #define MAX_TIME_SCALE        5760           // for timeScale display. A multiplier of 2,3,4,5,6,8,10,12,16,18,24,48i...
 #define MAIL_TIME_OUT         5              // second
-#define MAX_N_TRY             4              // max try number gor meteoconsult download
+#define MAX_N_TRY             4              // max try number for meteoconsult download
 #define MAX_LEVEL_POI_VISIBLE 5              // for point of interest visibility
 #define SEP_WIDTH             40             // separator in menus
 #define MAX_VISIBLE_SHORTNAME 10             // for gribInfo. Maximum number of shortname displayed
@@ -1135,7 +1135,7 @@ static gboolean drawClosest (cairo_t *cr) {
    CAIRO_SET_SOURCE_RGB_RED(cr);
    for (int i = 0; i < nIsoc; i++) {
       pt = isocArray [i* MAX_SIZE_ISOC + isoDesc [i].closest];
-      //printf ("lat: %.2lf, lon: %.2lf\n", pt.lat, pt.lon); 
+      // printf ("lat: %.2lf, lon: %.2lf\n", pt.lat, pt.lon); 
       x = getX (pt.lon); 
       y = getY (pt.lat); 
       cairo_arc (cr, x, y, 2, 0, 2 * G_PI);
@@ -1151,7 +1151,7 @@ static gboolean drawFocal (cairo_t *cr) {
    for (int i = 0; i < nIsoc; i++) {
       lat = isoDesc [i].focalLat;
       lon = isoDesc [i].focalLon;
-      //printf ("lat: %.2lf, lon: %.2lf\n", pt.lat, pt.lon); 
+      // printf ("lat: %.2lf, lon: %.2lf\n", lat, lon); 
       x = getX (lon); 
       y = getY (lat); 
       cairo_arc (cr, x, y, 2, 0, 2 * G_PI);
@@ -1944,11 +1944,11 @@ static void drawGribCallback (GtkDrawingArea *area, cairo_t *cr, int width, int 
    drawOrthoRoute (cr, ORTHO_ROUTE_PARAM);
    drawLoxoRoute (cr);
 
-   if ((route.n != 0) && (isfinite(route.totDist)) && (route.totDist > 0)) {
-      if (par.closestDisp) drawClosest (cr);
-      if (par.focalDisp) drawFocal (cr);
+   if ((route.n != 0) && (isfinite (route.totDist)) && (route.totDist > 0)) {
       drawAllIsochrones (cr, par.style);
       drawAllRoutes (cr);
+      if (par.closestDisp) drawClosest (cr);
+      if (par.focalDisp) drawFocal (cr);
    }
 
    // circle (cr, par.pOr.lon, par.pOr.lat, 0.0, 0.0, 0.0);
@@ -4785,7 +4785,7 @@ static void *getGribWebAll (void *userData) {
          ret = GRIB_UNCOMPLETE;
    }
    else
-      ret = 0;
+      ret = GRIB_ERROR;
       
    g_mutex_lock (&warningMutex);
    snprintf (statusbarWarningStr, sizeof (statusbarWarningStr), "Download Done");

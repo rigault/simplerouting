@@ -25,7 +25,9 @@
 extern double fPointLoss (int shipIndex, int type, double tws, bool fullPack);
 extern double fTimeToRecupOnePoint (double tws);
 
-#define LIMIT    100                            // for forwardSectorOptimize
+#define LIMIT           50                      // for forwardSectorOptimize
+#define MIN_PT          2                       // for forwardSectorOptimize
+#define MIN_VMC_RATIO   0.8                     // for forwardSectorOptimize
 
 /*! global variables */
 Pp      *isocArray = NULL;                      // list of isochrones Two dimensions array : maxNIsoc  * MAX_SIZE_ISOC
@@ -49,7 +51,7 @@ static struct {
    double dd;
    double vmc;
    double nPt;
-} sector [2][MAX_SIZE_ISOC];                    // we keep even and odd last sectors
+} sector [2][MAX_N_SECTORS];                    // we keep even and odd last sectors
 
 
 /*! return distance from point X do segment [AB]. Meaning to H, projection of X en [AB] */
@@ -109,7 +111,7 @@ static inline int findFirst (int nIsoc) {
 
 /*! initialization of sector */
 static inline void initSector (int nIsoc, int nMax) {
-   for (int i = 0; i < nMax; i++) {
+   for (int i = 0; i < nMax; i += 1) {
       sector [nIsoc][i].dd = DBL_MAX;
 	   sector [nIsoc][i].vmc = 0;
       sector [nIsoc][i].nPt = 0;
@@ -127,7 +129,8 @@ static inline int forwardSectorOptimize (const Pp *pOr, const Pp *pDest, int nIs
    double alpha, theta;
    double thetaStep = 360.0 / par.nSectors;
    double focalLat, focalLon; // center of sectors
-   const double denominator = cos (DEG_TO_RAD * (pOr->lat + pDest->lat)/2);
+   const double denominator = cos (DEG_TO_RAD * (pOr->lat + pDest->lat) / 2);
+   double pOrToPDestDirectHdg = directCap (pOr->lat, pOr->lon, pDest->lat, pDest->lon);
 
    if (denominator < epsilon * epsilon) { // really small !
       fprintf (stderr, "In forwardSectorOptimize, Error denominator: %.8lf\n", denominator);
@@ -140,8 +143,8 @@ static inline int forwardSectorOptimize (const Pp *pOr, const Pp *pDest, int nIs
    }
    else {
       double dist = pOr->dd - isoDesc [nIsoc - LIMIT].distance - par.jFactor;
-      double dLat = dist * cos (DEG_TO_RAD * pOrToPDestCog);               // nautical miles in N S direction
-      double dLon = dist * sin (DEG_TO_RAD * pOrToPDestCog) / denominator; // nautical miles in E W direction
+      double dLat = dist * cos (DEG_TO_RAD * pOrToPDestDirectHdg);               // nautical miles in N S direction
+      double dLon = dist * sin (DEG_TO_RAD * pOrToPDestDirectHdg) / denominator; // nautical miles in E W direction
       focalLat = pOr->lat + dLat / 60.0; 
       focalLon = pOr->lon + dLon / 60.0;
       if (focalLat  < -90.0 || focalLat > 90.0) {
@@ -165,8 +168,8 @@ static inline int forwardSectorOptimize (const Pp *pOr, const Pp *pDest, int nIs
 
    // all points are distributed in sectors
    for (int i = 0; i < isoLen; i += 1) {
-      alpha = orthoCap (focalLat, focalLon, isoList [i].lat, isoList [i].lon);
-      theta = pOrToPDestCog - alpha;
+      alpha = directCap (focalLat, focalLon, isoList [i].lat, isoList [i].lon);
+      theta = pOrToPDestDirectHdg - alpha;
       theta = fmod (theta + 360.0, 360.0);
       iSector = round ((360.0 - theta) / thetaStep);
 		if ((isoList [i].dd < sector [currentSector][iSector].dd) && (isoList [i].vmc > sector [currentSector] [iSector].vmc)) {
@@ -180,9 +183,10 @@ static inline int forwardSectorOptimize (const Pp *pOr, const Pp *pDest, int nIs
    k = 0;
    for (iSector = 0; iSector < par.nSectors; iSector++) {
       bool weKeep = false;
-      if ((sector [currentSector][iSector].dd < DBL_MAX - 1)                        // not empty
-         && (sector [currentSector][iSector].vmc > 0.6 * isoDesc [nIsoc-1].bestVmc) // VMC not too bad
-         && (sector [currentSector][iSector].vmc < pOr->dd * 1.1)) {                // DD is not behind pOr ! 
+      if ((sector [currentSector][iSector].dd < DBL_MAX - 1)                                  // not empty
+         && (sector [currentSector][iSector].vmc > MIN_VMC_RATIO * isoDesc [nIsoc-1].bestVmc) // VMC not too bad
+         && (sector [currentSector][iSector].vmc < pOr->dd * 1.1)                             // DD is not behind pOr ! 
+         && (sector [currentSector][iSector].nPt >= MIN_PT)) {
 
          switch (par.kFactor) {
          case 0:

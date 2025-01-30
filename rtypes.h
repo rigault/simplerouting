@@ -91,7 +91,7 @@
 #define MAX_N_COMPETITORS     10                // Number Max of competitors
 #define MAX_SIZE_SHIP_NAME    21                // see AIS specificatiions
 #define MAX_N_SAIL            8                 // Max number of sails in sailName table
-#define MAX_N_SECTORS         1000              // Max number of sectors for optimization of sectors
+#define MAX_N_SECTORS         3600              // Max number of sectors for optimization of sectors
 
 // NOAA or ECMWF or ARPEGE or AROME for web download or MAIL. Specific for current
 enum {NOAA_WIND, ECMWF_WIND, ARPEGE_WIND, AROME_WIND, MAIL, MAIL_SAILDOCS_CURRENT}; 
@@ -107,7 +107,7 @@ enum {NONE, ARROW, BARBULE};                    // wind representation
 enum {NOTHING, JUST_POINT, SEGMENT, BEZIER};    // bezier or segment representation
 enum {UNVISIBLE, NORMAL, CAT, PORT, NEW};       // for POI point of interest
 enum {RUNNING, STOPPED, NO_SOLUTION, EXIST_SOLUTION};          // for chooseDeparture.ret values and allCompetitors check
-enum {GRIB_STOPPED = -2, GRIB_RUNNING = -1, GRIB_ERROR = 0, GRIB_OK = 1, GRIB_UNCOMPLETE = 2};   // for readGribCheck and readCurentGribCheck
+enum {GRIB_STOPPED = -2, GRIB_RUNNING = -1, GRIB_ERROR = 0, GRIB_OK = 1, GRIB_UNCOMPLETE = 2, GRIB_ONLY_DOWNLOAD = 3}; // for readGribCheck and readCurentGribCheck
 enum {ROUTING_STOPPED = -2, ROUTING_ERROR = -1, ROUTING_RUNNING = 0};   // for routingLaunch
 enum {NO_ANIMATION, PLAY, LOOP};                // for animationActive status
 enum {WIND_DISP, GUST_DISP, WAVE_DISP, RAIN_DISP, PRESSURE_DISP}; // for display
