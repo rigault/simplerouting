@@ -227,5 +227,3 @@ void displayText (GtkApplication *app, const char *text, size_t maxLen, const ch
    gtk_window_present (GTK_WINDOW (textWindow));
 }
 
-
-

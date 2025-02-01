@@ -22,12 +22,15 @@
 #include "rutil.h"
 #include "grib.h"
 
+
 extern double fPointLoss (int shipIndex, int type, double tws, bool fullPack);
 extern double fTimeToRecupOnePoint (double tws);
 
+#define MAX_N_INTERVAL 1000                     // for chooseDeparture
 #define LIMIT           50                      // for forwardSectorOptimize
 #define MIN_PT          2                       // for forwardSectorOptimize
 #define MIN_VMC_RATIO   0.8                     // for forwardSectorOptimize
+#define MAX_N_HISTORY   20                      // for saveRoute
 
 /*! global variables */
 Pp      *isocArray = NULL;                      // list of isochrones Two dimensions array : maxNIsoc  * MAX_SIZE_ISOC
@@ -444,6 +447,10 @@ bool dumpRoute (const char *fileName, Pp dest) {
 /*! store current route in history */
 static void saveRoute (SailRoute *route) {
    // allocate or rallocate space for routes
+   if (historyRoute.n >= MAX_N_HISTORY) {
+      fprintf (stderr, "In saveRoute, Error: MAX_N_HISTORY reached: %d\n", MAX_N_HISTORY);
+      return;
+   }
    SailRoute *newRoutes = realloc (historyRoute.r, (historyRoute.n + 1) * sizeof(SailRoute));
    if (newRoutes == NULL) {
       fprintf (stderr, "In saveRoute, Error: Memory allocation failed\n");
@@ -1111,11 +1118,16 @@ void *routingLaunch () {
 void *bestTimeDeparture () {
    double minDuration = DBL_MAX, maxDuration = 0;
    int localRet;
-   chooseDeparture.bestTime = -1;
+   chooseDeparture.bestTime = -1.0;
    chooseDeparture.count = 0;
+   chooseDeparture.bestCount = -1;
    chooseDeparture.tStop = chooseDeparture.tEnd; // default value
 
-   for (int t = chooseDeparture.tBegin; t < chooseDeparture.tEnd; t += chooseDeparture.tStep) {
+   for (double t = chooseDeparture.tBegin; t < chooseDeparture.tEnd ; t += chooseDeparture.tInterval) {
+      if (chooseDeparture.count > MAX_N_INTERVAL) {
+         fprintf (stderr, "In bestTimeDeparture, chooseDeparture.count exced limit %d\n", chooseDeparture.count);
+         break;
+      }
       par.startTimeInHours = t;
       routingLaunch ();
       localRet = g_atomic_int_get (&route.ret);
@@ -1124,25 +1136,26 @@ void *bestTimeDeparture () {
          return NULL;
       }
       if (localRet > 0) {
-         chooseDeparture.t [t] = route.duration;
+         chooseDeparture.t [chooseDeparture.count] = route.duration;
          if (route.duration < minDuration) {
             minDuration = route.duration;
             chooseDeparture.bestTime = t;
+            chooseDeparture.bestCount = chooseDeparture.count;
          }
          if (route.duration > maxDuration) {
             maxDuration = route.duration;
          }
-         printf ("Count: %d, time %d, duration: %.2lf, min: %.2lf, bestTime: %d\n", \
+         printf ("Count: %d, time %.2lf, duration: %.2lf, min: %.2lf, bestTime: %.2lf\n", \
                  chooseDeparture.count, t, route.duration, minDuration, chooseDeparture.bestTime);
       }
       else {
          chooseDeparture.tStop = t;
-         printf ("Count: %d, time %d, Unreachable\n", chooseDeparture.count, t);
+         printf ("Count: %d, time %.2lf, Unreachable\n", chooseDeparture.count, t);
          break;
       }
       chooseDeparture.count += 1;
    }
-   if (chooseDeparture.bestTime != -1) {
+   if (chooseDeparture.bestCount >= 0) {
       par.startTimeInHours = chooseDeparture.bestTime;
       printf ("Solution exist: best startTime: %.2lf\n", par.startTimeInHours);
       chooseDeparture.minDuration = minDuration;

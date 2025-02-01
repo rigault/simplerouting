@@ -107,6 +107,7 @@ void optionManage (char option) {
       printf ("%s\n", buffer);
       break;
    case 'h': // help
+      printf ("Size of size_t : %zu bytes\n", sizeof (size_t));
 	   if ((f = fopen (par.cliHelpFileName, "r")) == NULL) {
 		   fprintf (stderr, "In optionManage, Error help: Impossible to read: %s\n", par.cliHelpFileName);
 		   break;

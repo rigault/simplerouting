@@ -173,14 +173,15 @@ typedef struct {
 typedef struct {
    int ret;
    int count;
+   int bestCount;
    int tBegin;
    int tEnd;
-   int tStep;
+   double tInterval; // time interval in decimal hours betwen tries
    int tStop;
    double t [MAX_N_TIME_STAMPS];
    double minDuration;
    double maxDuration;
-   int bestTime;
+   double bestTime;  // best time in decimal hours after grib time
 } ChooseDeparture;
 
 /*! Structure for geo map shputil */

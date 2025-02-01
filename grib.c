@@ -1,4 +1,4 @@
-/*! compilation: gcc -c grib.c `pkg-config --cflags glib-2.0` */
+long/*! compilation: gcc -c grib.c `pkg-config --cflags glib-2.0` */
 #include <glib.h>
 #include <float.h>   
 #include <limits.h>
@@ -33,7 +33,7 @@ double zoneTimeDiff (const Zone *zone1, const Zone *zone0) {
 
 /*! print Grib u v ... for all lat lon time information */
 void printGrib (const Zone *zone, const FlowP *gribData) {
-   int iGrib;
+   long iGrib;
    printf ("printGribAll\n");
    for (size_t  k = 0; k < zone->nTimeStamp; k++) {
       double t = zone->timeStamp [k];
@@ -62,7 +62,7 @@ static bool checkGrib (const Zone *zone, int iFlow, CheckGrib *check) {
    const int maxUV = 100;
    const int maxW = 20;
    memset (check, 0, sizeof (CheckGrib));
-   for (size_t iGrib = 0; iGrib < zone->nTimeStamp * zone->nbLat * zone->nbLon; iGrib++) {
+   for (size_t iGrib = 0; iGrib < zone->nTimeStamp * zone->nbLat * zone->nbLon; iGrib += 1) {
       if (tGribData [iFlow] [iGrib].u == MISSING) check->uMissing += 1;
 	   else if (fabs (tGribData [iFlow] [iGrib].u) > maxUV) check->uStrange += 1;
    
@@ -136,7 +136,8 @@ static bool uvPresentGrib (const Zone *zone) {
 /*! check lat, lon are consistent with indice 
 	return number of values */
 static int consistentGrib (const Zone *zone, int iFlow, double epsilon, int *nLatSuspects, int *nLonSuspects) {
-   int n = 0, iGrib;
+   int n = 0;
+   long iGrib;
    double lat, lon;
    *nLatSuspects = 0;
    *nLonSuspects = 0;
@@ -359,14 +360,14 @@ static inline void find4PointsAround (double lat, double lon,  double *latMin,
 }
 
 /*! return indice of lat in gribData wind or current  */
-static inline int indLat (double lat, const Zone *zone) {
-   return (int) round ((lat - zone->latMin)/zone->latStep);
+static inline long indLat (double lat, const Zone *zone) {
+   return (long) round ((lat - zone->latMin)/zone->latStep);
 }
 
 /*! return indice of lon in gribData wind or current */
-static inline int indLon (double lon, const Zone *zone) {
+static inline long indLon (double lon, const Zone *zone) {
    if (lon < zone->lonLeft) lon += 360;
-   return (int) round ((lon - zone->lonLeft)/zone->lonStep);
+   return (long) round ((lon - zone->lonLeft)/zone->lonStep);
 }
 
 /*! interpolation to get u, v, g (gust), w (waves) at point (lat, lon)  and time t */
@@ -674,9 +675,9 @@ static bool readGribParameters (const char *fileName, Zone *zone) {
 }
 
 /*! find index in gribData table */
-static inline int indexOf (int timeStep, double lat, double lon, const Zone *zone) {
-   int iLat = indLat (lat, zone);
-   int iLon = indLon (lon, zone);
+static inline long indexOf (int timeStep, double lat, double lon, const Zone *zone) {
+   long iLat = indLat (lat, zone);
+   long iLon = indLon (lon, zone);
    int iT = -1;
    for (iT = 0; iT < (int) zone->nTimeStamp; iT++) {
       if (timeStep == zone->timeStamp [iT])
@@ -694,14 +695,14 @@ static inline int indexOf (int timeStep, double lat, double lon, const Zone *zon
    return true if OK */
 bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
    FILE* f = NULL;
-   int err = 0, iGrib;
+   int err = 0;
+   long iGrib;
    long bitmapPresent  = 0, timeStep, oldTimeStep;
    double lat, lon, val, indicatorOfParameter;
    char shortName [MAX_SIZE_SHORT_NAME];
    size_t lenName;
    const long GUST_GFS = 180;
    char str [MAX_SIZE_LINE];
-   //static int count;
    memset (zone, 0,  sizeof (Zone));
    zone->wellDefined = false;
 
@@ -722,7 +723,7 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
       tGribData [iFlow] = NULL;
    }
    if ((tGribData [iFlow] = calloc ((zone->nTimeStamp + 1) * zone->nbLat * zone->nbLon, sizeof (FlowP))) == NULL) { // nTimeStamp + 1
-      fprintf (stderr, "In readGribAll, Errorcalloc tGribData [iFlow]\n");
+      fprintf (stderr, "In readGribAll, Error calloc tGribData [iFlow]\n");
       return false;
    }
    printf ("In readGribAll.: %s allocated\n", 
@@ -744,12 +745,11 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
    oldTimeStep = timeStep;
 
    // Loop on all the messages in a file
-   while ((h = codes_handle_new_from_file(0, f, PRODUCT_GRIB, &err)) != NULL) {
+   while ((h = codes_handle_new_from_file (0, f, PRODUCT_GRIB, &err)) != NULL) {
       if (err != CODES_SUCCESS) CODES_CHECK (err, 0);
-      //printf ("count ReadGribAll: %d\n", count++);
 
       // Check if a bitmap applies
-      CODES_CHECK(codes_get_long (h, "bitmapPresent", &bitmapPresent), 0);
+      CODES_CHECK (codes_get_long (h, "bitmapPresent", &bitmapPresent), 0);
       if (bitmapPresent) {
           CODES_CHECK(codes_set_double (h, "missingValue", MISSING), 0);
       }
@@ -785,10 +785,10 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
          if (! (zone -> anteMeridian))
             lon = lonCanonize (lon);
          // printf ("lon : %.2lf\n", lon);
-         iGrib = indexOf ((int) timeStep, lat, lon, zone);
+         iGrib = indexOf (timeStep, lat, lon, zone);
    
          if (iGrib == -1) {
-            fprintf (stderr, "In readGribAll: Error iGrib : %d\n", iGrib); 
+            fprintf (stderr, "In readGribAll: Error iGrib : %ld\n", iGrib); 
             free (tGribData [iFlow]); 
             tGribData [iFlow] = NULL;
             codes_handle_delete (h);
@@ -798,7 +798,7 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
             fclose (f);
             return false;
          }
-         //printf("%.2f %.2f %.2lf %ld %d %s\n", lat, lon, val, timeStep, iGrib, shortName);
+         // printf("%.2f %.2f %.2lf %ld %ld %s\n", lat, lon, val, timeStep, iGrib, shortName);
          tGribData [iFlow] [iGrib].lat = lat; 
          tGribData [iFlow] [iGrib].lon = lon; 
          if ((strcmp (shortName, "10u") == 0) || (strcmp (shortName, "ucurr") == 0))

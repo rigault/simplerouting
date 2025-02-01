@@ -61,7 +61,7 @@ static const bool windowsOS = false;
 #define EPSILON               0.0000001
 #define MAX_N_SURFACE         (24*MAX_N_DAYS_WEATHER + 1)            // 16 days with timeStep 1 hour
 #define MAIN_WINDOW_DEFAULT_WIDTH  1800
-#define MAIN_WINDOW_DEFAULT_HEIGHT 600
+#define MAIN_WINDOW_DEFAULT_HEIGHT 800
 #define APPLICATION_ID        "com.routing"  
 #define MIN_ZOOM_POI_VISIBLE  30
 #define BOAT_UNICODE          "⛵"
@@ -117,32 +117,41 @@ static const bool windowsOS = false;
 #define CAIRO_SET_SOURCE_RGBA_SELECTION(cr)        cairo_set_source_rgba (cr,1.0,0.0,0.0,0.5)                        // selection in semi-transparent red
 #define CAIRO_SET_SOURCE_RGBA_POLAR_TWS(cr)        cairo_set_source_rgba (cr,1.0,0.0,0.0,1.0)                        // specific tws polar red
 
-/*! Structure storing data required to update Grib request */
+/*! Structure storing data required to update Grib request. Used for: 
+   - web download (NOAA, ECMWF, ARPEGE, AROME...
+   - meteoconsilt download (Wind and Current)
+   - mail request (saildocs, mailasail)
+*/
 typedef struct {
-   GtkSpinButton *latMinSpin;
-   GtkSpinButton *lonLeftSpin;
-   GtkSpinButton *latMaxSpin;
-   GtkSpinButton *lonRightSpin;
-   GtkSpinButton *timeMaxSpin;
-   GtkWidget     *hhZBuffer;
-   GtkTextBuffer *urlBuffer;
-   GtkWidget     *dropDownTimeStep;
-   GtkWidget     *dropDownServ;
-   GtkWidget     *dropDownMail;
-   GtkWidget     *warning;
-   GtkWidget     *sizeEval; 
-   int typeWeb;  // NOAA_WIND or ECMWF_WIND or ARPEGE_WIND or AROME_WIND or MAIL 
-   int hhZ;      // Grib time run; 007, 06Z, ...
-   int mailService;
-   int latMax;
-   int latMin;
-   int lonLeft;
-   int lonRight;
-   int timeStep;   // in hours
-   int timeMax;    // in days
-   char url    [MAX_SIZE_MESSAGE * 4];
-   char object [MAX_SIZE_MESSAGE];  // for grib mail
-   char body   [MAX_SIZE_MESSAGE];  // for grib mail
+   GtkSpinButton *latMinSpin;   // for web and mail
+   GtkSpinButton *lonLeftSpin;  // for web and mail
+   GtkSpinButton *latMaxSpin;   // for web and mail
+   GtkSpinButton *lonRightSpin; // for web and mail
+   GtkSpinButton *timeMaxSpin;  // for web and mail
+   GtkWidget     *hhZBuffer;    // for web download and meteoconsult
+   GtkTextBuffer *urlBuffer;    // for web
+   GtkWidget     *dropDownTimeStep;  // for web
+   GtkWidget     *dropDownServ; // for web and mail
+   GtkWidget     *dropDownMail; // for mail
+   GtkWidget     *warning;      // for web and mail
+   GtkWidget     *sizeEval;     // for web
+   bool onlyDownload;           // true if only download in file, without decoding and loading
+   int typeWeb;                 // for web and mail: NOAA_WIND or ECMWF_WIND or ARPEGE_WIND or AROME_WIND or MAIL 
+   int hhZ;                     // for Web download ans meteoconsult. Grib time run; 007, 06Z, ...
+   int mailService;             // for mail
+   int latMax;                  // for web and mail
+   int latMin;                  // for web and mail
+   int lonLeft;                 // for web and mail
+   int lonRight;                // for web and mail
+   int timeStep;                // for web and mail. in hours
+   int timeMax;                 // // for web and mail. in days
+   char url      [MAX_SIZE_MESSAGE * 4]; // for web download and meteoconsult
+   char fileName [MAX_SIZE_LINE];        // for all
+   char object   [MAX_SIZE_MESSAGE];     //  for mail
+   char body     [MAX_SIZE_MESSAGE];     // for mail
+   GtkWidget  *urlEntry;            // for meteoconsult
+   int        index;                // for meteoconsult: geo zone (ex: ANTILLES, EUROPE, ...)
+   int        urlType;              // for meteoconsult: WIND or CURRENT
 } GribRequestData;
 
 static GribRequestData gribRequestData;
@@ -195,9 +204,9 @@ static int    typeFlow = WIND;                     // for openGrib.. WIND or CUR
 static bool   simulationReportExist = false;
 static bool   gpsTrace = false;                    // used to trace GPS position only one time per session
 static char   traceName [MAX_SIZE_FILE_NAME];      // global var for newTrace ()
-static char   gloGribFileName [MAX_SIZE_FILE_NAME];// name of grib File Name under request
 static char   selectedPort [MAX_SIZE_NAME];
-static GThread *gloThread;                         // global var for threads
+static GThread *gribThread;                        // global var for grib download and decoding threads
+static GThread *runThread;                         // global var for isochrone run threads
 static GMutex warningMutex;                        // mutex for warnin message
 static char   statusbarWarningStr [MAX_SIZE_TEXT]; // global var to store warning string
 static struct tm startInfo =  {0};                 // start date
@@ -208,17 +217,6 @@ static struct {
    guint  timer;
    int    active;
 } animation = {{1000, 500, 200, 100, 50, 20}, 0, NO_ANIMATION};
-
-/*! struct for meteo consult url Request */
-static struct {
-   GtkWidget  *hhZBuffer;
-   GtkWidget  *urlEntry;
-   char       outputFileName [MAX_SIZE_LINE];
-   char       url [MAX_SIZE_URL];
-   int        index;   // geo zone (ex: ANTILLES, EUROPE, ...)
-   int        hhZ;     // time run 
-   int        urlType; // WIND or CURRENT
-} urlRequest;
 
 /*! struct for dashboard */
 static struct {
@@ -263,6 +261,7 @@ static void competitorsDump();
 static void *readGribLaunch ();
 static void cbDropDownTStep (GObject *dropDown, GParamSpec *pspec, gpointer userData);
 static void cleanAll ();
+static void simulationReport ();
 
 /*! destroy the child window before exiting application */
 static void onParentDestroy (GtkWidget *widget, gpointer childWindow) {
@@ -279,15 +278,20 @@ static void onParentWindowDestroy(GtkWidget *widget, gpointer popWindow) {
 
 /*! stop child thread */
 static void stopChildThread () {
-   if (gloThread != NULL)
-      g_thread_unref (gloThread);
-   gloThread = NULL;
+   // grib threads, timers and global status
+   if (gribThread != NULL)
+      g_thread_unref (gribThread);
+   gribThread = NULL;
+   g_atomic_int_set (&gloStatusMailRequest, GRIB_STOPPED); // for mailGribCheck force stop
+   g_atomic_int_set (&readGribRet, GRIB_STOPPED);
+
+   if (runThread != NULL)
+      g_thread_unref (runThread);
+   runThread = NULL;
    g_atomic_int_set (&route.ret, ROUTING_STOPPED);         // for route calculation stop BUG
    g_atomic_int_set (&chooseDeparture.ret, STOPPED);       // to force stop of choose departure
    g_atomic_int_set (&competitors.ret, STOPPED);           // to force stop when all competitors run
-   g_atomic_int_set (&gloStatusMailRequest, GRIB_STOPPED); // for mailGribCheck force stop
-   g_atomic_int_set (&readGribRet, GRIB_STOPPED);          // for NOAA and ECMWF force stop
-   // printf ("Thread killed\n");
+   printf ("Thread killed\n");
 }
 
 /*! destroy waitMessage */
@@ -306,17 +310,31 @@ static void popoverFinish (GtkWidget *pop) {
    }
 }
 
-/*! intSpin for change */
-static void intSpinUpdate (GtkSpinButton *spin_button, gpointer userData) {
+/*! intSpin */
+static void intSpinUpdate (GtkSpinButton *spinButton, gpointer userData) {
    int *value = (int *) userData;
-   *value = gtk_spin_button_get_value_as_int (spin_button);
+   *value = gtk_spin_button_get_value_as_int (spinButton);
 }
 
-/*! intSpin for change */
-static void intSpinUpdateWithQueueDraw (GtkSpinButton *spin_button, gpointer userData) {
+/*! intSpin  */
+static void intSpinUpdateWithQueueDraw (GtkSpinButton *spinButton, gpointer userData) {
    int *value = (int *) userData;
-   *value = gtk_spin_button_get_value_as_int (spin_button);
+   *value = gtk_spin_button_get_value_as_int (spinButton);
    gtk_widget_queue_draw (drawing_area); // Draw all
+}
+
+/*! hour Spin for onChooseDepartureButtonClicked */
+static void hourSpinUpdate (GtkSpinButton *spinButton, gpointer userData) {
+   double *value = (double *) userData;
+   int hours = gtk_spin_button_get_value_as_int (spinButton);
+   *value = fmod (*value, 1.0) + hours;
+}
+
+/*! hour min for onChooseDepartureButtonClicked */
+static void minSpinUpdate (GtkSpinButton *spinButton, gpointer userData) {
+   double *value = (double *) userData;
+   int min = gtk_spin_button_get_value_as_int (spinButton);
+   *value = floor (*value) + (double) min / 60.0;
 }
 
 /*! udpate title of window with right grib file name */
@@ -705,6 +723,8 @@ static void drawTrace (cairo_t *cr) {
    cairo_set_line_width (cr, 0.5);
    CAIRO_SET_SOURCE_RGB_BLACK (cr);
 
+   if (par.traceFileName [0] == '\0') 
+      return;
    if ((f = fopen (par.traceFileName, "r")) == NULL) {
       fprintf (stderr, "In drawTrace: Error Impossible to open: %s\n", par.traceFileName);
       return;
@@ -2551,11 +2571,10 @@ static gboolean allCompetitorsCheck (gpointer data) {
       snprintf (str, MAX_SIZE_LINE, "In allCompetitorsCheck: Unknown compretitors.ret: %d\n", localRet);
       break;
    }
-   g_source_remove (routingTimeout); // timer stopped
    waitMessageDestroy ();
-   if (gloThread != NULL)
-      g_thread_unref (gloThread);
-   gloThread = NULL;
+   if (runThread != NULL)
+      g_thread_unref (runThread);
+   runThread = NULL;
    if (str [0] != '\0')
       infoMessage (str, GTK_MESSAGE_WARNING);
    return FALSE;
@@ -2586,12 +2605,12 @@ static void onOkButtonCalClicked (GtkWidget *widget, gpointer window) {
       freeHistoryRoute ();                   // liberate history
       
       waitMessage ("All competitors Running", "It can take a while !!!\nWatch status bar ");
-      gloThread = g_thread_new ("All Competitors", allCompetitors, NULL); // launch routing
+      runThread = g_thread_new ("All Competitors", allCompetitors, NULL); // launch routing
       routingTimeout = g_timeout_add (ROUTING_TIME_OUT, allCompetitorsCheck, NULL);
    }
    else {
       waitMessage ("Isochrone building", "Be patient\nWatch status bar");
-      gloThread = g_thread_new ("routingLaunch", routingLaunch, NULL); // launch routing gloThread is global
+      runThread = g_thread_new ("routingLaunch", routingLaunch, NULL); // launch routing runThread is global
       routingTimeout = g_timeout_add (ROUTING_TIME_OUT, routingCheck, NULL);
    }
 }
@@ -2625,6 +2644,7 @@ static void dateUpdate (GtkCalendar *calendar, gpointer userData) {
    startTime->tm_mday = g_date_time_get_day_of_month (date);
    startTime->tm_mon = g_date_time_get_month (date) - 1;
    startTime->tm_year = g_date_time_get_year (date) - 1900;
+   mktime (startTime);
 }
 
 /*! get start date and time for routing. */
@@ -2653,12 +2673,12 @@ static void fCalendar (struct tm *start) {
    // Create labels and selection buttons
    GtkWidget *labelHour = gtk_label_new ("Hour");
    GtkWidget *spinHour = gtk_spin_button_new_with_range (0, 23, 1);
-   gtk_spin_button_set_value(GTK_SPIN_BUTTON (spinHour), start->tm_hour);
+   gtk_spin_button_set_value (GTK_SPIN_BUTTON (spinHour), start->tm_hour);
    g_signal_connect (spinHour, "value-changed", G_CALLBACK (intSpinUpdate), &start->tm_hour);
 
    GtkWidget *labelMinutes = gtk_label_new ("Minutes");
    GtkWidget *spinMinutes = gtk_spin_button_new_with_range (0, 59, 1);
-   gtk_spin_button_set_value(GTK_SPIN_BUTTON (spinMinutes), start->tm_min);
+   gtk_spin_button_set_value (GTK_SPIN_BUTTON (spinMinutes), start->tm_min);
    g_signal_connect (spinMinutes, "value_changed", G_CALLBACK (intSpinUpdate), &start->tm_min);
 
    // Create horizontal box
@@ -3004,7 +3024,7 @@ static gboolean routingCheck (gpointer data) {
    case ROUTING_ERROR: // error
       snprintf (str, MAX_SIZE_LINE, "Check logs");
       break;
-   default: // route ret contains number of steps to reach pDest or NIL if unreached
+   default:
       if (! isfinite (route.totDist) || (route.totDist <= 1)) {
          snprintf (str, MAX_SIZE_LINE,  "No route calculated. Check if wind !");
          break;
@@ -3015,9 +3035,9 @@ static gboolean routingCheck (gpointer data) {
       logReport (0);
    }
    waitMessageDestroy ();
-   if (gloThread != NULL)
-      g_thread_unref (gloThread);
-   gloThread = NULL;
+   if (runThread != NULL)
+      g_thread_unref (runThread);
+   runThread = NULL;
    if (str [0] != '\0')
       infoMessage (str, GTK_MESSAGE_ERROR);
    gtk_widget_queue_draw (drawing_area); // draw all including isochrones
@@ -3042,7 +3062,7 @@ static gboolean bestDepartureCheck (gpointer data) {
       g_mutex_lock (&warningMutex);
       if (chooseDeparture.tEnd  != 0) {
          snprintf (str, sizeof (str),"Evaluation count: %d  %.0lf%%", chooseDeparture.count, 
-            100.0 * (chooseDeparture.count * chooseDeparture.tStep) / chooseDeparture.tEnd);
+            100.0 * (chooseDeparture.count * chooseDeparture.tInterval) / chooseDeparture.tEnd);
          statusWarningMessage (statusbar, str);
       }
       g_mutex_unlock (&warningMutex);
@@ -3056,23 +3076,20 @@ static gboolean bestDepartureCheck (gpointer data) {
       break;
    case EXIST_SOLUTION:
       simulationReportExist = true;
-      snprintf (str, MAX_SIZE_LINE,\
-         "The quickest trip lasts %.2lf hours, start time: %d hours after beginning of Grib\nSee simulation Report for details", 
-         chooseDeparture.minDuration, chooseDeparture.bestTime);
       initStart (&startInfo);
       selectedPointInLastIsochrone = (nIsoc <= 1) ? 0 : isoDesc [nIsoc -1].closest; 
       niceReport (&route, route.calculationTime);
+      simulationReport ();
       gtk_widget_queue_draw (drawing_area);
       break;
    default: 
       snprintf (str, MAX_SIZE_LINE, "In bestDepartureCheck: Unknown chooseDeparture.ret: %d\n", localRet);
       break;
    }
-   g_source_remove (routingTimeout); // timer stopped
    waitMessageDestroy ();
-   if (gloThread != NULL)
-      g_thread_unref (gloThread);
-   gloThread = NULL;
+   if (runThread != NULL)
+      g_thread_unref (runThread);
+   runThread = NULL;
    if (str [0] != '\0')
       infoMessage (str, GTK_MESSAGE_WARNING);
    return FALSE;
@@ -3080,11 +3097,22 @@ static gboolean bestDepartureCheck (gpointer data) {
 
 /*! when OK in departure box is clicked */
 static void onOkButtonDepClicked (GtkWidget *widget, gpointer theWindow) {
-   g_atomic_int_set (&chooseDeparture.ret , RUNNING); // mean not terminated
+   const double epsilon = 5.0/60.0; // 4 minutes intrerval min
+   if (chooseDeparture.tInterval < epsilon) {
+      infoMessage ("Choose a correct time interval", GTK_MESSAGE_WARNING);
+      return;
+   }
+   if ((chooseDeparture.tEnd - chooseDeparture.tBegin) < chooseDeparture.tInterval) {
+      infoMessage ("Choose a correct window time", GTK_MESSAGE_WARNING);
+      return;
+   }
    simulationReportExist = false;
+   g_atomic_int_set (&chooseDeparture.ret , RUNNING); // mean not terminated
+   freeHistoryRoute ();                               // liberate history
    waitMessage ("Simulation Running", "It can take a while !!!\nWatch status bar...");
-   gloThread = g_thread_new ("chooseDepartureLaunch", bestTimeDeparture, NULL); // launch routing
+   runThread = g_thread_new ("chooseDepartureLaunch", bestTimeDeparture, NULL); // launch routing
    routingTimeout = g_timeout_add (ROUTING_TIME_OUT, bestDepartureCheck, NULL);
+
    if ((theWindow != NULL) && GTK_IS_WINDOW (theWindow))
       gtk_window_destroy (GTK_WINDOW (theWindow));
 }
@@ -3102,7 +3130,7 @@ static void onChooseDepartureButtonClicked (GtkWidget *widget, gpointer data) {
      infoMessage ("Destination point not in wind zone", GTK_MESSAGE_WARNING);
      return;
    }
-   chooseDeparture.tStep = 1;
+   chooseDeparture.tInterval = 1.0;
    chooseDeparture.tBegin = 0;
    chooseDeparture.tEnd = zone.timeStamp [zone.nTimeStamp - 1];
    
@@ -3117,15 +3145,26 @@ static void onChooseDepartureButtonClicked (GtkWidget *widget, gpointer data) {
    gtk_grid_set_column_spacing (GTK_GRID (grid), 10);
    gtk_grid_set_row_spacing (GTK_GRID (grid), 5);
 
-   /// time step line
-   GtkWidget *labelTimeStep = gtk_label_new ("Time Step");
-   GtkWidget *spinButtonTimeStep = gtk_spin_button_new_with_range (1, 12, 1);
-   gtk_spin_button_set_value (GTK_SPIN_BUTTON (spinButtonTimeStep), chooseDeparture.tStep);
-   g_signal_connect (spinButtonTimeStep, "value-changed", 
-      G_CALLBACK (intSpinUpdate), &chooseDeparture.tStep);
-   gtk_label_set_xalign(GTK_LABEL (labelTimeStep), 0);
-   gtk_grid_attach(GTK_GRID (grid), labelTimeStep,      0, 0, 1, 1);
-   gtk_grid_attach(GTK_GRID (grid), spinButtonTimeStep, 1, 0, 1, 1);
+   /// time interval line
+   GtkWidget *labelInterval = gtk_label_new ("Interval ");
+   gtk_grid_attach (GTK_GRID (grid), labelInterval, 0, 0, 1, 1);
+
+   GtkWidget *spinButtonHourInterval = gtk_spin_button_new_with_range (0, 12, 1);
+   gtk_spin_button_set_value (GTK_SPIN_BUTTON (spinButtonHourInterval), floor (chooseDeparture.tInterval));
+   g_signal_connect (spinButtonHourInterval, "value-changed", G_CALLBACK (hourSpinUpdate), &chooseDeparture.tInterval);
+   gtk_label_set_xalign (GTK_LABEL (labelInterval), 0);
+   GtkWidget *labelIntervalH = gtk_label_new ("H");
+   gtk_grid_attach (GTK_GRID (grid), spinButtonHourInterval, 1, 0, 1, 1);
+   gtk_grid_attach (GTK_GRID (grid), labelIntervalH, 2, 0, 1, 1);
+
+   GtkWidget *spinButtonMinInterval = gtk_spin_button_new_with_range (0, 59, 1);
+   gtk_spin_button_set_value (GTK_SPIN_BUTTON (spinButtonMinInterval), 60 * fmod (chooseDeparture.tInterval, 1.0));
+   g_signal_connect (spinButtonMinInterval, "value-changed", G_CALLBACK (minSpinUpdate), &chooseDeparture.tInterval);
+   //gtk_label_set_xalign(GTK_LABEL (labelInterval), 0);
+   labelInterval = gtk_label_new ("Hours");
+   gtk_grid_attach (GTK_GRID (grid), spinButtonMinInterval, 3, 0, 1, 1);
+   labelInterval = gtk_label_new ("Min");
+   gtk_grid_attach (GTK_GRID (grid), labelInterval, 4, 0, 1, 1);
    
    /// time start line
    GtkWidget *labelMini = gtk_label_new ("Min Start After Grib");
@@ -3134,8 +3173,11 @@ static void onChooseDepartureButtonClicked (GtkWidget *widget, gpointer data) {
    g_signal_connect (spinButtonMini, "value-changed", 
       G_CALLBACK (intSpinUpdate), &chooseDeparture.tBegin);
    gtk_label_set_xalign(GTK_LABEL (labelMini), 0);
+   GtkWidget *labelHours = gtk_label_new ("Hours");
+   gtk_label_set_xalign(GTK_LABEL (labelHours), 0);
    gtk_grid_attach(GTK_GRID (grid), labelMini,      0, 1, 1, 1);
    gtk_grid_attach(GTK_GRID (grid), spinButtonMini, 1, 1, 1, 1);
+   gtk_grid_attach(GTK_GRID (grid), labelHours,     2, 1, 1, 1);
    
    /// time max line
    GtkWidget *labelMaxi = gtk_label_new ("Max Start After Grib");
@@ -3143,9 +3185,11 @@ static void onChooseDepartureButtonClicked (GtkWidget *widget, gpointer data) {
    gtk_spin_button_set_value (GTK_SPIN_BUTTON (spinButtonMaxi), chooseDeparture.tEnd);
    g_signal_connect (spinButtonMaxi, "value-changed", 
       G_CALLBACK (intSpinUpdate), &chooseDeparture.tEnd);
+   labelHours = gtk_label_new ("Hours");
    gtk_label_set_xalign(GTK_LABEL (labelMaxi), 0);
-   gtk_grid_attach(GTK_GRID (grid), labelMaxi,      0, 2, 1, 1);
-   gtk_grid_attach(GTK_GRID (grid), spinButtonMaxi, 1, 2, 1, 1);
+   gtk_grid_attach (GTK_GRID (grid), labelMaxi,      0, 2, 1, 1);
+   gtk_grid_attach (GTK_GRID (grid), spinButtonMaxi, 1, 2, 1, 1);
+   gtk_grid_attach (GTK_GRID (grid), labelHours,     2, 2, 1, 1);
 
    GtkWidget *hBox = OKCancelLine (onOkButtonDepClicked, depWindow);
 
@@ -3277,22 +3321,13 @@ static void onNowButtonClicked (GtkWidget *widget, gpointer data) {
 
 /*! display isochrones */
 static void isocDump () {
-   char *buffer = NULL;
-   char footer [MAX_SIZE_LINE];
-   const int nPointFactor = 1000;
-   size_t length = nIsoc * MAX_SIZE_LINE * nPointFactor;
-   if (nIsoc == 0) {
-      infoMessage ("No isochrone", GTK_MESSAGE_WARNING);
-      return;
-   } 
-   if ((buffer = (char *) malloc (length)) == NULL) {
-      infoMessage ("Not enough memory", GTK_MESSAGE_ERROR); 
-      return;
-   }
-   allIsocToStr (buffer, length); 
-   snprintf (footer, sizeof (footer), "Number of isochrones: %d", nIsoc); 
-   displayText (app, buffer, strlen (buffer), "Isochrones", footer);
-   free (buffer);
+   char str [MAX_SIZE_LINE];
+   const char *fileContents [] = {par.dumpIFileName};
+   formatThousandSep (str, sizeof (str), getFileSize (par.dumpIFileName));
+   char *title = g_strdup_printf ("Dump %d sochrones", nIsoc);
+   if (! myEditor (app, fileContents, 1, title, NULL))
+      infoMessage ("impossible to open Isochrone dump", GTK_MESSAGE_ERROR);
+   g_free (title);
 }
 
 /*! display isochrone descriptors */
@@ -3350,16 +3385,11 @@ static void newTrace () {
    entryBox ("New Trace", "Trace: ", traceName, newTraceResponse);
 }
 
-/*! call back after trace */
-static void cbEditTrace () {
-   if ((windowEditor != NULL) && GTK_IS_WINDOW (windowEditor))
-      gtk_window_destroy (GTK_WINDOW (windowEditor));
-}
-
 /*! Edit trace  */
 static void editTrace () {
    const char *fileContents [] = {par.traceFileName};
-   myEditor (app, fileContents, 1, "Trace edition", cbEditTrace);
+   if (! myEditor (app, fileContents, 1, "Trace edition", NULL))
+      infoMessage ("impossible to open Trace", GTK_MESSAGE_ERROR);
 }
 
 /*! add POR to current trace */
@@ -3424,6 +3454,13 @@ static void traceReport () {
    gtk_window_present (GTK_WINDOW (traceWindow));
 }
 
+/*! display log */
+static void logDump () {
+   const char *fileContents [] = {par.logFileName};
+   if (! myEditor (app, fileContents, 1, "Log Dump" , NULL))
+      infoMessage ("impossible to open log", GTK_MESSAGE_ERROR);
+}
+
 /*! all displayText with right parameters */
 void fileDump (GSimpleAction *action, GVariant *parameter, gpointer user_data) {
    const char *fileName = (const char *) user_data;
@@ -3444,7 +3481,7 @@ void fileDump (GSimpleAction *action, GVariant *parameter, gpointer user_data) {
    }
 }
 
-/* call back for openScenario */
+/* call back for openTrace */
 static void cbOpenTrace (GObject* source_object, GAsyncResult* res, gpointer data) {
    GFile* file = gtk_file_dialog_open_finish ((GtkFileDialog *) source_object, res, NULL);
    if (file != NULL) {
@@ -3597,7 +3634,7 @@ static void cbSimulationReport (GtkDrawingArea *area, cairo_t *cr,
    cairo_set_line_width (cr, 1);
 
    if ((chooseDeparture.tStop - chooseDeparture.tBegin == 0) || ((int) chooseDeparture.maxDuration == 0)) {
-      fprintf (stderr, "In cbSimukationReport: unapropriate values for chooseDeparture\n");
+      fprintf (stderr, "In cbSimulationReport: unapropriate values for chooseDeparture\n");
       return;
    }
    
@@ -3605,13 +3642,13 @@ static void cbSimulationReport (GtkDrawingArea *area, cairo_t *cr,
    const int xRight = width - 20;
    const int yTop = 10;
    const int yBottom = height - 25;
-   const int xk = (xRight - xLeft) / (chooseDeparture.tStop -chooseDeparture.tBegin);  
+   const int xk = (xRight - xLeft) / chooseDeparture.count;  
    const int yk = (yBottom - yTop) / (int) chooseDeparture.maxDuration;
    const int constDelta = 5;
    const int rectangleWidth = CLAMP (xk, 1, 20); // between 1 and 20
 
-   // Draw horizontal line wirh arrow
-   CAIRO_SET_SOURCE_RGB_BLACK(cr);
+   // Draw horizontal line with arrow
+   CAIRO_SET_SOURCE_RGB_BLACK (cr);
    cairo_move_to (cr, xLeft,  yBottom );
    cairo_line_to (cr, xRight, yBottom);
    cairo_line_to (cr, xRight - constDelta, yBottom + constDelta); // for arrow
@@ -3620,7 +3657,7 @@ static void cbSimulationReport (GtkDrawingArea *area, cairo_t *cr,
    cairo_line_to (cr, xRight - constDelta, yBottom - constDelta);
    cairo_stroke (cr);
    
-   // Draw vertical line wirh arrow
+   // Draw vertical line with arrow
    cairo_move_to (cr, xLeft, yBottom);
    cairo_line_to (cr, xLeft, yTop);
    cairo_line_to (cr, xLeft - constDelta, yTop + constDelta);
@@ -3629,35 +3666,42 @@ static void cbSimulationReport (GtkDrawingArea *area, cairo_t *cr,
    cairo_line_to (cr, xLeft + constDelta, yTop + constDelta);
    cairo_stroke (cr);
    int h; 
-   CAIRO_SET_SOURCE_RGB_GRAY(cr);
-   for (int t = chooseDeparture.tBegin; t < chooseDeparture.tStop; t += chooseDeparture.tStep) {
-      if (t != chooseDeparture.bestTime) {
-         h = (int) chooseDeparture.t [t] * yk;
-         cairo_rectangle (cr, xLeft + t * xk, yBottom - h, rectangleWidth, h);
+   CAIRO_SET_SOURCE_RGB_GRAY (cr);
+   // one gray vertical rectangle for each value
+   for (int count = 0; count < chooseDeparture.count; count += 1) {
+      if (count != chooseDeparture.bestCount) {
+         h = (int) (chooseDeparture.t [count] * yk);
+         cairo_rectangle (cr, xLeft + count * xk, yBottom - h, rectangleWidth, h);
       }
    }
    cairo_fill (cr);
-   CAIRO_SET_SOURCE_RGB_GREEN(cr);
-   h = (int) chooseDeparture.t [chooseDeparture.bestTime] * yk;
-   cairo_rectangle (cr, xLeft + chooseDeparture.bestTime * xk, yBottom - h, rectangleWidth, h);
+   CAIRO_SET_SOURCE_RGB_GREEN (cr);
+   // oone grreen vertical rectangle for the best value
+   h = (int) chooseDeparture.t [chooseDeparture.bestCount] * yk;
+   cairo_rectangle (cr, xLeft + chooseDeparture.bestCount * xk, yBottom - h, rectangleWidth, h);
    cairo_fill (cr);
 
-   CAIRO_SET_SOURCE_RGB_BLACK(cr);
+   CAIRO_SET_SOURCE_RGB_BLACK (cr);
    // Draw time labels
    cairo_select_font_face (cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
    cairo_set_font_size (cr, 10);
 
-   const int displayStep = MAX (1, (chooseDeparture.tStop - chooseDeparture.tBegin) / 20);
-   
-   for (int t = chooseDeparture.tBegin; t < chooseDeparture.tStop; t += displayStep) {
-      x = xLeft + (rectangleWidth/2) + xk * t;
+   int lastX = xLeft;
+   const int minXLibelle = 50;
+   // Horizontal libelles for time 
+   for (int count = 0; count < chooseDeparture.count; count += 1) {
+      x = xLeft + xk * count;
+      if (((x - lastX) < minXLibelle) && (count != 0)) // avoid print too many closed libelles
+         continue;
       cairo_move_to (cr, x, yBottom + 10);
-      snprintf (str, sizeof (str),"%d", t); 
+      double t = chooseDeparture.tBegin + count * chooseDeparture.tInterval;
+      snprintf (str, sizeof (str),"%02.0lf:%02.0lf", floor (t), 60.0 * fmod (t, 1.0)); 
       cairo_show_text (cr, str);
+      lastX = x;
    }
    cairo_stroke(cr);
 
-   // Draw duration labels;
+   // Draw vertical duration labels;
    const int durationStep = (int) (chooseDeparture.maxDuration) / 10;
    for (int duration = 0; duration < chooseDeparture.maxDuration ; duration += durationStep) {
       y = yBottom - duration * yk;
@@ -3668,31 +3712,41 @@ static void cbSimulationReport (GtkDrawingArea *area, cairo_t *cr,
       cairo_move_to (cr, xLeft, y);
       cairo_line_to (cr, xRight, y);
       cairo_stroke (cr);
-      CAIRO_SET_SOURCE_RGB_BLACK(cr);
+      CAIRO_SET_SOURCE_RGB_BLACK (cr);
    }
-   cairo_stroke(cr);
+   cairo_stroke (cr);
 }
 
 /*! display the report of simulation for best time departure */
 static void simulationReport () { 
    char line [MAX_SIZE_LINE];
+   char strDate [MAX_SIZE_DATE];
    if (! simulationReportExist) {
-      printf ("no simulation available\n");
       infoMessage ("No simulation available", GTK_MESSAGE_WARNING);
       return;
    }
-   snprintf (line, sizeof (line), \
-      "Simulation Report. Min Duration: %.2lf hours, Best Departure Time:  %d hours after beginning of Grib", \
-      chooseDeparture.minDuration, chooseDeparture.bestTime);
-
    GtkWidget *simulationWindow = gtk_application_window_new (GTK_APPLICATION (app));
-   gtk_window_set_title (GTK_WINDOW(simulationWindow), line);
+   gtk_window_set_title (GTK_WINDOW (simulationWindow), "Simulation Report. Duration in hours as a function of time departure after grib time");
    gtk_window_set_default_size (GTK_WINDOW(simulationWindow), 1200, 400);
-   g_signal_connect (window, "destroy", G_CALLBACK(onParentDestroy), simulationWindow);
+   g_signal_connect (window, "destroy", G_CALLBACK (onParentDestroy), simulationWindow);
+
+   GtkWidget *vBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+   gtk_window_set_child (GTK_WINDOW (simulationWindow), vBox);
 
    GtkWidget *simulDrawingArea = gtk_drawing_area_new ();
+   gtk_widget_set_hexpand (simulDrawingArea, TRUE);
+   gtk_widget_set_vexpand (simulDrawingArea, TRUE);
    gtk_drawing_area_set_draw_func (GTK_DRAWING_AREA (simulDrawingArea), cbSimulationReport, NULL, NULL);
-   gtk_window_set_child (GTK_WINDOW (simulationWindow), simulDrawingArea);
+
+   snprintf (line, sizeof (line), "Min Duration: %02.0lf:%02.0lf hh:mm, Best Departure Time:  %02.0lf:%02.0lf hh:mm after beginning of Grib, Recommended start: %s UTC",\
+      floor (chooseDeparture.minDuration), 60 * fmod (chooseDeparture.minDuration, 1.0),\
+      floor (chooseDeparture.bestTime),  60 * fmod (chooseDeparture.bestTime, 1.0), \
+      newDate (zone.dataDate [0], zone.dataTime [0]/100 + chooseDeparture.bestTime, strDate, sizeof (strDate))
+   );
+   GtkWidget *simulStatusBar = gtk_label_new (line);
+      
+   gtk_box_append (GTK_BOX(vBox), simulDrawingArea);
+   gtk_box_append (GTK_BOX(vBox), simulStatusBar);
 
    gtk_window_present (GTK_WINDOW (simulationWindow));   
 }
@@ -3714,7 +3768,8 @@ static void onRoutegramEvent (GtkDrawingArea *area, cairo_t *cr, \
    const int constDelta = 5;
    const int dayLG = 10;
    const int ySail = yTop + 15;
-   const int ySailName = yTop + 25;
+   const int ySailName = yTop + 10;
+   const int decYSailName = 15;
 
    if ((route.duration + par.tStep) == 0) {
       fprintf (stderr, "In onRouteGramEvent: unapropriate values for route.duration. par.tStep\n");
@@ -3929,16 +3984,18 @@ static void onRoutegramEvent (GtkDrawingArea *area, cairo_t *cr, \
 
    // write sail name
    x = xLeft;
-   cairo_set_font_size (cr, 10);
-   cairo_select_font_face (cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
+   cairo_set_font_size (cr, 11);
+   cairo_select_font_face (cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
    CAIRO_SET_SOURCE_RGB_GRAY (cr);
    cairo_move_to (cr, x, ySailName);
    sail = route.t [0].sail;
+   int dec = 0; // say if decalage or not alternately
    cairo_show_text (cr, sailName [sail % MAX_N_SAIL]);
    for (int i = 1; i < route.n; i++) {
       x = xLeft + xk * i * par.tStep;
       if (route.t[i].sail != sail) {
-         cairo_move_to (cr, x, ySailName);
+         dec = ! dec;
+         cairo_move_to (cr, x, ySailName + dec * decYSailName);
          sail = route.t [i].sail;
          cairo_show_text (cr, sailName [sail % MAX_N_SAIL]);
       }
@@ -3965,17 +4022,28 @@ static void routeGram () {
       infoMessage ("No route calculated", GTK_MESSAGE_WARNING);
       return;
    }
-   snprintf (line, MAX_SIZE_LINE, "Routegram max TWS: %.2lf, max Gust: %.2lf, max Waves: %.2lf, miles: %.2lf",\
-      route.maxTws, MAX (route.maxTws, MS_TO_KN * route.maxGust), route.maxWave, route.totDist);
-
    GtkWidget *routeWindow = gtk_application_window_new (GTK_APPLICATION (app));
-   gtk_window_set_title (GTK_WINDOW(routeWindow), line);
-   gtk_window_set_default_size (GTK_WINDOW(routeWindow), 1400, 400);
-   g_signal_connect(window, "destroy", G_CALLBACK(onParentDestroy), routeWindow);
+   gtk_window_set_title (GTK_WINDOW (routeWindow), "Routegram");
+   gtk_window_set_default_size (GTK_WINDOW (routeWindow), 1400, 400);
+   g_signal_connect(window, "destroy", G_CALLBACK (onParentDestroy), routeWindow);
+
+   GtkWidget *vBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+   gtk_window_set_child (GTK_WINDOW (routeWindow), vBox);
 
    GtkWidget *routeDrawingArea = gtk_drawing_area_new ();
+   gtk_widget_set_hexpand (routeDrawingArea, TRUE);
+   gtk_widget_set_vexpand (routeDrawingArea, TRUE);
    gtk_drawing_area_set_draw_func (GTK_DRAWING_AREA (routeDrawingArea), onRoutegramEvent, NULL, NULL);
-   gtk_window_set_child (GTK_WINDOW (routeWindow), routeDrawingArea);
+
+   snprintf (line, MAX_SIZE_LINE, "Max TWS: %.2lf Kn, Max Gust: %.2lf Kn, Max Waves: %.2lf m, Total Dist.: %.2lf NM",\
+      route.maxTws, MAX (route.maxTws, MS_TO_KN * route.maxGust), route.maxWave, route.totDist);
+
+   GtkWidget *routeStatusBar = gtk_label_new (line);
+      
+   gtk_box_append (GTK_BOX(vBox), routeDrawingArea);
+   gtk_box_append (GTK_BOX(vBox), routeStatusBar);
+
+
    gtk_window_present (GTK_WINDOW (routeWindow));   
 }
 
@@ -4022,7 +4090,7 @@ static void cbAfterPoiEdit () {
 /*! edit poi or port */
 static void poiEdit (GSimpleAction *action, GVariant *parameter, gpointer *data) {
    const char *fileContents [] = {par.poiFileName, par.portFileName};
-   if (!myEditor (app, fileContents, 2, "PoI and Ports Edition", cbAfterPoiEdit))
+   if (! myEditor (app, fileContents, 2, "PoI and Ports Edition", cbAfterPoiEdit))
       infoMessage ("impossible to open Point of Interest", GTK_MESSAGE_ERROR);
 }
 
@@ -4509,7 +4577,7 @@ static void helpInfo () {
 
 /*! check if readGrib is terminated (wind) */
 static gboolean readGribCheck (gpointer data) {
-   char str [MAX_SIZE_LINE] = "";
+   char str [MAX_SIZE_STD] = "";
    int localReadGribRet = g_atomic_int_get (&readGribRet); // atomic read
    // printf ("readGribCheck: %d\n", localReadGribRet);
    switch (localReadGribRet) {
@@ -4520,7 +4588,7 @@ static gboolean readGribCheck (gpointer data) {
       return TRUE;
    case GRIB_ERROR: // error
       initScenario ();
-      snprintf (str, MAX_SIZE_LINE, "In readGribCheck (wind)");
+      snprintf (str, MAX_SIZE_STD, "In readGribCheck (wind)");
       break;
    case GRIB_STOPPED: case GRIB_OK: case GRIB_UNCOMPLETE: // -2 stopped, 1 normal, 2 uncomplete
       theTime = 0.0;
@@ -4533,14 +4601,16 @@ static gboolean readGribCheck (gpointer data) {
       if (localReadGribRet == GRIB_UNCOMPLETE)
          infoMessage ("Grib shorter than expected, but working", GTK_MESSAGE_WARNING);
       break;
+   case GRIB_ONLY_DOWNLOAD:
+      snprintf (str, MAX_SIZE_STD, "%s Downloaded, open it when necessary", gribRequestData.fileName); 
+      break;
    default:
-      snprintf (str, MAX_SIZE_LINE, "In readGribCheck: Error readGribRet: %d unknown\n", localReadGribRet);
+      snprintf (str, MAX_SIZE_STD, "In readGribCheck: Error readGribRet: %d unknown\n", localReadGribRet);
       fprintf (stderr, "%s\n", str);
    }
-   if (gloThread != NULL)
-      g_thread_unref (gloThread);
-   gloThread = NULL;
-   g_source_remove (gribReadTimeout); // timer stopped
+   if (gribThread != NULL)
+      g_thread_unref (gribThread);
+   gribThread = NULL;
    waitMessageDestroy ();
    if (str [0] != '\0')
       infoMessage (str, GTK_MESSAGE_WARNING);
@@ -4549,7 +4619,7 @@ static gboolean readGribCheck (gpointer data) {
 
 /*! check if readGrib is terminated  (current) */
 static gboolean readCurrentGribCheck (gpointer data) {
-   char str [MAX_SIZE_LINE] = "";
+   char str [MAX_SIZE_STD] = "";
    int localReadGribRet = g_atomic_int_get (&readGribRet); // atomic read
    gtk_widget_queue_draw (drawing_area);
    switch (localReadGribRet) {
@@ -4559,20 +4629,22 @@ static gboolean readCurrentGribCheck (gpointer data) {
       g_mutex_unlock (&warningMutex);
       return TRUE;
    case GRIB_ERROR:
-      snprintf (str, MAX_SIZE_LINE, "In readCurrentGribCheck (current)");
+      snprintf (str, MAX_SIZE_STD, "In readCurrentGribCheck (current)");
       break;
    case GRIB_STOPPED: case GRIB_OK: case GRIB_UNCOMPLETE: // either -2 stopped, 1 normal
       break;
+   case GRIB_ONLY_DOWNLOAD:
+      snprintf (str, MAX_SIZE_STD, "%s Downloaded, open it when necessary", gribRequestData.fileName); // should never happen yet
+      break;
    default:
-      snprintf (str, MAX_SIZE_LINE, "In, readCurrentGribCheck: Error readGribRetCurrent: %d unknown\n", localReadGribRet);
+      snprintf (str, MAX_SIZE_STD, "In, readCurrentGribCheck: Error readGribRetCurrent: %d unknown\n", localReadGribRet);
    }
-   if (gloThread != NULL)
-      g_thread_unref (gloThread);
-   gloThread = NULL;
+   if (gribThread != NULL)
+      g_thread_unref (gribThread);
+   gribThread = NULL;
+   waitMessageDestroy ();
    if (str [0] != '\0')
       infoMessage (str, GTK_MESSAGE_WARNING);
-   //g_source_remove (gribReadTimeout); // timer stopped
-   waitMessageDestroy ();
    return FALSE;
 }
    
@@ -4593,18 +4665,18 @@ static void *getMeteoConsult () {
    char errMessage [MAX_SIZE_LINE];
    int nTry = 0;
    int ret = GRIB_RUNNING;
-   int delay = (urlRequest.urlType == WIND) ? METEO_CONSULT_WIND_DELAY : METEO_CONSULT_CURRENT_DELAY;
+   int delay = (gribRequestData.urlType == WIND) ? METEO_CONSULT_WIND_DELAY : METEO_CONSULT_CURRENT_DELAY;
    
    do {
       if (nTry != 0)
-         urlRequest.hhZ = buildMeteoConsultUrl (urlRequest.urlType, urlRequest.index, delay, urlRequest.url, sizeof (urlRequest.url));
+         gribRequestData.hhZ = buildMeteoConsultUrl (gribRequestData.urlType, gribRequestData.index, delay, gribRequestData.url, sizeof (gribRequestData.url));
 
       g_mutex_lock (&warningMutex);
       snprintf (statusbarWarningStr, sizeof (statusbarWarningStr), 
-         "MeteoConsult Download and decoding, Time Run: %d, Nb try: %d",urlRequest.hhZ, nTry + 1);
+         "MeteoConsult Download and decoding, Time Run: %d, Nb try: %d",gribRequestData.hhZ, nTry + 1);
       g_mutex_unlock (&warningMutex);
 
-      if (curlGet (urlRequest.url, urlRequest.outputFileName, errMessage, sizeof (errMessage)))
+      if (curlGet (gribRequestData.url, gribRequestData.fileName, errMessage, sizeof (errMessage)))
          break; // success
       else {
          fprintf (stderr, "In getMeteoConsult: %s\n", errMessage); 
@@ -4615,15 +4687,21 @@ static void *getMeteoConsult () {
    } while (nTry < MAX_N_TRY);
 
    if (nTry >=  MAX_N_TRY) { // FAIL
-      ret = 0;
+      ret = GRIB_ERROR;
+      g_atomic_int_set (&readGribRet, ret);
+      return NULL;
+   }
+   if (gribRequestData.onlyDownload) {
+      g_strlcpy (gribRequestData.fileName, gribRequestData.fileName, sizeof (gribRequestData.fileName));
+      ret = GRIB_ONLY_DOWNLOAD;
    }
    else {// SUCCESS
       if (typeFlow == WIND) {
-         g_strlcpy (par.gribFileName, urlRequest.outputFileName, MAX_SIZE_FILE_NAME);
+         g_strlcpy (par.gribFileName, gribRequestData.fileName, MAX_SIZE_FILE_NAME);
          ret = readGribAll (par.gribFileName, &zone, WIND); // Global variable
       }
       else {
-         g_strlcpy (par.currentGribFileName, urlRequest.outputFileName, MAX_SIZE_FILE_NAME);
+         g_strlcpy (par.currentGribFileName, gribRequestData.fileName, MAX_SIZE_FILE_NAME);
          ret = readGribAll (par.currentGribFileName, &currentZone, CURRENT); // Global variable
       }
    }
@@ -4665,7 +4743,7 @@ int nextTimeStepInterval (int type, int requestedTimeStep, int currentTimeStep) 
    return (currentTimeStep < limit0) ? step0 : step1;
 }
 
-/*! Download all NOOA or ECMWF files, concat them in a bigFile and load it */
+/*! Download all NOOA or ECMWF files, concat them gribRequestData.fileName and load it */
 static void *getGribWebAll (void *userData) {
    const int sleepBetweenDownload = 100000; //100 ms
    const char *providerID [4] = {"NOAA", "ECMWF", "ARPEGE", "AROME"};
@@ -4673,7 +4751,7 @@ static void *getGribWebAll (void *userData) {
    GribRequestData *data = (GribRequestData *) userData;
    time_t now = time (NULL);
    struct tm *pTime = gmtime (&now);
-   char fileName [MAX_SIZE_URL], bigFile [MAX_SIZE_LINE], prefix [MAX_SIZE_LINE];
+   char fileName [MAX_SIZE_URL], prefix [MAX_SIZE_LINE];
    char strDate [MAX_SIZE_DATE];
    char errMessage [MAX_SIZE_LINE];
    int timeMax = data->timeMax * 24;
@@ -4761,7 +4839,7 @@ static void *getGribWebAll (void *userData) {
       return NULL;
    }
    
-   snprintf (bigFile, sizeof (bigFile), \
+   snprintf (gribRequestData.fileName, sizeof (gribRequestData.fileName), \
       "%sgrib/%s-%s-%02dZ-%02d-%03d.grb", par.workingDir, providerID [data->typeWeb], strDate, data->hhZ, data->timeStep, lastTimeStep);
 
    // printf ("In getGribWebAll readGribRet end = %d\n", readGribRet);
@@ -4776,13 +4854,18 @@ static void *getGribWebAll (void *userData) {
       concatLast = lastTimeStep;
    }
 
-   if (concat (prefix, ".tmp", limit0, concatStep0, concatStep1, concatLast, bigFile)) {
-      printf ("bigFile: %s\n", bigFile);
-      g_strlcpy (par.gribFileName, bigFile, MAX_SIZE_FILE_NAME);
-      g_atomic_int_set (&readGribRet, GRIB_RUNNING);
-      ret = readGribAll (par.gribFileName, &zone, WIND);
-      if (ret && (lastTimeStep < timeMax))
-         ret = GRIB_UNCOMPLETE;
+   if (concat (prefix, ".tmp", limit0, concatStep0, concatStep1, concatLast, gribRequestData.fileName)) {
+      printf ("gribRequestData.fileName: %s\n", gribRequestData.fileName);
+      if (gribRequestData.onlyDownload) {
+         ret = GRIB_ONLY_DOWNLOAD;
+      }
+      else {
+         g_strlcpy (par.gribFileName, gribRequestData.fileName, MAX_SIZE_FILE_NAME);
+         g_atomic_int_set (&readGribRet, GRIB_RUNNING);
+         ret = readGribAll (par.gribFileName, &zone, WIND);
+         if (ret && (lastTimeStep < timeMax))
+            ret = GRIB_UNCOMPLETE;
+      }
    }
    else
       ret = GRIB_ERROR;
@@ -4798,20 +4881,32 @@ static void *getGribWebAll (void *userData) {
 }
 
 /*! Manage response to Grib Request dialog box */
-static void onOkButtonGribRequestClicked (GtkWidget *widget, gpointer theWindow) {
+static void launchGribRequest (GtkWidget *widget, gpointer theWindow, bool onlyDownload) {
+   printf ("onlyDownload: %d\n", onlyDownload);
+   gribRequestData.onlyDownload = onlyDownload;
    g_atomic_int_set (&readGribRet, GRIB_RUNNING);
    if (gribRequestData.typeWeb != MAIL) { //Web
       waitMessage ("Grib Download and decoding",  "Watch status bar...");
-      gloThread = g_thread_new ("readGribThread", getGribWebAll, &gribRequestData);
+      gribThread = g_thread_new ("readGribThread", getGribWebAll, &gribRequestData);
       gribReadTimeout = g_timeout_add (READ_GRIB_TIME_OUT, readGribCheck, NULL);
    }
    else { // mail
       waitMessage ("Waiting for grib mail response", "Be patient\nWatch status bar...");
-      gloThread = g_thread_new ("mailGribRequest", mailGribRequest, NULL);
+      gribThread = g_thread_new ("mailGribRequest", mailGribRequest, NULL);
       gribMailTimeout = g_timeout_add (MAIL_GRIB_TIME_OUT, mailGribCheck, NULL);
    }
    if ((theWindow != NULL) && GTK_IS_WINDOW (theWindow))
       gtk_window_destroy (GTK_WINDOW (theWindow));
+}
+
+/*! Manage response to Grib Request dialog box after OK buttton cjhoice */
+static void onOkButtonGribRequestClicked (GtkWidget *widget, gpointer theWindow) {
+   launchGribRequest (widget, theWindow, false);
+}
+
+/*! Manage response to Grib Request dialog box after onlyDownload button choice */
+static void onOnlyDownloadButtonGribRequestClicked (GtkWidget *widget, gpointer theWindow) {
+   launchGribRequest (widget, theWindow, true);
 }
 
 /*! return warning message based on timeStep and resolution */
@@ -5091,7 +5186,18 @@ static void gribRequestBox (GribRequestData *data) {
       gtk_grid_attach (GTK_GRID (grid), password_entry, 1, 7, 1, 1);
    }
 
-   GtkWidget *hBox = OKCancelLine (onOkButtonGribRequestClicked, gribWebWindow);
+   // hBox definition with 2 buttons; OK, OnlyDownload, Cancel
+   GtkWidget *hBox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 5);
+   GtkWidget *OKbutton = gtk_button_new_with_label ("OK");
+   GtkWidget *onlyDownloadButton = gtk_button_new_with_label ("Only DownLoad");
+   GtkWidget *cancelButton = gtk_button_new_with_label ("Cancel");
+   gtk_box_append (GTK_BOX(hBox), OKbutton);
+   gtk_box_append (GTK_BOX(hBox), onlyDownloadButton);
+   gtk_box_append (GTK_BOX(hBox), cancelButton);
+   g_signal_connect (OKbutton, "clicked", G_CALLBACK (onOkButtonGribRequestClicked), gribWebWindow);
+   g_signal_connect (cancelButton, "clicked", G_CALLBACK (onCancelButtonClicked), gribWebWindow);
+   g_signal_connect (onlyDownloadButton, "clicked", G_CALLBACK (onOnlyDownloadButtonGribRequestClicked), gribWebWindow);
+
    // Multi-line zone to display URL
    GtkWidget *textView = gtk_text_view_new ();
    gtk_text_view_set_editable(GTK_TEXT_VIEW (textView), FALSE);
@@ -5153,16 +5259,17 @@ static void cbOpenGrib (GObject* source_object, GAsyncResult* res, gpointer data
    char *fileName = g_file_get_path(file);
    if (fileName == NULL)
       return;
+   snprintf (statusbarWarningStr, sizeof (statusbarWarningStr), "Grib decoding: %s", fileName);
    if (typeFlow == WIND) { // wind
       g_strlcpy (par.gribFileName, fileName, MAX_SIZE_FILE_NAME);
       waitMessage ("Grib File decoding", "Be patient\nWatch status bar...");
-      gloThread = g_thread_new ("readGribThread", readGribLaunch, NULL);
+      gribThread = g_thread_new ("readGribThread", readGribLaunch, NULL);
       gribReadTimeout = g_timeout_add (READ_GRIB_TIME_OUT, readGribCheck, NULL);
    }
    else {
       g_strlcpy (par.currentGribFileName, fileName, MAX_SIZE_FILE_NAME);
       waitMessage ("Current Grib File decoding", "Be patient\nWatch status bar...");
-      gloThread = g_thread_new ("readCurrentGribThread", readGribLaunch, NULL);
+      gribThread = g_thread_new ("readCurrentGribThread", readGribLaunch, NULL);
       gribReadTimeout = g_timeout_add (READ_GRIB_TIME_OUT, readCurrentGribCheck, NULL);
    }
    g_free (fileName);
@@ -5171,6 +5278,7 @@ static void cbOpenGrib (GObject* source_object, GAsyncResult* res, gpointer data
 /*! Select grib file and read grib file, fill gribData */
 static void openGrib (GSimpleAction *action, GVariant *parameter, gpointer data) {
    int iFlow = GPOINTER_TO_INT (data);
+   memset (&gribRequestData, 0, sizeof(GribRequestData));
    GtkFileDialog* fileDialog;
    if (iFlow == WIND)
       fileDialog = selectFile ("Open Grib", "grib", "Grib Files", "*.gr*", ".*gr*", NULL);
@@ -5354,6 +5462,7 @@ static void cbOpenScenario (GObject* source_object, GAsyncResult* res, gpointer 
          g_strlcpy (parameterFileName, fileName, MAX_SIZE_FILE_NAME);
          readParam (fileName);
          initScenario ();
+         titleUpdate ();
          g_free (fileName);
          gtk_widget_queue_draw (drawing_area);
       }
@@ -5525,13 +5634,13 @@ static void gribInfo (GSimpleAction *action, GVariant *parameter, gpointer *data
 
 /*! callback to check status of mail request */
 static gboolean mailGribCheck (gpointer data) {
-   char str [MAX_SIZE_LINE] = "";
+   char str [MAX_SIZE_STD] = "";
    int localStatusMailRequest = g_atomic_int_get (&gloStatusMailRequest); // atomic read
    switch (localStatusMailRequest) {
    case GRIB_STOPPED: // stop
       break;
    case GRIB_ERROR:   // error
-      snprintf (str, MAX_SIZE_LINE, "Perhaps Email size limit exceeded. See Mail provider"); 
+      snprintf (str, MAX_SIZE_STD, "Perhaps Email size limit exceeded. See Mail provider"); 
       break;
    case GRIB_RUNNING: // normal operation. No new mail found yet.
       g_mutex_lock (&warningMutex);
@@ -5540,36 +5649,40 @@ static gboolean mailGribCheck (gpointer data) {
       return TRUE;
       break; 
    case GRIB_OK: // Mail available 
-      g_source_remove (gribMailTimeout); // timer stopped
+      g_source_remove (gribMailTimeout);  // timer stopped
       waitMessageDestroy ();
-      if (gloThread != NULL)
-         g_thread_unref (gloThread); // close previous mail thread
-      gloThread = NULL;  
+      if (gribThread != NULL)
+         g_thread_unref (gribThread);     // close previous mail thread
+      gribThread = NULL;  
       // then launching next thread...
+      if (gribRequestData.onlyDownload) {
+         snprintf (str, MAX_SIZE_STD, "%s Downloaded, open it when necessary", gribRequestData.fileName); 
+         break;
+      }
+
       typeFlow = (gribRequestData.mailService == SAILDOCS_CURR) ? CURRENT: WIND;
       if (typeFlow == WIND) { // wind  
-         g_strlcpy (par.gribFileName, gloGribFileName, MAX_SIZE_FILE_NAME);
+         g_strlcpy (par.gribFileName, gribRequestData.fileName, MAX_SIZE_FILE_NAME);
          waitMessage ("Grib File decoding", "Be patient\nWatch status bar...");
-         gloThread = g_thread_new ("readGribThread", readGribLaunch, NULL);
+         gribThread = g_thread_new ("readGribThread", readGribLaunch, NULL);
          gribReadTimeout = g_timeout_add (READ_GRIB_TIME_OUT, readGribCheck, NULL);
       }
       else {
-         g_strlcpy (par.currentGribFileName, gloGribFileName, MAX_SIZE_FILE_NAME);
+         g_strlcpy (par.currentGribFileName, gribRequestData.fileName, MAX_SIZE_FILE_NAME);
          waitMessage ("Grib Current File decoding", "Be patient\nWatch status bar...");
-         gloThread = g_thread_new ("readCurrentGribThread", readGribLaunch, NULL);
+         gribThread = g_thread_new ("readCurrentGribThread", readGribLaunch, NULL);
          gribReadTimeout = g_timeout_add (READ_GRIB_TIME_OUT, readCurrentGribCheck, NULL);
       }
       return FALSE;
       break;
    default:
-      snprintf (str, MAX_SIZE_LINE, "Unknown value: %d in mailGribCheck\n", localStatusMailRequest);
+      snprintf (str, MAX_SIZE_STD, "Unknown value: %d in mailGribCheck\n", localStatusMailRequest);
       break;
    }
-   g_source_remove (gribMailTimeout); // timer stopped
    waitMessageDestroy ();
-   if (gloThread != NULL)
-      g_thread_unref (gloThread);
-   gloThread = NULL;
+   if (gribThread != NULL)
+      g_thread_unref (gribThread);
+   gribThread = NULL;
    if (str [0] != '\0')
       infoMessage (str, GTK_MESSAGE_WARNING);
    return FALSE;
@@ -5579,7 +5692,7 @@ static gboolean mailGribCheck (gpointer data) {
 void *mailGribRequest () {
    char path [MAX_SIZE_LINE];
    int count = 0;
-   g_atomic_int_set (&gloStatusMailRequest, GRIB_RUNNING); // for mailGribCheck force stop
+   g_atomic_int_set (&gloStatusMailRequest, GRIB_RUNNING);
 
    if (markAsRead (par.imapServer, par.imapUserName, par.mailPw, par.imapMailBox))
       printf ("markAsRead OK for box: %s\n", par.imapMailBox);
@@ -5605,7 +5718,7 @@ void *mailGribRequest () {
          g_mutex_unlock (&warningMutex);
 
          int ret = imapGetUnseen (par.imapServer, par.imapUserName, par.mailPw, par.imapMailBox, 
-            path, gloGribFileName, sizeof (gloGribFileName));
+            path, gribRequestData.fileName, sizeof (gribRequestData.fileName));
          g_atomic_int_set (&gloStatusMailRequest, ret);
          sleep (MAIL_TIME_OUT);
          count += 1;
@@ -5653,9 +5766,9 @@ static gboolean readGribLaunchBis (gpointer data) {
 /*! for testing */
 static gboolean getGribWebAllBis (gpointer data) {
    static int count = 0;
-   if (gloThread != NULL)
-      g_thread_unref (gloThread);
-   gloThread = NULL;
+   if (gribThread != NULL)
+      g_thread_unref (gribThread);
+   gribThread = NULL;
    printf ("exec no: %d\n", count);
    gribRequestData.typeWeb = NOAA_WIND;
    gribRequestData.hhZ = 0;
@@ -5665,7 +5778,7 @@ static gboolean getGribWebAllBis (gpointer data) {
    gribRequestData.lonRight = -100;
    gribRequestData.timeStep = 3;
    gribRequestData.timeMax = 8;
-   gloThread = g_thread_new ("thread", getGribWebAll, &gribRequestData);
+   gribThread = g_thread_new ("thread", getGribWebAll, &gribRequestData);
    count += 1;
    return TRUE;
 }
@@ -7054,14 +7167,16 @@ static void separatorMenu (GMenu *vMenu, int n, const char *app) {
    g_free (strSep); 
 }
 
-/*! Manage response to Grib Request dialog box */
-static void onOkButtonMeteoConsultRequestClicked (GtkWidget *widget, gpointer theWindow) {
-   g_strlcat (urlRequest.outputFileName, strrchr (urlRequest.url, '/'), sizeof (urlRequest.outputFileName));
-   printf ("urlRequest.outputFileName: %s\n", urlRequest.outputFileName);
+/*! launch meteoconsult request */
+static void launchMeteoConsultRequest (GtkWidget *widget, gpointer theWindow, bool onlyDownload) {
+   printf ("onlyDownload: %d\n", onlyDownload);
+   gribRequestData.onlyDownload = onlyDownload;
+   g_strlcat (gribRequestData.fileName, strrchr (gribRequestData.url, '/'), sizeof (gribRequestData.fileName));
+   printf ("gribRequestData.fileName: %s\n", gribRequestData.fileName);
    waitMessage ("MeteoConsult Download and decoding", "Info coming...");
 
    g_atomic_int_set (&readGribRet, GRIB_RUNNING); 
-   gloThread = g_thread_new ("readGribThread", getMeteoConsult, NULL);
+   gribThread = g_thread_new ("readGribThread", getMeteoConsult, NULL);
 
    if (typeFlow == WIND)
       gribReadTimeout = g_timeout_add (READ_GRIB_TIME_OUT, readGribCheck, NULL);
@@ -7072,20 +7187,30 @@ static void onOkButtonMeteoConsultRequestClicked (GtkWidget *widget, gpointer th
       gtk_window_destroy (GTK_WINDOW (theWindow));
 }
 
+/*! Manage response to meteoconsult Grib Request dialog box */
+static void onOkButtonMeteoConsultRequestClicked (GtkWidget *widget, gpointer theWindow) {
+   launchMeteoConsultRequest (widget, theWindow, false);
+}
+
+/*! Manage response to meteoconsult Grib Request dialog box */
+static void onOnlyDownloadButtonMeteoConsultRequestClicked (GtkWidget *widget, gpointer theWindow) {
+   launchMeteoConsultRequest (widget, theWindow, true);
+}
+
 /*! callback for url change */
 static void entryUrlChange (GtkEditable *editable, gpointer userData) {
    const char *text = gtk_editable_get_text (editable);
-   g_strlcpy (urlRequest.url, text, MAX_SIZE_TEXT);
+   g_strlcpy (gribRequestData.url, text, MAX_SIZE_TEXT);
 }
 
 /*! Callback change zone for meteo consult */
 static void cbZoneDropDown (GObject *dropDown, GParamSpec *pspec, gpointer userData) {
-   urlRequest.index = gtk_drop_down_get_selected (GTK_DROP_DOWN(dropDown));
-   int delay = (urlRequest.urlType == WIND) ? METEO_CONSULT_WIND_DELAY : METEO_CONSULT_CURRENT_DELAY;
-   snprintf (urlRequest.outputFileName, sizeof (urlRequest.outputFileName), (typeFlow == WIND) ? "%sgrib": "%scurrentgrib", par.workingDir);
-   urlRequest.hhZ = buildMeteoConsultUrl (urlRequest.urlType, urlRequest.index, delay, urlRequest.url, sizeof (urlRequest.url));
-   GtkEntryBuffer *buffer = gtk_entry_get_buffer (GTK_ENTRY (urlRequest.urlEntry));
-   gtk_entry_buffer_set_text (buffer, urlRequest.url, -1);
+   gribRequestData.index = gtk_drop_down_get_selected (GTK_DROP_DOWN(dropDown));
+   int delay = (gribRequestData.urlType == WIND) ? METEO_CONSULT_WIND_DELAY : METEO_CONSULT_CURRENT_DELAY;
+   snprintf (gribRequestData.fileName, sizeof (gribRequestData.fileName), (typeFlow == WIND) ? "%sgrib": "%scurrentgrib", par.workingDir);
+   gribRequestData.hhZ = buildMeteoConsultUrl (gribRequestData.urlType, gribRequestData.index, delay, gribRequestData.url, sizeof (gribRequestData.url));
+   GtkEntryBuffer *buffer = gtk_entry_get_buffer (GTK_ENTRY (gribRequestData.urlEntry));
+   gtk_entry_buffer_set_text (buffer, gribRequestData.url, -1);
 }
 
 /*! Grib URL selection for Meteo Consult */
@@ -7136,28 +7261,38 @@ static void gribMeteoConsult (GSimpleAction *action, GVariant *parameter, gpoint
    gtk_label_set_xalign(GTK_LABEL (label), 0.0);
    gtk_grid_attach (GTK_GRID(grid), label,        0, 1, 1, 1);
 
-   urlRequest.urlType = typeFlow;
-   urlRequest.index = 0;
-   int delay = (urlRequest.urlType == WIND) ? METEO_CONSULT_WIND_DELAY : METEO_CONSULT_CURRENT_DELAY;
-   snprintf (urlRequest.outputFileName, sizeof (urlRequest.outputFileName), (typeFlow == WIND) ? "%sgrib": "%scurrentgrib", par.workingDir);
-   urlRequest.hhZ = buildMeteoConsultUrl (urlRequest.urlType, urlRequest.index, delay, urlRequest.url, sizeof (urlRequest.url));
+   gribRequestData.urlType = typeFlow;
+   gribRequestData.index = 0;
+   int delay = (gribRequestData.urlType == WIND) ? METEO_CONSULT_WIND_DELAY : METEO_CONSULT_CURRENT_DELAY;
+   snprintf (gribRequestData.fileName, sizeof (gribRequestData.fileName), (typeFlow == WIND) ? "%sgrib": "%scurrentgrib", par.workingDir);
+   gribRequestData.hhZ = buildMeteoConsultUrl (gribRequestData.urlType, gribRequestData.index, delay, gribRequestData.url, sizeof (gribRequestData.url));
 
-   char *strHhZ = g_strdup_printf ("%02dZ", urlRequest.hhZ);
-   urlRequest.hhZBuffer = gtk_label_new (strHhZ);
+   char *strHhZ = g_strdup_printf ("%02dZ", gribRequestData.hhZ);
+   gribRequestData.hhZBuffer = gtk_label_new (strHhZ);
    g_free (strHhZ);
-   gtk_label_set_xalign(GTK_LABEL (urlRequest.hhZBuffer), 0.0);
-   gtk_grid_attach (GTK_GRID (grid), urlRequest.hhZBuffer , 1, 1, 1, 1);
+   gtk_label_set_xalign(GTK_LABEL (gribRequestData.hhZBuffer), 0.0);
+   gtk_grid_attach (GTK_GRID (grid), gribRequestData.hhZBuffer , 1, 1, 1, 1);
 
-   GtkEntryBuffer *buffer = gtk_entry_buffer_new (urlRequest.url, -1);
-   urlRequest.urlEntry = gtk_entry_new_with_buffer (buffer);
-   int min_width = MAX (300, strlen (urlRequest.url) * 10);
-   gtk_widget_set_size_request (urlRequest.urlEntry, min_width, -1);
-   g_signal_connect (urlRequest.urlEntry, "changed", G_CALLBACK (entryUrlChange), NULL);
+   GtkEntryBuffer *buffer = gtk_entry_buffer_new (gribRequestData.url, -1);
+   gribRequestData.urlEntry = gtk_entry_new_with_buffer (buffer);
+   int min_width = MAX (300, strlen (gribRequestData.url) * 10);
+   gtk_widget_set_size_request (gribRequestData.urlEntry, min_width, -1);
+   g_signal_connect (gribRequestData.urlEntry, "changed", G_CALLBACK (entryUrlChange), NULL);
 
-   GtkWidget *hBox = OKCancelLine (onOkButtonMeteoConsultRequestClicked, gribMeteoConsultWindow);
+   // hBox definition with 3 buttons: OK, OnlyDownload, Cancel
+   GtkWidget *hBox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 5);
+   GtkWidget *OKbutton = gtk_button_new_with_label ("OK");
+   GtkWidget *onlyDownloadButton = gtk_button_new_with_label ("Only DownLoad");
+   GtkWidget *cancelButton = gtk_button_new_with_label ("Cancel");
+   gtk_box_append (GTK_BOX(hBox), OKbutton);
+   gtk_box_append (GTK_BOX(hBox), onlyDownloadButton);
+   gtk_box_append (GTK_BOX(hBox), cancelButton);
+   g_signal_connect (OKbutton, "clicked", G_CALLBACK (onOkButtonMeteoConsultRequestClicked), gribMeteoConsultWindow);
+   g_signal_connect (onlyDownloadButton, "clicked", G_CALLBACK (onOnlyDownloadButtonMeteoConsultRequestClicked), gribMeteoConsultWindow);
+   g_signal_connect (cancelButton, "clicked", G_CALLBACK (onCancelButtonClicked), gribMeteoConsultWindow);
 
    gtk_box_append (GTK_BOX (vBox), grid);
-   gtk_box_append (GTK_BOX (vBox), urlRequest.urlEntry);
+   gtk_box_append (GTK_BOX (vBox), gribRequestData.urlEntry);
    gtk_box_append (GTK_BOX (vBox), hBox);
 
    gtk_window_present (GTK_WINDOW (gribMeteoConsultWindow));
@@ -7432,14 +7567,13 @@ static void appStartup (GApplication *application) {
    
    createAction ("TraceAdd", traceAdd);
    createAction ("TraceReport", traceReport);
-   createActionForFileDump ("TraceDump", fileDump, par.traceFileName);
    createAction ("OpenTrace", openTrace);
    createAction ("NewTrace", newTrace);
    createAction ("EditTrace", editTrace);
 
    createAction ("PolygonDump", polygonDump);
    createAction ("CompetitorsDump", competitorsDump);
-   createActionForFileDump ("LogDump", fileDump, par.logFileName);
+   createAction ("LogDump", logDump);
    createAction ("VirtualRegDashboardImport", virtualRegDashboardImport);
    createAction ("VirtualRegStaminaCalculator", virtualRegStaminaCalculator);
 
@@ -7529,7 +7663,6 @@ static void appStartup (GApplication *application) {
    GMenu *trace_menu_v = g_menu_new ();
    subMenu (trace_menu_v, strAdd, "app.TraceAdd");
    subMenu (trace_menu_v, "Report", "app.TraceReport");
-   subMenu (trace_menu_v, "Dump", "app.TraceDump");
    subMenu (trace_menu_v, "Open", "app.OpenTrace");
    subMenu (trace_menu_v, "New", "app.NewTrace");
    subMenu (trace_menu_v, "Edit", "app.EditTrace");
@@ -7656,7 +7789,6 @@ int main (int argc, char *argv[]) {
    g_strlcpy (parameterFileName, PARAMETERS_FILE, sizeof (parameterFileName) - 1);
    switch (argc) {
       case 1: // no parameter
-         
          ret = readParam (parameterFileName);
          break;
       case 2: // one parameter

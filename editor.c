@@ -5,8 +5,12 @@
 #include <gtksourceview/gtksource.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include "rtypes.h"
+
 typedef void (*Callback) (void *);
 GtkApplicationWindow *windowEditor;
+extern long    getFileSize (const char *fileName);
+extern char   *formatThousandSep (char *buffer, size_t maxLen, int value);
 
 /*! type to exchange data linked to editor */
 typedef struct {
@@ -14,6 +18,7 @@ typedef struct {
    GtkSourceBuffer *buffer;
    GtkWidget *searchEntry;
    gint currentMatch;
+   GtkWidget *textView;  // Ajout pour éviter la recherche
    GList *matches;
    char *fileName;
    char *str;
@@ -71,11 +76,11 @@ static void searchAndHighlight (GtkSourceBuffer *buffer, const gchar *text, GLis
    GtkTextTagTable *tagTable = gtk_text_buffer_get_tag_table(GTK_TEXT_BUFFER(buffer));
 
    // Chercher si le tag "highlightYellow" existe déjà
-   GtkTextTag *highlightTag = gtk_text_tag_table_lookup(tagTable, "highlightYellow");
+   GtkTextTag *highlightTag = gtk_text_tag_table_lookup (tagTable, "highlightYellow");
 
    // Si le tag n'existe pas, on le crée
    if (highlightTag == NULL) {
-      highlightTag = gtk_text_buffer_create_tag(GTK_TEXT_BUFFER(buffer), "highlightYellow", "background", "yellow", NULL);
+      highlightTag = gtk_text_buffer_create_tag (GTK_TEXT_BUFFER(buffer), "highlightYellow", "background", "yellow", NULL);
    }
 
    if (highlightTag == NULL) {
@@ -97,11 +102,11 @@ static void searchAndHighlight (GtkSourceBuffer *buffer, const gchar *text, GLis
    // Convertir les deux chaînes (texte et contenu) en minuscules pour rendre la recherche insensible à la casse
    gchar *lowercaseSearchText = g_utf8_strdown(text, -1);
    gchar *lowercaseContent = g_utf8_strdown(content, -1);
+   GtkTextIter matchStartIter, matchEndIter;
 
    // Trouver toutes les correspondances du texte (insensible à la casse)
    const gchar *current_pos = lowercaseContent;
    while ((current_pos = g_strstr_len(current_pos, -1, lowercaseSearchText)) != NULL) {
-      GtkTextIter matchStartIter, matchEndIter;
 
       // Calculer l'offset en caractères UTF-8
       gint start_offset = g_utf8_pointer_to_offset (lowercaseContent, current_pos);
@@ -177,7 +182,6 @@ static void onMySearchClicked (GtkButton *button, gpointer user_data) {
 
    // print matches
    searchAndHighlight (data->buffer, searchText, &data->matches);
-   // printf ("Search completed for text: %s\n", searchText);
 }
 
 /*! Save the file with modifications */
@@ -309,6 +313,7 @@ static void onBufferChanged (GtkTextBuffer *buffer, gpointer user_data) {
 
 /*! Simple editor with tabs, finder, copy, and save buttons */
 bool myEditor (GtkApplication *app, const char **fileNames, int fileCount, const char *title, Callback callback) {
+   char str [MAX_SIZE_LINE];
    if (fileCount > 3) {
       fprintf (stderr, "In editor, Maximum of 3 files supported.\n");
       return false;
@@ -341,8 +346,13 @@ bool myEditor (GtkApplication *app, const char **fileNames, int fileCount, const
       FILE *file = fopen (fileName, "r");
       if (file == NULL) {
          fprintf (stderr, "In editor, Impossible to open: %s\n", fileName);
-         continue;
+         return false;
       }
+      // Create a tab label with the file name and size
+      formatThousandSep (str, sizeof (str), getFileSize (fileName));
+      char *title = g_strdup_printf ("%s, %s Bytes", fileName, str);
+      GtkWidget *tabLabel = gtk_label_new (title);
+      g_free (title);
 
       // Read content of the file
       fseek (file, 0, SEEK_END);
@@ -359,7 +369,7 @@ bool myEditor (GtkApplication *app, const char **fileNames, int fileCount, const
          continue;
       }
 
-      content[fileSize] = '\0';
+      content [fileSize] = '\0';
 
       // GtkSourceView and buffer creation
       GtkWidget *sourceView = gtk_source_view_new ();
@@ -367,10 +377,12 @@ bool myEditor (GtkApplication *app, const char **fileNames, int fileCount, const
       gtk_text_buffer_set_text (GTK_TEXT_BUFFER (sourceBuffer), content, -1);
       gtk_text_view_set_buffer (GTK_TEXT_VIEW (sourceView), GTK_TEXT_BUFFER (sourceBuffer));
       gtk_text_view_set_monospace (GTK_TEXT_VIEW (sourceView), TRUE);
+      gtk_text_view_set_cursor_visible (GTK_TEXT_VIEW (sourceView), TRUE);
 
       // Data creation
       EditorData *data = g_new0 (EditorData, 1);
       data->buffer = sourceBuffer;
+      data->textView = sourceView;  // 🔹 Stocke le GtkTextView ici
       data->fileName = g_strdup (fileName);
       data->searchEntry = searchEntry;
       data->matches = NULL;
@@ -385,11 +397,8 @@ bool myEditor (GtkApplication *app, const char **fileNames, int fileCount, const
       // Scroll bar creation
       GtkWidget *scroll = gtk_scrolled_window_new ();
       gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scroll), sourceView);
-      gtk_widget_set_hexpand(scroll, TRUE);
-      gtk_widget_set_vexpand(scroll, TRUE);
-
-      // Create a tab label with the file name
-      GtkWidget *tabLabel = gtk_label_new (fileName);
+      gtk_widget_set_hexpand (scroll, TRUE);
+      gtk_widget_set_vexpand (scroll, TRUE);
 
       // Add the scrollable source view to the notebook as a new tab
       gtk_notebook_append_page (GTK_NOTEBOOK (notebook), scroll, tabLabel);
@@ -397,7 +406,7 @@ bool myEditor (GtkApplication *app, const char **fileNames, int fileCount, const
       // Connect toolbar signals to the current buffer
       g_signal_connect (saveButton, "clicked", G_CALLBACK (onMySaveClicked), notebook);
       g_signal_connect (searchClicButton, "clicked", G_CALLBACK (onMySearchClicked), notebook);
-      g_signal_handlers_disconnect_by_func(pasteButton, G_CALLBACK (onMyCopyClicked), notebook);
+      g_signal_handlers_disconnect_by_func (pasteButton, G_CALLBACK (onMyCopyClicked), notebook);
       g_signal_connect (pasteButton, "clicked", G_CALLBACK (onMyCopyClicked), notebook);
 
       if (callback != NULL)
@@ -419,3 +428,4 @@ bool myEditor (GtkApplication *app, const char **fileNames, int fileCount, const
 
    return true;
 }
+

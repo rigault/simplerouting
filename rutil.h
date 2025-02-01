@@ -59,7 +59,7 @@ extern double diffTimeBetweenNowAndGribOrigin (long intDate, double nHours);
 extern void   *commandRun (void *data);
 extern bool   compact (const char *dir, const char *inFile,\
    const char *shortNames, double lonLeft, double lonRight, double latMin, double latMax, const char *outFile);
-extern bool concat (const char *prefix, const char *suffix, int limit0, int step0, int step1, int max, const char *fileRes);
+extern bool   concat (const char *prefix, const char *suffix, int limit0, int step0, int step1, int max, const char *fileRes);
 extern bool   isEmpty (const char *str);
 extern char   *formatThousandSep (char *buffer, size_t maxLen, int value);
 extern bool   initSHP (const char* nameFile);
