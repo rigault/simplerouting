@@ -11,8 +11,6 @@ extern bool    storeRoute (SailRoute *route, const Pp *pOr, const Pp *pDest, dou
 extern bool    allIsocToStr (char *str, size_t maxLen);
 extern bool    isoDescToStr (char *str, size_t maxLen);
 extern bool    routeToStr (const SailRoute *route, char *str, size_t maxLen, char *footer, size_t maxLenFooter);
-extern bool    dumpAllIsoc (const char *fileName);
-extern bool    dumpRoute (const char *fileName, Pp dest);
 extern void    *routingLaunch ();
 extern void    *bestTimeDeparture ();
 extern void    *allCompetitors ();

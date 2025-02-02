@@ -262,6 +262,7 @@ static void *readGribLaunch ();
 static void cbDropDownTStep (GObject *dropDown, GParamSpec *pspec, gpointer userData);
 static void cleanAll ();
 static void simulationReport ();
+static void routeGram ();
 
 /*! destroy the child window before exiting application */
 static void onParentDestroy (GtkWidget *widget, gpointer childWindow) {
@@ -2233,7 +2234,7 @@ static void cbPolarFilterDropDown (GObject *dropDown, GParamSpec *pspec, gpointe
 }
 
 /*! create label with background color based index */
-GtkWidget *createLabelWithBackGroundColor (int index, const char *str) {
+static GtkWidget *createLabelWithBackGroundColor (int index, const char *str) {
    GtkWidget *label = gtk_label_new (str);
    if (index < 0 || index >= MAX_N_SAIL)
       index = 7; // red
@@ -2248,7 +2249,7 @@ GtkWidget *createLabelWithBackGroundColor (int index, const char *str) {
 } 
 
 /*! create label with color based index */
-GtkWidget *createLabelWithColor (int index, const char *str) {
+static GtkWidget *createLabelWithColor (int index, const char *str) {
    GtkWidget *label = gtk_label_new (str);
    if (index < 0 || index >= MAX_N_SAIL)
       index = 7; // red
@@ -2735,7 +2736,7 @@ static void fCalendar (struct tm *start) {
    gtk_window_present (GTK_WINDOW (calWindow));
 }
 
-/*! one line for niceReport () */
+/*! one line for reports */
 static void lineReport (GtkWidget *grid, int l, const char* iconName, const char *libelle, const char *value) {
    GtkWidget *icon = gtk_button_new_from_icon_name (iconName);
    //GtkWidget *icon = gtk_label_new ("");
@@ -2903,107 +2904,6 @@ static void onAllureEvent (GtkDrawingArea *drawing_area, cairo_t *cr, \
    }
 }
 
-/*! display nice report */
-static void niceReport (SailRoute *route, double computeTime) {
-   char str [MAX_SIZE_LINE];
-   char totalDate [MAX_SIZE_DATE]; 
-   char line [MAX_SIZE_LINE];
-   char strLat [MAX_SIZE_NAME];
-   char strLon [MAX_SIZE_NAME];
-   int cIndex = MAX (0, route->competitorIndex);
-   if (computeTime > 0) {
-      snprintf (line, sizeof (line), "%s %s      Compute Time: %.2lf sec.", (route->destinationReached) ? 
-       "Destination reached" : "Destination unreached", competitors.t [cIndex].name, computeTime);
-   }
-   else 
-      snprintf (line, sizeof (line), "%s %s", (route->destinationReached) ? "Destination reached" 
-                                          : "Destination unreached", competitors.t [cIndex].name);
-
-   GtkWidget *reportWindow = gtk_application_window_new (app);
-   gtk_window_set_title (GTK_WINDOW(reportWindow), line);
-   gtk_widget_set_size_request (reportWindow, REPORT_WIDTH, -1);
-   g_signal_connect (window, "destroy", G_CALLBACK(onParentDestroy), niceReport);
-
-   GtkWidget *vBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-   gtk_window_set_child (GTK_WINDOW (reportWindow), (GtkWidget *) vBox);
-   
-   GtkWidget *grid = gtk_grid_new();   
-   gtk_grid_set_column_spacing(GTK_GRID (grid), 10);
-   //gtk_grid_set_row_spacing (GTK_GRID (grid), 5);
-   gtk_grid_set_row_homogeneous (GTK_GRID (grid), FALSE);
-   gtk_grid_set_column_homogeneous (GTK_GRID(grid), FALSE);
-   
-   snprintf (line, sizeof (line), "%s\n",\
-      newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours, 
-      totalDate, sizeof (totalDate)));
-   lineReport (grid, 0, "document-open-recent", "Departure Date and Time", line);
-
-   snprintf (line, sizeof (line), "%02d:%02d\n", (int) par.startTimeInHours,\
-       (int) (60 * fmod (par.startTimeInHours, 1.0)));
-   lineReport (grid, 2, "dialog-information-symbolic", "Nb hours:minutes after origin of grib", line);
-   
-   snprintf (line, sizeof (line), "%02d:%02d\n", (int) par.tStep, (int) (60 * fmod (par.tStep, 1.0)));
-   lineReport (grid, 4, "dialog-information-symbolic", "hours:minutes Isoc. Time Step", line);
-   
-   snprintf (line, sizeof (line), "%d\n", route->nIsoc);
-   lineReport (grid, 6, "accessories-text-editor-symbolic", "Nb of isochrones", line);
-
-   snprintf (line, sizeof (line), "%s %s\n",\
-      latToStr (lastClosest.lat, par.dispDms, strLat, sizeof (strLat)),\
-      lonToStr (lastClosest.lon, par.dispDms, strLon, sizeof (strLon)));
-   lineReport (grid, 8, "emblem-ok-symbolic", "Best Point Reached", line);
-
-   snprintf (line, sizeof (line), "%.2lf\n", \
-         (route->destinationReached) ? 0 : orthoDist (lastClosest.lat, lastClosest.lon,\
-         par.pDest.lat, par.pDest.lon));
-   lineReport (grid, 10, "mail-forward-symbolic", "Distance To Destination", line);
-
-   snprintf (line, sizeof (line), "%s\n",\
-      newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours + route->duration, 
-      totalDate, sizeof (totalDate)));
-   lineReport (grid, 12, "alarm-symbolic", "Arrival Date and Time", line);
-
-   snprintf (line, sizeof (line), "%.2lf\n", route->totDist);
-   lineReport (grid, 14, "emblem-important-symbolic", "Total Distance in Nautical Miles", line);
-   
-   snprintf (line, sizeof (line), "%.2lf\n", route->motorDist);
-   lineReport (grid, 16, "emblem-important-symbolic", "Motor Distance in Nautical Miles", line);
-   
-   snprintf (line, sizeof (line), "%s\n", durationToStr (route->duration, str, sizeof (str)));
-   lineReport (grid, 18, "user-away", "Duration", line);
-   
-   snprintf (line, sizeof (line), "%s\n", durationToStr (route->motorDuration, str, sizeof (str)));
-   lineReport (grid, 20, "user-away", "Motor Duration", line);
-   
-   snprintf (line, sizeof (line), "%.2lf\n", route->totDist/route->duration);
-   lineReport (grid, 22, "utilities-system-monitor-symbolic", "Mean Speed Over Ground", line);
-   
-   snprintf (line, sizeof (line), "%d\n", route->nSailChange);
-   lineReport (grid, 24, "utilities-system-monitor-symbolic", "Sail changes", line);
-
-   snprintf (line, sizeof (line), "%s\n", par.polarFileName);
-   lineReport (grid, 26, "utilities-system-monitor-symbolic", "Polar File", line);
-
-   // setup drawing area for stat
-   GtkWidget *hBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-
-   GtkWidget *statDrawingArea = gtk_drawing_area_new ();
-   gtk_widget_set_size_request (statDrawingArea,  REPORT_WIDTH/2, 150);
-   gtk_drawing_area_set_draw_func (GTK_DRAWING_AREA (statDrawingArea), onStatEvent, NULL, NULL);
-
-   GtkWidget *allureDrawingArea = gtk_drawing_area_new ();
-   gtk_widget_set_size_request (allureDrawingArea, REPORT_WIDTH/2, 150);
-   gtk_drawing_area_set_draw_func (GTK_DRAWING_AREA (allureDrawingArea), onAllureEvent, NULL, NULL);
-
-   gtk_box_append (GTK_BOX (hBox), statDrawingArea);
-   gtk_box_append (GTK_BOX (hBox), allureDrawingArea);
-
-   gtk_box_append (GTK_BOX (vBox), grid);
-   gtk_box_append (GTK_BOX (vBox), hBox);
-   gtk_window_present (GTK_WINDOW (reportWindow));
-}
-      
-
 /*! check if routing is terminated */
 static gboolean routingCheck (gpointer data) {
    char str [MAX_SIZE_LINE] = "";
@@ -3030,7 +2930,7 @@ static gboolean routingCheck (gpointer data) {
          break;
       }
       if (par.special == 0)
-         niceReport (&route, route.calculationTime);
+         routeGram ();
       selectedPointInLastIsochrone = (nIsoc <= 1) ? 0 : isoDesc [nIsoc -1].closest; 
       logReport (0);
    }
@@ -3078,7 +2978,7 @@ static gboolean bestDepartureCheck (gpointer data) {
       simulationReportExist = true;
       initStart (&startInfo);
       selectedPointInLastIsochrone = (nIsoc <= 1) ? 0 : isoDesc [nIsoc -1].closest; 
-      niceReport (&route, route.calculationTime);
+      routeGram ();
       simulationReport ();
       gtk_widget_queue_draw (drawing_area);
       break;
@@ -3461,8 +3361,8 @@ static void logDump () {
       infoMessage ("impossible to open log", GTK_MESSAGE_ERROR);
 }
 
-/*! all displayText with right parameters */
-void fileDump (GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+/*! call displayText with right parameters in order to dump text file */
+static void fileDump (GSimpleAction *action, GVariant *parameter, gpointer user_data) {
    const char *fileName = (const char *) user_data;
    char str [MAX_SIZE_NAME];
    GError *error = NULL;
@@ -3617,15 +3517,6 @@ static void routeHistory () {
    gtk_widget_set_visible (menuHist, true);
 }
 
-/*! display the report of route calculation */
-static void routeReport () {
-   if (route.n <= 0)
-      infoMessage ("No route calculated", GTK_MESSAGE_WARNING);
-   else {
-      niceReport (&route, 0);
-   }
-}
-
 /*! Draw simulation */
 static void cbSimulationReport (GtkDrawingArea *area, cairo_t *cr, 
    int width, int height, gpointer userData) {
@@ -3751,11 +3642,11 @@ static void simulationReport () {
    gtk_window_present (GTK_WINDOW (simulationWindow));   
 }
 
+#define MAX_VAL_ROUTE 4 // for onRoutegramEvent
 /*! Draw routegram */
 static void onRoutegramEvent (GtkDrawingArea *area, cairo_t *cr, \
    int width, int height, gpointer userData) {
 
-#define MAX_VAL_ROUTE 4
    int x, y;
    char str [MAX_SIZE_LINE], strDate [MAX_SIZE_LINE];
    const int legendXLeft = width - 80;
@@ -3937,7 +3828,7 @@ static void onRoutegramEvent (GtkDrawingArea *area, cairo_t *cr, \
       cairo_stroke(cr);
    }
 
-   //draw SOG
+   //draw speed
    cairo_set_line_width (cr, 5);
    x = xLeft;
    y = yBottom - yk * route.t[0].sog;
@@ -3945,7 +3836,8 @@ static void onRoutegramEvent (GtkDrawingArea *area, cairo_t *cr, \
    int amure = route.t[0].amure;
    routeColor (cr, motor, amure);
    cairo_move_to (cr, x, y);
-   for (int i = 1; i < route.n; i++) {
+   int n = (route.destinationReached) ? route.n : route.n - 1; 
+   for (int i = 1; i < n; i++) {
       x = xLeft + xk * i * par.tStep;
       y = yBottom - yk * route.t[i].sog;
       cairo_line_to (cr, x, y);
@@ -3957,9 +3849,9 @@ static void onRoutegramEvent (GtkDrawingArea *area, cairo_t *cr, \
          cairo_move_to (cr, x, y);
       }
    }
-   // last SOG segment to destination
+   // last speed segment to destination
    cairo_line_to (cr, lastX, y);
-   cairo_stroke(cr);
+   cairo_stroke (cr);
 
    // draw sail
    cairo_set_line_width (cr, 5);
@@ -4010,22 +3902,71 @@ static void onRoutegramEvent (GtkDrawingArea *area, cairo_t *cr, \
          else cairo_line_to (cr, x, y);
       }
       if (route.destinationReached) 
-         cairo_line_to (cr, lastX, yBottom - yk * lastW);
+         cairo_line_to (cr, lastX, y);
       cairo_stroke(cr);
    }
+}
+/*! return decorated label associated to str */
+static GtkWidget *labelDeco (const char *str) {
+   GtkWidget *label = gtk_label_new (str);
+   char *pango_markup = g_strdup_printf (\
+       "<span foreground='blue' font-style='italic' weight='bold' font_family='monospace'>%s</span>", str);
+   gtk_label_set_markup (GTK_LABEL(label), pango_markup);
+   g_free (pango_markup);
+   
+   gtk_label_set_yalign(GTK_LABEL(label), 0);
+   gtk_label_set_xalign(GTK_LABEL(label), 0);   
+   return label;
+}
+
+/*! one line for routeGram () */
+static void lineRouteGramReport (GtkWidget *grid, int l, const char* iconName, const char *str0,
+                                 const char *val0, const char *str1, const char *val1) {
+   //GtkWidget *icon = gtk_button_new_from_icon_name (iconName);
+   GtkWidget *label = gtk_label_new ("           ");  // space
+   gtk_grid_attach (GTK_GRID (grid), label, 0, l, 1, 1);
+
+   label = labelDeco (str0);
+   gtk_grid_attach (GTK_GRID (grid), label, 1, l, 1, 1);
+   label = labelDeco (val0);
+   gtk_grid_attach (GTK_GRID (grid), label, 2, l, 1, 1);
+
+   label = gtk_label_new ("            ");            // space between colummns
+   gtk_grid_attach (GTK_GRID (grid), label, 3, l, 1, 1);
+
+   label = labelDeco (str1);
+   gtk_grid_attach (GTK_GRID (grid), label, 4, l, 1, 1);
+   label = labelDeco (val1);
+   gtk_grid_attach (GTK_GRID (grid), label, 5, l, 1, 1);
+
+   gtk_widget_set_margin_end (GTK_WIDGET (label), 20);
 }
 
 /*! represent routegram */
 static void routeGram () {
-   char line [MAX_SIZE_LINE];
+   char totalDate [MAX_SIZE_DATE]; 
+   char str [MAX_SIZE_LINE];
+   char strLat [MAX_SIZE_NAME], strLon [MAX_SIZE_NAME];
+   char str0 [MAX_SIZE_LINE];
+   char str1 [MAX_SIZE_LINE];
+   int cIndex = MAX (0, route.competitorIndex);
+
    if (route.n <= 0) {
       infoMessage ("No route calculated", GTK_MESSAGE_WARNING);
       return;
    }
    GtkWidget *routeWindow = gtk_application_window_new (GTK_APPLICATION (app));
-   gtk_window_set_title (GTK_WINDOW (routeWindow), "Routegram");
-   gtk_window_set_default_size (GTK_WINDOW (routeWindow), 1400, 400);
-   g_signal_connect(window, "destroy", G_CALLBACK (onParentDestroy), routeWindow);
+
+   if (route.calculationTime > 0)
+      snprintf (str, sizeof (str), "Destnation %s %s      Compute Time: %.2lf sec.", (route.destinationReached) ? 
+       "Reached" : "Unreached", competitors.t [cIndex].name, route.calculationTime);
+   else 
+      snprintf (str, sizeof (str), "Desination %s %s", (route.destinationReached) ? "Reached" : "Unreached", competitors.t [cIndex].name);
+
+   gtk_window_set_title (GTK_WINDOW (routeWindow), str);
+
+   gtk_window_set_default_size (GTK_WINDOW (routeWindow), 1400, 500);
+   g_signal_connect (window, "destroy", G_CALLBACK (onParentDestroy), routeWindow);
 
    GtkWidget *vBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
    gtk_window_set_child (GTK_WINDOW (routeWindow), vBox);
@@ -4035,14 +3976,81 @@ static void routeGram () {
    gtk_widget_set_vexpand (routeDrawingArea, TRUE);
    gtk_drawing_area_set_draw_func (GTK_DRAWING_AREA (routeDrawingArea), onRoutegramEvent, NULL, NULL);
 
-   snprintf (line, MAX_SIZE_LINE, "Max TWS: %.2lf Kn, Max Gust: %.2lf Kn, Max Waves: %.2lf m, Total Dist.: %.2lf NM",\
-      route.maxTws, MAX (route.maxTws, MS_TO_KN * route.maxGust), route.maxWave, route.totDist);
+   // setup drawing area for stat
+   GtkWidget *hBox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 5);
 
-   GtkWidget *routeStatusBar = gtk_label_new (line);
+   GtkWidget *grid = gtk_grid_new();   
+   gtk_grid_set_column_spacing (GTK_GRID (grid), 10);
+   //gtk_grid_set_row_spacing (GTK_GRID (grid), 5);
+   gtk_grid_set_row_homogeneous (GTK_GRID (grid), FALSE);
+   gtk_grid_set_column_homogeneous (GTK_GRID(grid), FALSE);
+   
+   snprintf (str0, sizeof (str0), "%s",\
+      newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours, 
+      totalDate, sizeof (totalDate)));
+   snprintf (str1, sizeof (str1), "%s",\
+      newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours + route.duration, 
+      totalDate, sizeof (totalDate)));
+   lineRouteGramReport (grid, 0, "alarm-symbolic", "Departure", str0, "Arrival", str1);
+
+   snprintf (str0, sizeof (str0), "%02d:%02d", (int) par.startTimeInHours,\
+       (int) (60 * fmod (par.startTimeInHours, 1.0)));
+   snprintf (str1, sizeof (str1), "%02d:%02d", (int) par.tStep, (int) (60 * fmod (par.tStep, 1.0)));
+   lineRouteGramReport (grid, 1, "dialog-information-symbolic", "Time after grib origin", \
+      str0, "Isoc. Time Step", str1);
+   
+   snprintf (str0, sizeof (str0), "%d", route.nIsoc);
+   snprintf (str1, sizeof (str1), "%s %s",\
+      latToStr (lastClosest.lat, par.dispDms, strLat, sizeof (strLat)),\
+      lonToStr (lastClosest.lon, par.dispDms, strLon, sizeof (strLon)));
+   lineRouteGramReport (grid, 2, "accessories-text-editor-symbolic", "Nb of isochrones", str0, "Best Point Reached", str1);
+
+   snprintf (str0, sizeof (str0), "%.2lf", \
+         (route.destinationReached) ? 0 : orthoDist (lastClosest.lat, lastClosest.lon,\
+         par.pDest.lat, par.pDest.lon));
+   snprintf (str1, MAX_SIZE_LINE, "%.2lf - %.2lf", route.avrSog, route.maxSog);
+
+   lineRouteGramReport (grid, 3, "mail-forward-symbolic", "Distance To Dest. (NM)", str0, "Avr - Max Speed (Kn)", str1);
+
+   snprintf (str0, sizeof (str0), "%.2lf", route.totDist);
+   snprintf (str1, sizeof (str1), "%.2lf", route.motorDist);
+   lineRouteGramReport (grid, 4, "emblem-important-symbolic", "Distance (NM)", str0, \
+                        "Motor Distance (NM)", str1);
+   
+   snprintf (str0, sizeof (str0), "%s", durationToStr (route.duration, str, sizeof (str)));
+   snprintf (str1, sizeof (str1), "%s", durationToStr (route.motorDuration, str, sizeof (str)));
+   lineRouteGramReport (grid, 5, "user-away", "Duration", str0, "Motor Duration", str1);
+
+   snprintf (str0, sizeof (str0), "%d", route.nSailChange);
+   snprintf (str1, sizeof (str1), "%d", route.nAmureChange);
+   lineRouteGramReport (grid, 6, "utilities-system-monitor-symbolic", "Sail changes",  str0, "Amure changes", str1);
+
+   gchar *polarFileName = g_path_get_basename (par.polarFileName);
+   lineRouteGramReport (grid, 7, "utilities-system-monitor-symbolic", "Polar File", polarFileName, "", "");
+   g_free (polarFileName);
+
+   GtkWidget *statDrawingArea = gtk_drawing_area_new ();
+   gtk_widget_set_size_request (statDrawingArea,  REPORT_WIDTH / 2, 150);
+   gtk_drawing_area_set_draw_func (GTK_DRAWING_AREA (statDrawingArea), onStatEvent, NULL, NULL);
+
+   GtkWidget *allureDrawingArea = gtk_drawing_area_new ();
+   gtk_widget_set_size_request (allureDrawingArea,  REPORT_WIDTH / 2, 150);
+   gtk_drawing_area_set_draw_func (GTK_DRAWING_AREA (allureDrawingArea), onAllureEvent, NULL, NULL);
+
+   gtk_box_append (GTK_BOX (hBox), statDrawingArea);
+   gtk_box_append (GTK_BOX (hBox), allureDrawingArea);
+   gtk_box_append (GTK_BOX (hBox), grid);
+
+   snprintf (str, MAX_SIZE_LINE, "Avr TWS: %.2lf, Max TWS: %.2lf Kn, Max Gust: %.2lf Kn, Avr Waves: %.2lf m, Max Waves: %.2lf m",\
+      route.avrTws, route.maxTws, MAX (route.maxTws, MS_TO_KN * route.maxGust), route.avrWave, route.maxWave);
+
+   GtkWidget *routeStatusBar = gtk_label_new (str);
+   GtkWidget *empty = gtk_label_new ("       ");
       
    gtk_box_append (GTK_BOX(vBox), routeDrawingArea);
+   gtk_box_append (GTK_BOX(vBox), empty); // space
+   gtk_box_append (GTK_BOX(vBox), hBox);
    gtk_box_append (GTK_BOX(vBox), routeStatusBar);
-
 
    gtk_window_present (GTK_WINDOW (routeWindow));   
 }
@@ -4710,7 +4718,7 @@ static void *getMeteoConsult () {
 }
 
 /*! produce times steps intetval and limit */
-void getTimeSteps (int type, int requestedTimeStep, int *step0, int *step1, int *limit0) {
+static void getTimeSteps (int type, int requestedTimeStep, int *step0, int *step1, int *limit0) {
    switch (type) {
    case ARPEGE_WIND: // allways 1
       *step0 = 1; // be careful with semantic
@@ -4737,7 +4745,7 @@ void getTimeSteps (int type, int requestedTimeStep, int *step0, int *step1, int 
 }
 
 /*! produce current timeStep interval */
-int nextTimeStepInterval (int type, int requestedTimeStep, int currentTimeStep) {
+static int nextTimeStepInterval (int type, int requestedTimeStep, int currentTimeStep) {
    int step0, step1, limit0;
    getTimeSteps (type, requestedTimeStep, &step0, &step1, &limit0);
    return (currentTimeStep < limit0) ? step0 : step1;
@@ -5689,7 +5697,7 @@ static gboolean mailGribCheck (gpointer data) {
 }
 
 /*! mail Grib Request in thread */
-void *mailGribRequest () {
+static void *mailGribRequest () {
    char path [MAX_SIZE_LINE];
    int count = 0;
    g_atomic_int_set (&gloStatusMailRequest, GRIB_RUNNING);
@@ -6726,7 +6734,7 @@ static void changeLastPoint () {
    }
    lastClosest = isocArray [(nIsoc - 1) * MAX_SIZE_ISOC + selectedPointInLastIsochrone];
    storeRoute (&route, &par.pOr, &lastClosest, 0);
-   niceReport (&route, 0);
+   routeGram ();
 }
 
 /*! select action associated to right click */ 
@@ -7502,23 +7510,23 @@ static void appActivate (GApplication *application) {
 
 /*! for app_startup */
 static void createAction (const char *actionName, void *callBack) {
-   GSimpleAction *act_item = g_simple_action_new (actionName, NULL);
-   g_action_map_add_action (G_ACTION_MAP (app), G_ACTION (act_item));
-   g_signal_connect (act_item, "activate", G_CALLBACK (callBack), NULL);
+   GSimpleAction *actItem = g_simple_action_new (actionName, NULL);
+   g_action_map_add_action (G_ACTION_MAP (app), G_ACTION (actItem));
+   g_signal_connect (actItem, "activate", G_CALLBACK (callBack), NULL);
 }
 
 /*! for app_startup */
 static void createActionWithParam (const char *actionName, void *callBack, int param) {
-   GSimpleAction *act_item = g_simple_action_new (actionName, NULL);
-   g_action_map_add_action (G_ACTION_MAP (app), G_ACTION (act_item));
-   g_signal_connect_data (act_item, "activate", G_CALLBACK (callBack), GINT_TO_POINTER (param), NULL, 0);
+   GSimpleAction *actItem = g_simple_action_new (actionName, NULL);
+   g_action_map_add_action (G_ACTION_MAP (app), G_ACTION (actItem));
+   g_signal_connect_data (actItem, "activate", G_CALLBACK (callBack), GINT_TO_POINTER (param), NULL, 0);
 }
 
 /*! for app_startup */
-static void createActionForFileDump (const char *actionName, void *callBack, char *fileName) {
-    GSimpleAction *act_item = g_simple_action_new(actionName, NULL);
-    g_action_map_add_action (G_ACTION_MAP(app), G_ACTION(act_item));
-    g_signal_connect_data (act_item, "activate", callBack, fileName, NULL, 0);
+static void createActionWithPt (const char *actionName, void *callBack, void *ptParam) {
+    GSimpleAction *actItem = g_simple_action_new (actionName, NULL);
+    g_action_map_add_action (G_ACTION_MAP(app), G_ACTION (actItem));
+    g_signal_connect_data (actItem, "activate", callBack, ptParam, NULL, 0);
 }
 
 /*! Menu set up */
@@ -7555,7 +7563,6 @@ static void appStartup (GApplication *application) {
    createAction ("OrthoReport", niceWayPointReport);
    createAction ("RouteGram", routeGram);
    createAction ("SailRoute", routeDump);
-   createAction ("SailReport", routeReport);
    createAction ("SimulationReport", simulationReport);
    createAction ("Dashboard", dashboard);
 
@@ -7588,8 +7595,8 @@ static void appStartup (GApplication *application) {
    createAction ("VirtualRegatta", virtualRegatta);
 
    createAction ("Help", help);
-   createActionForFileDump ("InfoDump", fileDump, par.parInfoFileName);
-   createActionForFileDump ("CliDump", fileDump, par.cliHelpFileName);
+   createActionWithPt ("InfoDump", fileDump, par.parInfoFileName);
+   createActionWithPt ("CliDump", fileDump, par.cliHelpFileName);
    createAction ("Info", helpInfo);
 
    GMenu *menubar = g_menu_new ();
@@ -7643,7 +7650,6 @@ static void appStartup (GApplication *application) {
    subMenu (display_menu_v, "Way Points Report", "app.OrthoReport");
    subMenu (display_menu_v, "Routegram", "app.RouteGram");
    subMenu (display_menu_v, "Sail Route", "app.SailRoute");
-   subMenu (display_menu_v, "Sail Report", "app.SailReport");
    subMenu (display_menu_v, "Simulation Report", "app.SimulationReport");
    subMenu (display_menu_v, "Dashboard", "app.Dashboard");
 

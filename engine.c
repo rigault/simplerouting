@@ -376,32 +376,8 @@ bool isoDescToStr (char *str, size_t maxLen) {
    return true;
 }
 
-/*! copy all isoc in a string 
-   true if enough space, false if truncated */
-bool allIsocToStr (char *str, size_t maxLen) {
-   char line [MAX_SIZE_LINE];
-   char strLat [MAX_SIZE_LINE];
-   char strLon [MAX_SIZE_LINE];
-   Pp pt;
-   if (maxLen < MAX_SIZE_LINE) 
-      return false;
-   g_strlcpy (str, "No;  Lat        Lon;               Id Father;  Amure;  Motor\n", MAX_SIZE_LINE);
-   for (int i = 0; i < nIsoc; i++) {
-      for (int k = 0; k < isoDesc [i].size; k++) {
-         pt = isocArray [i * MAX_SIZE_ISOC + k];
-         snprintf (line, MAX_SIZE_LINE, "%03d; %-12s%-12s; %6d; %6d; %6d; %6d\n", \
-            i, latToStr (pt.lat, par.dispDms, strLat, sizeof (strLat)),\
-            lonToStr (pt.lon, par.dispDms, strLon, sizeof (strLon)), pt.id, pt.father, pt.amure, pt.motor);
-         if ((strlen (str) + strlen (line)) > maxLen) 
-            return false;
-         g_strlcat (str, line, maxLen);
-      }
-   }
-   return true;
-}
-   
 /*! write in CSV file Isochrones */
-bool dumpAllIsoc (const char *fileName) {
+static bool dumpIsocToFile (const char *fileName) {
    FILE *f;
    Pp pt;
    if ((f = fopen (fileName, "w")) == NULL) {
@@ -416,30 +392,6 @@ bool dumpAllIsoc (const char *fileName) {
       }
    }
    fprintf (f, "\n");
-   fclose (f);
-   return true;
-}
-
-/*! write in CSV file routes */
-bool dumpRoute (const char *fileName, Pp dest) {
-   FILE *f = NULL;
-   int i;
-   int iFather;
-   int dep = (dest.id == 0) ? nIsoc : nIsoc - 1;
-   Pp pt = dest;
-   if ((f = fopen (fileName, "w")) == NULL) {
-      fprintf (stderr, "In dumpRoute, Error cannot write route: %s\n", fileName);
-      return false;
-   }
-   fprintf (f, "%4d; %06.2f; %06.2f; %4d; %4d\n", dep, pt.lat, pt.lon, pt.id, pt.father);
-      
-   for (i = dep - 1; i >= 0; i--) {
-      iFather = findFather (pt.father, i, isoDesc[i].size);
-      pt = isocArray [i * MAX_SIZE_ISOC + iFather];
-      fprintf (f, "%4d; %06.2f; %06.2f; %4d; %4d\n", i, pt.lat, pt.lon, pt.id, pt.father);
-   }
-   pt = par.pOr;
-   fprintf (f, "%4d; %06.2f; %06.2f; %4d; %4d\n", -1, pt.lat, pt.lon, pt.id, pt.father);
    fclose (f);
    return true;
 }
@@ -745,6 +697,31 @@ bool routeToStr (const SailRoute *route, char *str, size_t maxLen, char *footer,
       newDate (route->dataDate, route->dataTime/100 + route->t[0].time + route->duration, strDate, sizeof (strDate)),\
       route->n,
       route->isocTimeStep);
+   return true;
+}
+
+/*! write in CSV file routes */
+bool dumpRouteToFile (SailRoute *route, const char *fileName) {
+   FILE *f = NULL;
+   char footer [MAX_SIZE_LINE];
+   char *buffer = NULL;
+
+   if ((route->n <= 0) || (competitors.n == 0)) {
+      fprintf (stderr, "In dumpRouteToFile, Error: no route\n");
+      return false;
+   }
+   if ((f = fopen (fileName, "w")) == NULL) {
+      fprintf (stderr, "In dumpRoute, Error cannot write route: %s\n", fileName);
+      return false;
+   }
+   if ((buffer = (char *) malloc (MAX_SIZE_BUFFER)) == NULL) {
+      fprintf (stderr, "In dumpRourz, Error Malloc %d\n", MAX_SIZE_BUFFER); 
+      fclose (f);
+      return false;
+   }
+   routeToStr (route, buffer, MAX_SIZE_BUFFER, footer, sizeof (footer)); 
+   fprintf (f, "%s", buffer);
+   fclose (f);
    return true;
 }
 
@@ -1105,8 +1082,8 @@ void *routingLaunch () {
    route.calculationTime = (double) ((ut1-ut0)/MILLION);
    route.destinationReached = (ret > 0);
    if (storeRoute (&route, &par.pOr, &lastClosest, lastStepDuration)) {
-      if (strlen (par.dumpRFileName) > 0) dumpRoute (par.dumpRFileName, lastClosest);
-      if (strlen (par.dumpIFileName) > 0) dumpAllIsoc (par.dumpIFileName);
+      if (strlen (par.dumpRFileName) > 0) dumpRouteToFile (&route, par.dumpRFileName);
+      if (strlen (par.dumpIFileName) > 0) dumpIsocToFile (par.dumpIFileName);
       g_atomic_int_set (&route.ret, ret); // route.ret is positionned just before ending. route.ret is shared between threads !
    }
    else 
