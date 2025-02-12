@@ -179,7 +179,7 @@ static void writeErrorMessage (const char *filename, int n) {
       return;
    }
    while (fgets(line, sizeof (line), file) && count < n) {
-      gchar *lowerLine = g_ascii_strdown (line, -1);
+      char *lowerLine = g_ascii_strdown (line, -1);
       if (strstr (lowerLine, "error")) {
          count = 1;
       }
@@ -204,7 +204,7 @@ static char* extractFilename (const char *filename) {
 
    while (fgets (line, sizeof (line), file)) {
       // check Content-Disposition ou Content-Type with "filename=" or "name="
-      gchar *lowerLine = g_ascii_strdown (line, -1);
+      char *lowerLine = g_ascii_strdown (line, -1);
 
       if (strstr(lowerLine, "content-disposition:") || strstr(lowerLine, "content-type:")) {
          char *start = strstr(line, "name="); // match both filename= and name=
@@ -241,7 +241,7 @@ static char *extractBase64Content (const char *filename) {
 
    while (fgets(line, sizeof(line), file)) {
       // find beginning of base64 section
-      gchar *lowerLine = g_ascii_strdown (line, -1);
+      char *lowerLine = g_ascii_strdown (line, -1);
       if (!isBase64Section &&  (strstr(lowerLine, "content-transfer-encoding: base64") != NULL)) {
          isBase64Section = TRUE;
          continue; // Passer à la ligne suivante

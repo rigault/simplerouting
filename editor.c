@@ -50,7 +50,7 @@ static void onMyCopyClicked (GtkButton *button, gpointer user_data) {
 
    GtkSourceBuffer *sourceBuffer = GTK_SOURCE_BUFFER (gtk_text_view_get_buffer (GTK_TEXT_VIEW (sourceView)));
    GtkTextIter start, end;
-   gchar *text;
+   char *text;
 
    gtk_text_buffer_get_bounds (GTK_TEXT_BUFFER(sourceBuffer), &start, &end);
    text = gtk_text_buffer_get_text (GTK_TEXT_BUFFER(sourceBuffer), &start, &end, FALSE);
@@ -65,9 +65,9 @@ static void onMyCopyClicked (GtkButton *button, gpointer user_data) {
 }
 
 /*! select all string matching text  */
-static void searchAndHighlight (GtkSourceBuffer *buffer, const gchar *text, GList **matches) {
+static void searchAndHighlight (GtkSourceBuffer *buffer, const char *text, GList **matches) {
    GtkTextIter startIter, endIter;
-   gchar *content;
+   char *content;
 
    // Nettoyer les précédentes correspondances
    *matches = NULL;
@@ -100,12 +100,12 @@ static void searchAndHighlight (GtkSourceBuffer *buffer, const gchar *text, GLis
    content = gtk_text_buffer_get_text (GTK_TEXT_BUFFER(buffer), &startIter, &endIter, FALSE);
 
    // Convertir les deux chaînes (texte et contenu) en minuscules pour rendre la recherche insensible à la casse
-   gchar *lowercaseSearchText = g_utf8_strdown(text, -1);
-   gchar *lowercaseContent = g_utf8_strdown(content, -1);
+   char *lowercaseSearchText = g_utf8_strdown(text, -1);
+   char *lowercaseContent = g_utf8_strdown(content, -1);
    GtkTextIter matchStartIter, matchEndIter;
 
    // Trouver toutes les correspondances du texte (insensible à la casse)
-   const gchar *current_pos = lowercaseContent;
+   const char *current_pos = lowercaseContent;
    while ((current_pos = g_strstr_len(current_pos, -1, lowercaseSearchText)) != NULL) {
 
       // Calculer l'offset en caractères UTF-8
@@ -169,7 +169,7 @@ static void onMySearchClicked (GtkButton *button, gpointer user_data) {
    }
 
    // get text of research
-   const gchar *searchText = gtk_editable_get_text (GTK_EDITABLE (data->searchEntry));
+   const char *searchText = gtk_editable_get_text (GTK_EDITABLE (data->searchEntry));
    if (!searchText || strlen (searchText) == 0) {
       fprintf (stderr, "In onMySearchClicked, Search text is empty.\n");
       return;
@@ -210,7 +210,7 @@ static void onMySaveClicked (GtkButton *button, gpointer user_data) {
 
    GtkSourceBuffer *sourceBuffer = GTK_SOURCE_BUFFER (gtk_text_view_get_buffer (GTK_TEXT_VIEW(sourceView)));
    GtkTextIter start, end;
-   gchar *text;
+   char *text;
 
    gtk_text_buffer_get_bounds (GTK_TEXT_BUFFER (sourceBuffer), &start, &end);
    text = gtk_text_buffer_get_text (GTK_TEXT_BUFFER(sourceBuffer), &start, &end, FALSE);
@@ -321,7 +321,7 @@ bool myEditor (GtkApplication *app, const char **fileNames, int fileCount, const
 
    // Main window creation
    windowEditor = GTK_APPLICATION_WINDOW (gtk_application_window_new (app));
-   gtk_window_set_default_size (GTK_WINDOW (windowEditor), 800, 600);
+   gtk_window_set_default_size (GTK_WINDOW (windowEditor), 1200, 600);
    gtk_window_set_title (GTK_WINDOW (windowEditor), title);
 
    // Notebook (tab container) creation

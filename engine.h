@@ -15,5 +15,10 @@ extern void    *routingLaunch ();
 extern void    *bestTimeDeparture ();
 extern void    *allCompetitors ();
 extern void    freeHistoryRoute ();
-extern void    competitorsToStr (CompetitorsList *copyComp, char *buffer, size_t maxLen);
+extern void    competitorsToStr (CompetitorsList *copyComp, char *buffer, size_t maxLen, char *footer, size_t maxLenFooter);
 extern void    logReport (int n);
+extern void    saveRoute (SailRoute *route);
+extern bool    exportRouteToGpx (const SailRoute *route, const gchar *filename);
+extern bool    dumpIsocToFile (const char *fileName);
+
+

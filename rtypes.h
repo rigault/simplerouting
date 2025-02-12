@@ -43,7 +43,7 @@
 #define SIZE_T_IS_SEA         (3601 * 1801)     // size of size is sea 
 #define MAX_N_WAY_POINT       10                // Max number of Way Points
 #define PROG_WEB_SITE         "http://www.orange.com"  
-#define PROG_NAME             "routing"         
+#define PROG_NAME             "RCube"         
 #define PROG_VERSION          "0.1"  
 #define PROG_AUTHOR           "René Rigault"
 #define DESCRIPTION           "Routing calculates best route from pOr (Origin) to pDest (Destination) \
@@ -212,12 +212,12 @@ typedef struct {
 
 /*! Wind point */ 
 typedef struct {
-   double lat;
-   double lon;
-   double u;                  // east west wind or current in meter/s
+   double lat;                // latitude
+   double lon;                // longitude
+   double u;                  // east west component of wind or current in meter/s
    double v;                  // north south component of wind or current in meter/s
    double w;                  // waves height WW3 model
-   double g;                  // wind speed gust
+   double g;                  // wind speed gust un meter/s
    double msl;                // mean sea level pressure
    double prate;              // precipitation rate
 } FlowP;                      // either wind or current
@@ -290,12 +290,12 @@ typedef struct {
 
 /*! Point for way point route */
 typedef struct {
-   double lat;
-   double lon;
-   double od;     // ortho dist
-   double oCap;   // ortho cap 
-   double ld;     // loxo dist
-   double lCap;   // loxo  cap 
+   double lat;    // latitude
+   double lon;    // longitude
+   double od;     // orthodomic distance
+   double oCap;   // orthodomic cap 
+   double ld;     // loxodromic distance
+   double lCap;   // loxodromic cap 
 } WayPoint;
 
 /*! Point for Sail Route  */
@@ -429,6 +429,7 @@ typedef struct {
    char midFileName [MAX_SIZE_FILE_NAME];    // list of mid country related to mmsi and AIS
    char tidesFileName [MAX_SIZE_FILE_NAME];  // list of ports witht lat, lon fo tides
    char logFileName [MAX_SIZE_FILE_NAME];    // log the runs
+   char wpGpxFileName [MAX_SIZE_FILE_NAME];  // To tpre Way Points in GPX format
    char dashboardVR [MAX_SIZE_FILE_NAME];    // Virtual Regatta dashboard thanks to plugin 
    double staminaVR;                         // Init stamina
    int nShpFiles;                            // number of Shp files
@@ -466,6 +467,7 @@ typedef struct {
    double xWind;                             // multiply factor for wind
    double maxWind;                           // max Wind supported
    char webkit [MAX_SIZE_NAME];              // name of webkit application
+   char googleApiKey [MAX_SIZE_TEXT];        // google API Key for google map (web)
    int  curlSys;                             // true if curl wuth system
    int  python;                              // true if python script used for mail grib request
    char smtpServer [MAX_SIZE_NAME];          // SMTP server name

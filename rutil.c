@@ -201,8 +201,8 @@ char *newFileNameSuffix (const char *fileName, const char *suffix, char *newFile
 
 /*!remove all .tmp file with prefix */
 void removeAllTmpFilesWithPrefix (const char *prefix) {
-   gchar *directory = g_path_get_dirname (prefix); 
-   gchar *base_prefix = g_path_get_basename (prefix);
+   char *directory = g_path_get_dirname (prefix); 
+   char *base_prefix = g_path_get_basename (prefix);
 
    GDir *dir = g_dir_open (directory, 0, NULL);
    if (!dir) {
@@ -212,10 +212,10 @@ void removeAllTmpFilesWithPrefix (const char *prefix) {
       return;
    }
 
-   const gchar *filename = NULL;
+   const char *filename = NULL;
    while ((filename = g_dir_read_name (dir))) {
       if (g_str_has_prefix (filename, base_prefix) && g_str_has_suffix(filename, ".tmp")) {
-         gchar *filepath = g_build_filename (directory, filename, NULL);
+         char *filepath = g_build_filename (directory, filename, NULL);
          remove (filepath);
          g_free (filepath);
      }
@@ -545,7 +545,7 @@ double getCoord (const char *str, double minLimit, double maxLimit) {
  */
 char *buildRootName (const char *fileName, char *rootName, size_t maxLen) {
    const char *workingDir = par.workingDir[0] != '\0' ? par.workingDir : WORKING_DIR;
-   gchar *fullPath = (g_path_is_absolute (fileName)) ? g_strdup (fileName) : g_build_filename (workingDir, fileName, NULL);
+   char *fullPath = (g_path_is_absolute (fileName)) ? g_strdup (fileName) : g_build_filename (workingDir, fileName, NULL);
    if (!fullPath) return NULL;
    g_strlcpy (rootName, fullPath, maxLen);
    g_free (fullPath);
@@ -1206,6 +1206,8 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "CONST_WIND_TWD:%lf", &par.constWindTwd) > 0);
       else if (sscanf (pLine, "CONST_CURRENT_S:%lf", &par.constCurrentS) > 0);
       else if (sscanf (pLine, "CONST_CURRENT_D:%lf", &par.constCurrentD) > 0);
+      else if (sscanf (pLine, "WP_GPX_FILE:%255s", str) > 0)
+         buildRootName (str, par.wpGpxFileName, sizeof (par.wpGpxFileName));
       else if (sscanf (pLine, "DUMPI:%255s", str) > 0)
          buildRootName (str, par.dumpIFileName, sizeof (par.dumpIFileName));
       else if (sscanf (pLine, "DUMPR:%255s", str) > 0)
@@ -1238,6 +1240,7 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "CLOSEST_DISP:%d", &par.closestDisp) > 0);
       else if (sscanf (pLine, "FOCAL_DISP:%d", &par.focalDisp) > 0);
       else if (sscanf (pLine, "SHP_POINTS_DISP:%d", &par.shpPointsDisp) > 0);
+      else if (sscanf (pLine, "GOOGLE_API_KEY:%1024s", par.googleApiKey) > 0);
       else if (sscanf (pLine, "WEBKIT:%255[^\n]", par.webkit) > 0)
          g_strstrip (par.webkit);
       else if ((strstr (pLine, "FORBID_ZONE:") != NULL) && (par.nForbidZone < MAX_N_FORBID_ZONE)) {
@@ -1361,6 +1364,7 @@ bool writeParam (const char *fileName, bool header, bool password) {
       fprintf (f, "CONST_CURRENT_D: %.2lf\n", par.constCurrentD);
    }
 
+   fprintf (f, "WP_GPX_FILE:     %s\n", par.wpGpxFileName);
    fprintf (f, "DUMPI:           %s\n", par.dumpIFileName);
    fprintf (f, "DUMPR:           %s\n", par.dumpRFileName);
    fprintf (f, "PAR_INFO:        %s\n", par.parInfoFileName);
@@ -1391,6 +1395,7 @@ bool writeParam (const char *fileName, bool header, bool password) {
    fprintf (f, "SMTP_SCRIPT:     %s\n", par.smtpScript);
    fprintf (f, "IMAP_TO_SEEN:    %s\n", par.imapToSeen);
    fprintf (f, "IMAP_SCRIPT:     %s\n", par.imapScript);
+   fprintf (f, "GOOGLE_API_KEY:  %s\n", par.googleApiKey);
    fprintf (f, "WEBKIT:          %s\n", par.webkit);
    fprintf (f, "SMTP_SERVER:     %s\n", par.smtpServer);
    fprintf (f, "SMTP_USER_NAME:  %s\n", par.smtpUserName);
@@ -1613,6 +1618,95 @@ bool curlGet (const char *url, const char *outputFile, char *errMessage, size_t 
       snprintf(errMessage, maxLen, "HTTP error: %ld", http_code);
       return false;
    }
+   return true;
+}
+
+/*! export Waypoints to GPX */
+bool exportWpToGpx (const char *gpxFileName) {
+   FILE *f;
+   if (! gpxFileName) 
+      return false;
+   if ((f = fopen (gpxFileName, "w")) == NULL) {   
+      fprintf (stderr, "In exportWpToGpx, Impossible to write open: %s\n", gpxFileName);
+      return false;
+   }
+
+   fprintf (f, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+   fprintf (f, "<gpx version=\"1.1\" creator=\"%s\">\n", PROG_NAME);
+   fprintf (f, "   <wpt lat=\"%.4lf\" lon=\"%.4lf\">\n", par.pOr.lat, par.pOr.lon);
+   fprintf (f, "      <name>Origin</name>\n");
+   fprintf (f, "   </wpt>\n");
+   for (int i = 0; i <  wayPoints.n; i++) {
+      fprintf (f, "   <wpt lat=\"%.4lf\" lon=\"%.4lf\">\n", wayPoints.t [i].lat, wayPoints.t[i].lon);
+      fprintf (f, "      <name>WP: %d</name>\n", i);
+      fprintf (f, "   </wpt>\n");
+   }
+   fprintf (f, "   <wpt lat=\"%.4lf\" lon=\"%.4lf\">\n", par.pDest.lat, par.pDest.lon);
+   fprintf (f, "      <name>Destination</name>\n");
+   fprintf (f, "   </wpt>\n");
+
+   fprintf (f, "</gpx>\n");
+   fclose (f);
+   return true;
+}
+
+/*! export CSV trace file toGPX file */
+bool exportTraceToGpx (const char *fileName, const char *gpxFileName) {
+   FILE *csvFile = fopen (fileName, "r");
+   FILE *gpxFile = fopen (gpxFileName, "w");
+   
+   if (!csvFile || !gpxFile) {
+      if (csvFile) fclose(csvFile);
+      if (gpxFile) fclose(gpxFile);
+      return false;
+   }
+   
+   gchar *line = NULL;
+   size_t len = 0;
+   ssize_t read;           // signed size t to authorize -1
+   bool firstLine = true;
+   
+   fprintf (gpxFile, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+   fprintf (gpxFile, "<gpx version=\"1.1\" creator=\"%s\">\n", PROG_NAME);
+   fprintf (gpxFile, "  <trk>\n");
+   fprintf (gpxFile, "   <name>Track %s</name>\n", gpxFileName);
+   fprintf (gpxFile, "   <trkseg>\n");
+   
+   while ((read = getline (&line, &len, csvFile)) != -1) {
+      if (firstLine) { 
+         firstLine = false;
+         continue;
+      }
+      
+      char **fields = g_strsplit (line, ";", -1);
+      size_t nFields = g_strv_length(fields);
+      if (nFields < 4) {
+         g_strfreev (fields);
+         continue;
+      }
+      for (size_t i = 0; i < nFields; i += 1)
+         g_strstrip (fields [i]);
+
+     fprintf (gpxFile, "     <trkpt lat=\"%s\" lon=\"%s\">\n", fields [0], fields [1]);
+     g_strdelimit (fields [3], "/", '-');
+     fprintf (gpxFile, "       <time>%.19sZ</time>\n",  g_strdelimit (fields [3], " ", 'T'));
+
+     if (nFields > 3 && fields [4] != NULL && fields [4][0] != '\0')
+         fprintf (gpxFile, "       <course>%s</course>\n", fields [4]);
+     if (nFields > 4 && fields [5] != NULL && fields [5][0] != '\0')
+         fprintf (gpxFile, "       <speed>%s</speed>\n", fields [5]);
+     fprintf (gpxFile, "     </trkpt>\n");
+      
+     g_strfreev (fields);
+   }
+   
+   fprintf (gpxFile, "   </trkseg>\n");
+   fprintf (gpxFile, "  </trk>\n");
+   fprintf (gpxFile, "</gpx>\n");
+   
+   fclose (csvFile);
+   fclose (gpxFile);
+   if (line) free(line);
    return true;
 }
 

@@ -249,13 +249,13 @@ static void strncpyPad (char *dest, const char *src, size_t n) {
    time format: 12:48:00 */
 struct tm getTmTime (const char *strDate, const char *strTime) {
    struct tm tm0 = {0};
-   gchar **dateTokens = g_strsplit (strDate, "_", -1);
+   char **dateTokens = g_strsplit (strDate, "_", -1);
    if (!dateTokens || g_strv_length(dateTokens) < 3) {
       g_strfreev(dateTokens);
       return tm0;
    }
 
-   gchar **timeTokens = g_strsplit(strTime, ":", -1);
+   char **timeTokens = g_strsplit(strTime, ":", -1);
    if (!timeTokens || g_strv_length(timeTokens) < 3) {
       g_strfreev(dateTokens);
       g_strfreev(timeTokens);
@@ -337,7 +337,7 @@ struct tm dashboardImportParam (const char *fileName, CompetitorsList *competito
    while (fgets (line, sizeof (line), file)) {
       // Parse the CSV line
       nLine += 1;
-      gchar **tokens = g_strsplit (line, ";", -1);
+      char **tokens = g_strsplit (line, ";", -1);
       nCol = g_strv_length (tokens);
       if (! tokens || (nCol > MAX_COL_VR_DASHBOARD))
          continue;

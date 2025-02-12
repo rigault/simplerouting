@@ -50,6 +50,7 @@ static void initScenarioOption (void) {
 /*! Manage command line option reduced to one character */
 void optionManage (char option) {
 	FILE *f = NULL;
+   char sailPolFileName [MAX_SIZE_NAME] = "";
    char directory [MAX_SIZE_DIR_NAME];
    char *buffer = NULL;
    char footer [MAX_SIZE_LINE] = "";
@@ -140,6 +141,20 @@ void optionManage (char option) {
          printf ("tws true wind speed = ");
          if (scanf ("%lf", &tws) < 1) break;
          printf ("speed over ground: %.2lf\n", findPolar (twa, tws, polMat));
+      }
+      break;
+   case 'q': // sail Polar
+      newFileNameSuffix (par.polarFileName, "sailpol", sailPolFileName, sizeof (sailPolFileName));
+      readPolar (false, sailPolFileName, &sailPolMat, errMessage, sizeof (errMessage));
+      polToStr (&sailPolMat, buffer, MAX_SIZE_BUFFER);
+      printf ("%s\n", buffer);
+      while (true) {
+         printf ("twa true wind angle = ");
+         if (scanf ("%lf", &twa) < 1) break;
+         printf ("tws true wind speed = ");
+         if (scanf ("%lf", &tws) < 1) break;
+         int sail = closestInPolar (twa,  tws, sailPolMat);
+         printf ("Sail: %d, Name: %s\n", sail, sailName [sail % MAX_N_SAIL]); 
       }
       break;
    case 'P': // Wave polar

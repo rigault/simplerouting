@@ -94,6 +94,8 @@ extern char   *strCpyMaxWidth (const char *str, int n, char *res, size_t maxLen)
 extern bool   curlGet (const char *url, const char *outputFile, char *errMessage, size_t maxLen); 
 extern void   updateIsSeaWithForbiddenAreas (void);
 extern bool   isServerAccessible (const char *url);
+extern bool   exportWpToGpx (const char *gpxFileName);
+extern bool   exportTraceToGpx (const char *fileName, const char *gpxFileName);
 extern bool   addTraceGPS (const char *fileName);
 extern bool   addTracePt (const char *fileName, double lat, double lon);
 extern bool   findLastTracePoint (const char *fileName, double *lat, double *lon, double *time);
