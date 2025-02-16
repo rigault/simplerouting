@@ -28,6 +28,7 @@ TRACE:            Trace File Name
 LOG:              Log File Name
 VR_DASHBOARD:     Virtual Regatta Dashboard File Name
 VR_DASHB_UTC:     1 if VR Dashboard provide time in UTC. O if local time.
+VR_STAMINA:       double number betwween 0.0 and 100.0 for stamina virtual regatta init.
 START_TIME:       Start Time in Hours after befinning of Grib
 T_STEP:           Time Step between Isochrones
 RANGE_COG:        Range COG in degrees for Isochrone Calculation
@@ -48,8 +49,9 @@ CONST_WIND_TWS:   If > 0, Constant Wind Speed in Knots
 CONST_WIND_TWD:   If CONST_WIND_TWS > 0, Constant Wind Direction in degrees
 CONST_CURRENT_S:  If > 0, Constant Currenet Speed in Knots
 CONST_CURRENT_D:  If CONST_WIND_TWS > 0, Constant Current Direction in degrees
+WP_GPX_FILE:      File Name of GPX file to expert waypoints.
 DUMPI:            Dump Isochrone Text File Name
-DUMPR:            Dump Route Text File Name
+DUMPR:            File Name of GPX file to export Route
 PAR_INFO:         Parameter Information Text File Name
 OPT:              Optimization Algorithm
 ISOC_DISP:        Isochrone Display
@@ -67,6 +69,8 @@ SHP_POINTS_DISP:  Display SHP files as points, not as shapes filled.
 LEVEL_POI_DISP:   Level of Point of Interest for Display
 SPEED_DISP:       Speed of display (fluidity)
 TECHNO_DISP:      Additionnal Info display for technical expert
+CLOSEST_DISP:     Display closest point to destination in each Isochrone
+FOCAL_DISP:       Display focal in each isochrone
 J_FACTOR:         For ForwardOptimization algorithm
 K_FACTOR:         For ForwardOptimization algorithm
 N_SECTORS:        Number of sectors. For ForwardOptimization algorithm
@@ -81,7 +85,10 @@ IMAP_SERVER:      IMAP server name. Example: imap.orange.fr
 IMAP_USER_NAME:   IMAP user name. Example: rene.rigault@wanadoo.fr
 IMAP_MAIL_BOX:    IMAP mail box. Example: inbox/meteoinfoforrr@orange.fr
 MAIL_PW:          Mail Password (be careful)
-WEBKIT:           WebKit name
+WEBKIT:           WebKit name. Note that "xdg-open" is the prefered navigator.
+WEB:              Web Directory
+WINDY_API_KEY:    Windy API Key
+GOOGLE_API_KEY:   Google API Key for google map 
 EDITOR:           Editor Name
 SPREADSHEET:      SpreadSheet name (be careful)
 FORBID_ZONE:      Specification of Forbidden Zone
