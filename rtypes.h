@@ -413,6 +413,7 @@ typedef struct {
    double gribResolution;                    // grib lat step for mail request
    int gribTimeStep;                         // grib time step for mail request
    int gribTimeMax;                          // grib time max fir mail request
+   char web [MAX_SIZE_DIR_NAME];             // name of web directory
    char currentGribFileName [MAX_SIZE_FILE_NAME];   // name of current grib file
    char polarFileName [MAX_SIZE_FILE_NAME];  // name of polar file
    char wavePolFileName [MAX_SIZE_FILE_NAME];// name of Wave polar file
@@ -467,6 +468,7 @@ typedef struct {
    double xWind;                             // multiply factor for wind
    double maxWind;                           // max Wind supported
    char webkit [MAX_SIZE_NAME];              // name of webkit application
+   char windyApiKey [MAX_SIZE_TEXT];         // windy API Key (web)
    char googleApiKey [MAX_SIZE_TEXT];        // google API Key for google map (web)
    int  curlSys;                             // true if curl wuth system
    int  python;                              // true if python script used for mail grib request

@@ -2,7 +2,7 @@
  * \brief Small routing software written in C language with GTK4
  * \author Rene Rigault
  * \version 0.1
- * \date 2024 
+ * \date 2025
  * \section Compilation
  * \li see "ccall4" file
  * \section Documentation
@@ -196,7 +196,7 @@ static bool   destPressed = true;
 static bool   polygonStarted = false;
 static bool   selecting = FALSE;
 static bool   updatedColors = false; 
-static double theTime = 0.0;
+static double theTime = 0.0;                       // number of decimal hours after befinning of Grib
 static int    polarType = WIND_POLAR;
 static int    segmentOrBezier = SEGMENT;
 static int    selectedPointInLastIsochrone = 0;
@@ -503,12 +503,27 @@ static void *commandWindy (void *data) {
    g_string_free (string, TRUE);
 }
 
+/*! find UTC TIME at theTime 
+   theTime is the number of decimal hours after the beginning of Grib */
+static struct tm *tmTime (double theTime) {  
+   time_t time0 = gribDateTimeToEpoch (zone.dataDate [0], zone.dataTime [0]); // epoch Grib Time
+   time0 += offsetLocalUTC ();
+   time0 += theTime * 3600.0;             // Add offset time
+   struct tm *utcTime = gmtime (&time0);  // UTC conversion
+   return utcTime;
+}
+
 /*! open windy using URL
-   Example: https://www.windy.com/route-planner/lat0,lon0;lat1,lon1,...,latn,lonN?lat,lon,zoom,i:pressure */
+   "https://www.windy.com/route-planner/45,1;45,2;46,3?2025-02-14-18,47.0,-2.0,8,d:picker"
+   https://www.windy.com/route-planner/lat0,lon0;lat1,lon1,...,latn,lonN?time,lat,lon,zoom,d:picker */
 static void windy (GSimpleAction *action, GVariant *parameter, gpointer *data) {
-   const char *windyUrl = "\"https://www.windy.com/route-planner/";
+   const char *windyUrl = "\"https://www.windy.com/route-planner/boat/";
    const int zoom = 8; // CLAMP (9 - log2 (diffLat), 2, 19);
    GString *string = g_string_new ("");
+   char strTime [MAX_SIZE_DATE];
+   struct tm *utcTime = tmTime ((route.n == 0) ? theTime : route.t[0].time);
+   strftime (strTime, sizeof (strTime), "%Y-%m-%d-%H", utcTime);  // format Windy
+   
    g_string_append_printf (string, "%s %s", par.webkit, windyUrl);
 
    if (route.n > 0) {
@@ -529,35 +544,19 @@ static void windy (GSimpleAction *action, GVariant *parameter, gpointer *data) {
       }
       g_string_append_printf (string, "%.6f,%.6f", par.pDest.lat, par.pDest.lon);
    }
-   g_string_append_printf (string, "?%.6lf,%.6lf,%d\",i:pressure", par.pOr.lat, par.pOr.lon, zoom);
+   g_string_append_printf (string, "?%s,%.6lf,%.6lf,%d\",d:picker", strTime, par.pOr.lat, par.pOr.lon, zoom);
+   printf ("%s\n", string->str);
    g_thread_new ("windy", commandWindy, string);
 }
 
 /*! generate json description of track boats */
 static bool generateJson (const char *fileName, int index) {
-   const int rank = 1;
-   time_t timestamp = time (NULL);
-   
-   // Create string
    GString *jsonString = g_string_new ("{\"result\": {\n");
 
-   // waypoint route
-   /*g_string_append_printf (jsonString, "\"%s\": {\n\"heading\": %.0lf, \"rank\": %d, \"timestamp\": %ld, \"track\": [\n", 
-      "WayPoints", wayPoints.t [0].lCap, rank, timestamp);
-
-   calculateOrthoRoute ();
-   g_string_append_printf (jsonString, "   [%.6f, %.6f],\n", par.pOr.lat, par.pOr.lon);
-   for (int i = 0; i < wayPoints.n; i++) {
-      g_string_append_printf (jsonString, "   [%.6f, %.6f],\n", wayPoints.t[i].lat, wayPoints.t[i].lon);
-   }
-   g_string_append_printf (jsonString, "   [%.6f, %.6f]", par.pDest.lat, par.pDest.lon);
-   g_string_append_printf (jsonString, "]\n}\n");
-   */
    // current route
    if (route.n > 0) {
-      g_string_append_printf (jsonString, "\"%s\": {\n\"heading\": %.0lf, \"rank\": %d, \"timestamp\": %ld, \"track\": [\n", 
-      //g_string_append_printf (jsonString, ",\n\"%s\": {\n\"heading\": %.0lf, \"rank\": %d, \"timestamp\": %ld, \"track\": [\n", 
-         competitors.t[0].name, route.t [index].lCap, rank + 1, timestamp); 
+      g_string_append_printf (jsonString, "\"%s\": {\n\"heading\": %.0lf, \"rank\": %d, \"track\": [\n", 
+         competitors.t[0].name, route.t [index].lCap, 0); 
       for (int i = 0; i < route.n; i++) {
          g_string_append_printf (jsonString, "   [%.6f, %.6f],\n", route.t[i].lat, route.t[i].lon);
       }
@@ -567,20 +566,19 @@ static bool generateJson (const char *fileName, int index) {
          g_string_append_printf (jsonString, "   [%.6f, %.6f]\n", route.t[route.n - 1].lat, route.t[route.n - 1].lon); // no comma
 
       g_string_append_printf (jsonString, "]\n}\n");
-   
    }
 
    // history routes
-   for (int k = 0; k < historyRoute.n - 1; k++) {
-      g_string_append_printf (jsonString, ",\n\"Rte%d\": {\n\"heading\": %.0lf, \"rank\": %d, \"timestamp\": %ld, \"track\": [\n", 
-         k, historyRoute.r[k].t[index].lCap, rank + 2 + k, timestamp); 
+   for (int k = 0; k < historyRoute.n - 1; k += 1) {
+      g_string_append_printf (jsonString, ",\n\"Rte%d\": {\n\"heading\": %.0lf, \"rank\": %d, \"track\": [\n", 
+         k, historyRoute.r[k].t[index].lCap, k + 1); 
 
-      for (int i = 1; i < historyRoute.r[k].n-1; i++) {
+      for (int i = 0; i < historyRoute.r[k].n-1; i += 1) {
          g_string_append_printf (jsonString, "   [%.6f, %.6f],\n", historyRoute.r[k].t[i].lat, historyRoute.r[k].t[i].lon);
       }
 
       g_string_append_printf (jsonString, "   [%.6f, %.6f]\n", 
-         historyRoute.r[k].t[historyRoute.r[k].n-1].lat, historyRoute.r[k].t[historyRoute.r[k].n-1].lon);
+         historyRoute.r[k].t[historyRoute.r[k].n - 1].lat, historyRoute.r[k].t[historyRoute.r[k].n - 1].lon);
 
       g_string_append_printf (jsonString, "]\n}\n");
    }
@@ -596,34 +594,60 @@ static bool generateJson (const char *fileName, int index) {
    return true;
 }
 
-/*! open windy using API */
+/*! open windy using API 
+   creation of paramFile wich contain parameters (javascipt values)
+   creation of json file for the routes
+   launch navigator on local html file thar referenves javascript files */
 static void windyAPI (GSimpleAction *action, GVariant *parameter, gpointer *data) {
-   const char *windyFile = "geo/windyindex.html";
-   const char *windyBoats = "geo/windyboats.json";
-   const char *paramFileName = "geo/windyparam.js";
+   if (route.n == 0) {
+      windy (action, parameter, data);
+      return;
+   }
+   bool OK = true;
+   const char *windyFile = "windyindex.html";
+   const char *windyBoats = "windyboats.json";
+   const char *paramFile = "windyparam.js";
    const char *navigator = "google-chrome --disable-web-security --user-data-dir=/tmp/chrome_dev";
    char *command = NULL;
-   char str [MAX_SIZE_TEXT];
    int index = findIndexInRoute (&route, theTime);
-   // index = 0; // ATT
+   time_t epochStartTime = gribDateTimeToEpoch (zone.dataDate [0], zone.dataTime [0]) + 3600 * route.t [index].time;
 
-   snprintf (str, sizeof (str), "let index = %d;\n", index);
-   if (! g_file_set_contents (paramFileName, str, -1, NULL)) {
+   char *fullWindyFile = g_build_filename (par.web, windyFile, NULL);
+   char *fullWindyBoats = g_build_filename (par.web, windyBoats, NULL);
+   char *fullParamFile = g_build_filename (par.web, paramFile, NULL);
+   GString *string = g_string_new ("");
+
+   g_string_append_printf (string, "let rCubeIndex = %d;\nlet rCubeStep = %0lf;\nlet rCubeEpoch = %ld;\nlet rCubeKey = \"%s\"\n", 
+                           index, route.isocTimeStep * 3600.0, epochStartTime, par.windyApiKey);
+
+   g_string_append_printf (string, "let wayPoints = [[%.6f, %.6f], ", par.pOr.lat, par.pOr.lon);
+   for (int i = 0; i < wayPoints.n; i++) {
+      g_string_append_printf (string, "[%.6f, %.6f],", wayPoints.t[i].lat, wayPoints.t[i].lon);
+   }
+   g_string_append_printf (string, "[%.6f, %.6f]];\n", par.pDest.lat, par.pDest.lon);
+
+   printf ("File: %s\n%s\n", fullParamFile, string->str);
+
+   if (! g_file_set_contents (fullParamFile, string->str, -1, NULL)) {
       infoMessage ("In Windy: Impossible to  create paramFile file", GTK_MESSAGE_ERROR);
-      return;
+      OK = false;
    }
-   
-   if (! generateJson (windyBoats, index)) {
+   if (OK && ! generateJson (fullWindyBoats, index)) {
       infoMessage ("In Windy: Impossible to generate json file", GTK_MESSAGE_ERROR);
-      return;
+      OK = false;
    }
-   if ((command = malloc (MAX_SIZE_LINE)) == NULL) {
+   if (OK && (command = malloc (MAX_SIZE_LINE)) == NULL) {
       fprintf (stderr, "In Windy Malloc: %d\n", MAX_SIZE_LINE);
-      return;
-   }   
-   snprintf (command, MAX_SIZE_LINE, "%s %s", navigator, windyFile);
-   printf ("windy command  : %s\n", command);
-   g_thread_new ("windy", commandRun, command);
+      OK = false;
+   } 
+   if (OK) {
+      snprintf (command, MAX_SIZE_LINE, "%s %s", navigator, fullWindyFile);
+      printf ("windy command  : %s\n", command);
+      g_thread_new ("windy", commandRun, command);
+   }
+   g_free (fullWindyFile);
+   g_free (fullWindyBoats);
+   g_free (fullParamFile);
 }
 
 /*! open virtual Regatta */
@@ -692,71 +716,110 @@ static void openMap (GSimpleAction *action, GVariant *parameter, gpointer *data)
    g_thread_new ("openMap", commandRun, command);
 }
 
-/*! create HTML file using template, routes and API Key */
-static bool generateHtml (const char *templateFile, const char *newFile, char *apiKey) {
-   char *templateContent = NULL;
+/*! replace strFrom by strTo in file. Create a new file */
+static bool replaceStrInFile (const char *fromFile, const char *toFile, const char *strFrom, const char *strTo) {
+   char *content = NULL;
    gsize length = 0;
 
    // get template.html
-   if (!g_file_get_contents (templateFile, &templateContent, &length, NULL)) {
-      fprintf (stderr, "In generateHtml: Error reading file: %s\n", templateFile);
+   if (!g_file_get_contents (fromFile, &content, &length, NULL)) {
+      fprintf (stderr, "In replaceHtmlKey: Error reading file: %s\n", fromFile);
       return false;
    }
-   GString *template = g_string_new (templateContent);
+   GString *string = g_string_new (content);
 
-   // build list of points
-   GString *coords1 = g_string_new("");
-   calculateOrthoRoute ();
-   g_string_append_printf (coords1, "{lat: %.6f, lng: %.6f},\n", par.pOr.lat, par.pOr.lon);
-   for (int i = 0; i < wayPoints.n; i++) {
-      g_string_append_printf (coords1, "{lat: %.6f, lng: %.6f},\n", wayPoints.t[i].lat, wayPoints.t[i].lon);
+   g_string_replace (string, strFrom, strTo, 1); 
+
+   // Write new file after replacement
+   if (! g_file_set_contents (toFile, string->str, -1, NULL)) {
+      fprintf (stderr, "In replaceHtmlKey: Error creating file: %s\n", toFile);
+      return false;
    }
-   g_string_append_printf (coords1, "{lat: %.6f, lng: %.6f}", par.pDest.lat, par.pDest.lon);
+   g_free (content);
+   g_string_free (string, TRUE);
+   return true;
+}
 
-   GString *coords2 = g_string_new ("");
+/*! create js file for google map*/
+static bool generateGoogleMapParam (const char *fileName) {
+   // build list of points
+   GString *coords = g_string_new("let routeCoords =\n[\n   [\n");
+   calculateOrthoRoute ();
+
+   // Waypoints
+   g_string_append_printf (coords, "      {lat: %.6f, lng: %.6f},\n", par.pOr.lat, par.pOr.lon);
+   for (int i = 0; i < wayPoints.n; i++) {
+      g_string_append_printf (coords, "      {lat: %.6f, lng: %.6f},\n", wayPoints.t[i].lat, wayPoints.t[i].lon);
+   }
+   g_string_append_printf (coords, "      {lat: %.6f, lng: %.6f}\n", par.pDest.lat, par.pDest.lon);
+   g_string_append_printf (coords, "   ],\n");
+
+   // Main route
    if (route.n > 0) {
+      g_string_append_printf (coords, "[\n");
       for (int i = 0; i < route.n; i++) {
-         g_string_append_printf (coords2, "{lat: %.6f, lng: %.6f},\n", route.t[i].lat, route.t[i].lon);
+         g_string_append_printf (coords, "      {lat: %.6f, lng: %.6f},\n", route.t[i].lat, route.t[i].lon);
       }
       if (route.destinationReached)
-         g_string_append_printf (coords2, "{lat: %.6f, lng: %.6f}", par.pDest.lat, par.pDest.lon);
-   
+         g_string_append_printf (coords, "      {lat: %.6f, lng: %.6f}\n", par.pDest.lat, par.pDest.lon);
+      g_string_append_printf (coords, "   ],\n");
    }
-   g_string_replace (template, "REPLACE_API_KEY", apiKey, 1); 
-   g_string_replace (template, "REPLACE_COORDS1", coords1->str, 1); 
-   g_string_replace (template, "REPLACE_COORDS2", coords2->str, 1); 
 
-   // Write new file after replacements
-   if (! g_file_set_contents (newFile, template->str, -1, NULL)) {
-      fprintf (stderr, "In generateHtml: Error creating file: %s\n", newFile);
+   // history routes
+   for (int k = 0; k < historyRoute.n - 1; k += 1) {
+      g_string_append_printf (coords, "[\n");
+      for (int i = 0; i < historyRoute.r[k].n; i += 1) {
+         g_string_append_printf (coords, "      {lat: %.6f, lng: %.6f},\n", historyRoute.r[k].t[i].lat, historyRoute.r[k].t[i].lon);
+      }
+      g_string_append_printf (coords, "   ],\n");
+   }
+   g_string_append_printf (coords, "];");
+
+   if (! g_file_set_contents (fileName, coords->str, -1, NULL)) {
+      fprintf (stderr, "In generateHtml: Error creating file: %s\n", fileName);
       return false;
    }
-
-   g_free (templateContent);
-   g_string_free (template, TRUE);
-   g_string_free (coords1, TRUE);
-   g_string_free (coords2, TRUE);
+   g_string_free (coords, TRUE);
    return true;
 }
 
 /*! open google map */
 static void googleMap (GSimpleAction *action, GVariant *parameter, gpointer *data) {
-   const char *templateFileName = "geo/template.html";
-   const char *fileName = "geo/googlemap.html";
+   const char *paramFileName = "googlemapparam.js";
+   const char *templateFileName = "googlemaptemplate.html";
+   const char *fileName = "googlemap.html";
+   bool OK = true;
+
+   char *fullParamFileName = g_build_filename (par.web, paramFileName, NULL);
+   char *fullTemplateFileName = g_build_filename (par.web, templateFileName, NULL);
+   char *fullFileName = g_build_filename (par.web, fileName, NULL);
    char *command = NULL;
-   if (! generateHtml (templateFileName, fileName, par.googleApiKey)) {
+   if (! generateGoogleMapParam (fullParamFileName)) {
+      infoMessage ("In googleMap: Impossible to generate param file", GTK_MESSAGE_ERROR);
+      OK = false;
+      return;
+      
+   }
+   if (OK && ! replaceStrInFile (fullTemplateFileName, fullFileName, "REPLACE_API_KEY", par.googleApiKey)) {
       infoMessage ("In googleMap: Impossible to get html file", GTK_MESSAGE_ERROR);
+      OK = false;
       return;
    }
-   if ((command = malloc (MAX_SIZE_LINE)) == NULL) {
+   if (OK && (command = malloc (MAX_SIZE_LINE)) == NULL) {
       fprintf (stderr, "In googleMap Malloc: %d\n", MAX_SIZE_LINE);
+      OK = false;
       return;
    }   
-   snprintf (command, MAX_SIZE_LINE, "%s %s", par.webkit, fileName);
-   g_thread_new ("googleMap", commandRun, command);
+   if (OK) {
+      snprintf (command, MAX_SIZE_LINE, "%s %s", par.webkit, fullFileName);
+      printf ("google command  : %s\n", command);
+      g_thread_new ("googleMap", commandRun, command);
+   }
+   g_free (fullParamFileName);
+   g_free (fullTemplateFileName);
+   g_free (fullFileName);
 }
 
-/*! Response for shom OK */
 /*! set display lonLeft, lonRight according to displayed antemeridian */
 static void dispMeridianUpdate () {
    //dispZone.anteMeridian = ((lonCanonize (dispZone.lonLeft) > 0.0) && (lonCanonize (dispZone.lonRight) < 0.0));

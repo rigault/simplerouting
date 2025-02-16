@@ -579,7 +579,7 @@ struct tm gribDateToTm (long intDate, double nHours) {
 /*! return date and time using ISO notation after adding myTime (hours) to the Date */
 char *newDate (long intDate, double nHours, char *res, size_t maxLen) {
    struct tm tm0 = gribDateToTm (intDate, nHours);
-   snprintf (res, maxLen, "%4d/%02d/%02d %02d:%02d", tm0.tm_year + 1900, tm0.tm_mon + 1, tm0.tm_mday,\
+   snprintf (res, maxLen, "%4d-%02d-%02d %02d:%02d", tm0.tm_year + 1900, tm0.tm_mon + 1, tm0.tm_mday,\
       tm0.tm_hour, tm0.tm_min);
    return res;
 }
@@ -902,11 +902,11 @@ double diffTimeBetweenNowAndGribOrigin (long intDate, double nHours) {
 char *epochToStr (time_t t, bool seconds, char *str, size_t maxLen) {
    struct tm *utc = gmtime (&t);
    if (seconds)
-      snprintf (str, maxLen, "%d/%02d/%02d %02d:%02d:%02d", 
+      snprintf (str, maxLen, "%d-%02d-%02d %02d:%02d:%02d", 
          utc->tm_year + 1900, utc->tm_mon + 1, utc->tm_mday,
          utc->tm_hour, utc->tm_min, utc->tm_sec);
    else
-      snprintf (str, maxLen, "%d/%02d/%02d %02d:%02d", 
+      snprintf (str, maxLen, "%d-%02d-%02d %02d:%02d", 
          utc->tm_year + 1900, utc->tm_mon + 1, utc->tm_mday,
          utc->tm_hour, utc->tm_min);
       
@@ -1216,6 +1216,8 @@ bool readParam (const char *fileName) {
          buildRootName (str, par.parInfoFileName, sizeof (par.parInfoFileName));
       else if (sscanf (pLine, "LOG:%254s", str) > 0)
          buildRootName (str, par.logFileName, sizeof (par.logFileName));
+      else if (sscanf (pLine, "WEB:%254s", str) > 0)
+         buildRootName (str, par.web, sizeof (par.web));
       else if (sscanf (pLine, "OPT:%d", &par.opt) > 0);
       else if (sscanf (pLine, "J_FACTOR:%d", &par.jFactor) > 0);
       else if (sscanf (pLine, "K_FACTOR:%d", &par.kFactor) > 0);
@@ -1241,6 +1243,7 @@ bool readParam (const char *fileName) {
       else if (sscanf (pLine, "FOCAL_DISP:%d", &par.focalDisp) > 0);
       else if (sscanf (pLine, "SHP_POINTS_DISP:%d", &par.shpPointsDisp) > 0);
       else if (sscanf (pLine, "GOOGLE_API_KEY:%1024s", par.googleApiKey) > 0);
+      else if (sscanf (pLine, "WINDY_API_KEY:%1024s", par.windyApiKey) > 0);
       else if (sscanf (pLine, "WEBKIT:%255[^\n]", par.webkit) > 0)
          g_strstrip (par.webkit);
       else if ((strstr (pLine, "FORBID_ZONE:") != NULL) && (par.nForbidZone < MAX_N_FORBID_ZONE)) {
@@ -1395,6 +1398,8 @@ bool writeParam (const char *fileName, bool header, bool password) {
    fprintf (f, "SMTP_SCRIPT:     %s\n", par.smtpScript);
    fprintf (f, "IMAP_TO_SEEN:    %s\n", par.imapToSeen);
    fprintf (f, "IMAP_SCRIPT:     %s\n", par.imapScript);
+   fprintf (f, "WEB:             %s\n", par.web);
+   fprintf (f, "WINDY_API_KEY:   %s\n", par.windyApiKey);
    fprintf (f, "GOOGLE_API_KEY:  %s\n", par.googleApiKey);
    fprintf (f, "WEBKIT:          %s\n", par.webkit);
    fprintf (f, "SMTP_SERVER:     %s\n", par.smtpServer);

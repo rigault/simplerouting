@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>RCube Maritime Route</title>
+    <script src="https://maps.googleapis.com/maps/api/js?key=REPLACE_API_KEY"></script>
+    <script src="googlemapparam.js"></script>
+    <script>
+        function initMap() {
+            let map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 5,
+                center: {lat: 0, lng: 0},
+                mapTypeId: 'hybrid'
+            });
+            let routePath = []; 
+            let len = routeCoords.length;
+            console.log ("len " + len);
+
+            routePath [0] = new google.maps.Polyline({ // Way points
+                path: routeCoords [0],
+                geodesic: true,
+                strokeColor: 'green',
+                strokeOpacity: 1.0,
+                strokeWeight: 3
+            });
+            if (len > 0) {
+                routePath [1] = new google.maps.Polyline({ // main route
+                  path: routeCoords [1],
+                  geodesic: true,
+                  strokeColor: 'black',
+                  strokeOpacity: 1.0,
+                  strokeWeight: 3
+               });
+            }
+            for (let i = 2; i < len; i += 1) {             // history
+               routePath [i] = new google.maps.Polyline({
+                  path: routeCoords [i],
+                  geodesic: true,
+                  strokeColor: 'pink', 
+                  strokeOpacity: 1.0,
+                  strokeWeight: 3
+               });
+            }
+
+            let origin = routePath[0].getPath().getArray()[0]; // Premier point
+            let destination = routePath[0].getPath().getArray()[routePath[0].getPath().getArray().length - 1]; // Last point
+
+            // Marqueur pour l'origine 🚢
+            let originMarker = new google.maps.Marker({
+               position: origin,
+               map: map,
+               label: "🚢",  // Emoticône pour l'origine
+               title: "Origin"
+            });
+
+            // Marqueur pour la destination 🏁
+            let destinationMarker = new google.maps.Marker({
+               position: destination,
+               map: map,
+               label: "🏁",  // Emoticône pour la destination
+               title: "Destination"
+            });
+
+            for (let i = 0; i < len; i += 1) 
+               routePath[i].setMap(map);
+            map.setCenter (routeCoords[0][0]); // Center on first point
+        }
+    </script>
+</head>
+<body onload="initMap()">
+   RCube
+   <div id="map" style="width:100%; height:100vh;"></div>
+</body>
+</html>
+

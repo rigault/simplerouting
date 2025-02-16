@@ -24,40 +24,49 @@ typedef struct {
    char *str;
 } EditorData;
 
-/*! Copy button for editor */
-static void onMyCopyClicked (GtkButton *button, gpointer user_data) {
-   GtkNotebook *notebook = GTK_NOTEBOOK (user_data);
+/*! retrieve text of the notebook, and the name of the file */
+static char *getText (gpointer userData, char *fileName) {
+   GtkNotebook *notebook = GTK_NOTEBOOK (userData);
 
    // get active noteboook
    int page = gtk_notebook_get_current_page (notebook);
    if (page == -1) {
-      fprintf (stderr, "In onMyCopyClicked, No active tab to copy from.\n");
-      return;
+      fprintf (stderr, "In getText, No active tab to copy from.\n");
+      return NULL;
    }
 
    // get GtkSourceView content in active notebook
    GtkWidget *scroll = gtk_notebook_get_nth_page (notebook, page);
    if (!scroll) {
-      fprintf (stderr, "In onMyCopyClicked, Failed to retrieve current tab content.\n");
-      return;
+      fprintf (stderr, "In getText, Failed to retrieve current tab content.\n");
+      return NULL;
    }
 
    GtkWidget *sourceView = gtk_scrolled_window_get_child (GTK_SCROLLED_WINDOW(scroll));
    if (!GTK_SOURCE_IS_VIEW (sourceView)) {
-      fprintf (stderr, "In onMyCopyClicked, Current tab does not contain a source view.\n");
-      return;
+      fprintf (stderr, "In getText, Current tab does not contain a source view.\n");
+      return NULL;
    }
 
    GtkSourceBuffer *sourceBuffer = GTK_SOURCE_BUFFER (gtk_text_view_get_buffer (GTK_TEXT_VIEW (sourceView)));
    GtkTextIter start, end;
-   char *text;
 
-   gtk_text_buffer_get_bounds (GTK_TEXT_BUFFER(sourceBuffer), &start, &end);
-   text = gtk_text_buffer_get_text (GTK_TEXT_BUFFER(sourceBuffer), &start, &end, FALSE);
+   gtk_text_buffer_get_bounds (GTK_TEXT_BUFFER (sourceBuffer), &start, &end);
 
+   GtkWidget *tabLabel = gtk_notebook_get_tab_label (GTK_NOTEBOOK (notebook), scroll); // filename search
+   const char *labelText = gtk_label_get_text(GTK_LABEL(tabLabel));
+   g_strlcpy (fileName, labelText, MAX_SIZE_FILE_NAME);
+   
+   return gtk_text_buffer_get_text (GTK_TEXT_BUFFER (sourceBuffer), &start, &end, FALSE);
+}
+
+/*! Copy button for editor */
+static void onMyCopyClicked (GtkButton *button, gpointer userData) {
+   char fileName [MAX_SIZE_FILE_NAME]; 
+   char *text = getText (userData, fileName);
    // Copy text in clipboard
-   GdkDisplay *display = gdk_display_get_default();
-   GdkClipboard *clipboard = gdk_display_get_clipboard(display);
+   GdkDisplay *display = gdk_display_get_default ();
+   GdkClipboard *clipboard = gdk_display_get_clipboard (display);
    gdk_clipboard_set_text (clipboard, text);
 
    printf ("In onMyCopyClicked: Text copied to clipboard.\n");
@@ -154,8 +163,6 @@ static void onMySearchClicked (GtkButton *button, gpointer user_data) {
 
    // get data associated to notebook
    GtkWidget *sourceView = gtk_scrolled_window_get_child (GTK_SCROLLED_WINDOW (scroll));
-
-   // check widget is a GtkSourceView instance
    if (!GTK_SOURCE_VIEW (sourceView)) {
      fprintf (stderr, "In onMySearchClicked, The widget in the current tab is not a source view.\n");
      return;
@@ -185,50 +192,17 @@ static void onMySearchClicked (GtkButton *button, gpointer user_data) {
 }
 
 /*! Save the file with modifications */
-static void onMySaveClicked (GtkButton *button, gpointer user_data) {
-   GtkNotebook *notebook = GTK_NOTEBOOK(user_data);
+static void onMySaveClicked (GtkButton *button, gpointer userData) {
+   char fileName [MAX_SIZE_FILE_NAME]; 
+   GError *error = NULL;
+   char *text = getText (userData, fileName);
 
-   // get active notebook content
-   int page = gtk_notebook_get_current_page (notebook);
-   if (page == -1) {
-      fprintf (stderr, "In onMySaveClicked, No active tab to save.\n");
-      return;
+   /* Get filename in notebook tab
+*/
+   if (!g_file_set_contents (fileName, text, -1, &error)) {
+      fprintf (stderr, "In onMySaveClicked, error writing file%s\n", error->message);
+      g_clear_error (&error);
    }
-
-   // Get GtkSourceView contect in active notebook
-   GtkWidget *scroll = gtk_notebook_get_nth_page (notebook, page);
-   if (!scroll) {
-      fprintf (stderr, "In onMySaveClicked, Failed to retrieve current tab content.\n");
-      return;
-   }
-
-   GtkWidget *sourceView = gtk_scrolled_window_get_child (GTK_SCROLLED_WINDOW(scroll));
-   if (!GTK_SOURCE_IS_VIEW(sourceView)) {
-      fprintf (stderr, "In onMySaveClicked, Current tab does not contain a source view.\n");
-      return;
-   }
-
-   GtkSourceBuffer *sourceBuffer = GTK_SOURCE_BUFFER (gtk_text_view_get_buffer (GTK_TEXT_VIEW(sourceView)));
-   GtkTextIter start, end;
-   char *text;
-
-   gtk_text_buffer_get_bounds (GTK_TEXT_BUFFER (sourceBuffer), &start, &end);
-   text = gtk_text_buffer_get_text (GTK_TEXT_BUFFER(sourceBuffer), &start, &end, FALSE);
-
-   // Get filename in notebbook tab
-   GtkWidget *tabLabel = gtk_notebook_get_tab_label (GTK_NOTEBOOK(notebook), scroll);
-   const char *fileName = gtk_label_get_text(GTK_LABEL (tabLabel));
-
-   // save file 
-   FILE *file = fopen (fileName, "w");
-   if (file) {
-      fputs (text, file);
-      fclose (file);
-      printf ("File saved successfully: %s\n", fileName);
-   } else {
-      fprintf (stderr, "In onMySaveClicked, Impossible to save file: %s\n", fileName);
-   }
-
    g_free (text);
 }
 
@@ -313,12 +287,6 @@ static void onBufferChanged (GtkTextBuffer *buffer, gpointer user_data) {
 
 /*! Simple editor with tabs, finder, copy, and save buttons */
 bool myEditor (GtkApplication *app, const char **fileNames, int fileCount, const char *title, Callback callback) {
-   char str [MAX_SIZE_LINE];
-   if (fileCount > 3) {
-      fprintf (stderr, "In editor, Maximum of 3 files supported.\n");
-      return false;
-   }
-
    // Main window creation
    windowEditor = GTK_APPLICATION_WINDOW (gtk_application_window_new (app));
    gtk_window_set_default_size (GTK_WINDOW (windowEditor), 1200, 600);
@@ -348,11 +316,7 @@ bool myEditor (GtkApplication *app, const char **fileNames, int fileCount, const
          fprintf (stderr, "In editor, Impossible to open: %s\n", fileName);
          return false;
       }
-      // Create a tab label with the file name and size
-      formatThousandSep (str, sizeof (str), getFileSize (fileName));
-      char *title = g_strdup_printf ("%s, %s Bytes", fileName, str);
-      GtkWidget *tabLabel = gtk_label_new (title);
-      g_free (title);
+      GtkWidget *tabLabel = gtk_label_new (fileName);
 
       // Read content of the file
       fseek (file, 0, SEEK_END);

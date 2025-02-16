@@ -83,6 +83,18 @@ static inline double orthoCap (double lat1, double lon1, double lat2, double lon
    return directCap (lat1, lon1, lat2, lon2) + givry (lat1, lon1, lat2, lon2);
 }
 
+/*! return initial orthodromic cap from origin to destination, no givry correction */
+static inline double otherOrthoCap (double lat1, double lon1, double lat2, double lon2) {
+    lat1 = DEG_TO_RAD * lat1;
+    lat2 = DEG_TO_RAD * lat2;
+    double delta_lon = DEG_TO_RAD * (lon2 - lon1);
+
+    double y = sin(delta_lon) * cos(lat2);
+    double x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(delta_lon);
+    double cap = RAD_TO_DEG * atan2(y, x);
+    return fmod (cap + 360.0, 360.0);
+}
+
 /*! return loxodromic distance in nautical miles from origin to destination */
 static inline double loxoDist (double lat1, double lon1, double lat2, double lon2) {
    // Convert degrees to radians

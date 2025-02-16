@@ -1220,7 +1220,7 @@ void logReport (int n) {
    char *polarFileName = g_path_get_basename (par.polarFileName);
    char *gribFileName = g_path_get_basename (par.gribFileName);
 
-   fprintf (f, "%04d/%02d/%02d %02d:%02d:%02d; %4.2lf; %4d; %c; %d; %s; %s; %s; %s; %s; %s; %.2lf; %3d°; %s; %s\n",
+   fprintf (f, "%04d-%02d-%02d %02d:%02d:%02d; %4.2lf; %4d; %c; %d; %s; %s; %s; %s; %s; %s; %.2lf; %3d°; %s; %s\n",
         timeInfos->tm_year+1900, timeInfos->tm_mon+1, timeInfos->tm_mday,
         timeInfos->tm_hour, timeInfos->tm_min, timeInfos->tm_sec,
         par.tStep, n, (route.destinationReached) ? 'R' : 'U',
@@ -1319,6 +1319,7 @@ bool exportRouteToGpx (const SailRoute *route, const gchar *fileName) {
       strftime (strTime, sizeof (strTime), "%Y-%m-%dT%H:%M:%SZ", utcTime);  // format ISO 8601
 
       fprintf (f, "    <rtept lat=\"%.6f\" lon=\"%.6f\">\n", p->lat, p->lon);
+      fprintf (f, "      <name>%d</name>\n", i);
       fprintf (f, "      <time>%s</time>\n", strTime);
       fprintf (f, "      <course>%.2f</course>\n", fmod (p->oCap + 360.0, 360.0));   //  degrees
       fprintf (f, "      <speed>%.2f</speed>\n", p->sog);      // speed (knots)
