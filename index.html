@@ -45,6 +45,7 @@
    <a href="#chap16">16. Bugs ou comportements particuliers</a>
    <a href="#chap17">17. Éléments bibliographiques </a>
    <a href="#chap18">18. Programmation</a>
+   <a href="#chap19">19. Virtual Regatta</a>
 
 <p></p>
 
@@ -378,6 +379,7 @@ py
 rte
 trace
 VRdashboard
+web
 </pre>
 
 		<h4>csources4</h4>
@@ -513,6 +515,14 @@ MakeFile
 		<h4>VRdashboard</h4>
 
       <p>Ce répertoire contient les fichiers au format csv issus de l'exportation du dashboard de Virtual Regatta.</p>
+
+		<h4>web</h4>
+
+      <p>Ce répertoire contient les fichiers html, js et json utilisés pour la consommation des API Web de Windy et Google map.</p>
+      <p>Pour l'API Google map, un fichier <code>googlemaptemplate.html</code> est utilisé pout générer le fichier <code>googlemap.html.</code>
+
+      <p>Pour l'API Windy, les fichiers <code>windyindex.html</code> et <code>windyscript.js</code> sont fixes et contiennent le code.
+      <p>Les fichiers <code>windyboats.json</code> et <code>windyparam.js</code> sont générés lorsque l'on accède à Windy en mode API.</p>
 
 		<h2>Desktop </h2>
 
@@ -670,6 +680,9 @@ NMEA: COM4 38400
          </thead>
          <tbody>
          <tr>
+            <td>ESC</td><td>Interromp un routage ou un téléchargement en cours</td>
+         </tr>
+         <tr>
             <td>F1</td><td>Initialise le point d’origine à la position GPS</td>
          </tr>
          <tr>
@@ -686,11 +699,11 @@ NMEA: COM4 38400
 		<p>Ce menu permet d’ouvrir des fichiers Grib (vent, courant) présents
 		dans les répertoires "grib" et "currentgrib", d’avoir des informations (métadonnées)
 		sur les Grib chargés (vent, courant), de lancer un téléchargement
-		sur Météoconsult, de lancer un téléchargement via le service
-		Web de la NOAA (administration américaine).</p>
+		sur Météoconsult, de lancer un téléchargement via les service
+		Web des organismes météo (NOAA, ECMWF, Météo France)..</p>
 
 		<p>Noter que le chargement des fichiers Grib auprès de
-		fournisseurs de service se fait via la sélection d’une zone
+		fournisseurs de service se fait aussi via la sélection d’une zone
 		géographique (voir utilisation de la souris, clic gauche au début
 		de ce chapitre).</p>
 
@@ -724,14 +737,13 @@ NMEA: COM4 38400
 
       <p>L'onglet parameter permet de contrôler les informations pilotant la construction des isochrones.</p>
 
-		<h3>Menu Display</h3>
+		<h3>Menu Routes</h3>
 
-		<p>Ce menu permet l’affichage des différentes informations, dans un
-		format assez brut.</p>
+		<p>Ce menu permet l’affichage des différentes informations, reatives aux routes, et aux isochrones</p>
 
-		<p>Notez l’existence du sail report, et du routegram.</p>
+		<p>Notez l’existence du routegram.</p>
 
-		<h3>Menu History</h3>
+      <p> La dernière route est générée au format GPX et se trouve dans le répertoire rte. <p>
 
 		<p>On peut lancer successivement plusieurs recherches de routes et
 		garder trace de l’historique.</p>
@@ -745,6 +757,13 @@ NMEA: COM4 38400
 		   <li>Il est possible de réinitialiser l’historique.</li>
       </ul>
 
+		<h3>Menu Way Points</h3>
+
+      <p> Permet de lister les Waypoints avec des information (cap, distances) et de les sauvegarder au format GPX dans le répertoire principal </p>
+
+      <p> La création des Waypoints se fait via la souris (clic droit)</p>
+      <p> on peut aussi les créer dans le fichier paramètre routing.par. </p>
+
 		<h3>Menu POI (Point Of Interest)</h3>
 
 		<p>Ce menu permet de visualiser les informations relatives aux POI, de les
@@ -755,6 +774,17 @@ NMEA: COM4 38400
 
 		<p>Ce menu permet de gérer les traces, qui sont sauvegardées dans des
 		fichiers .csv.</p>
+      <p> Il est aussi possible d'exporter les traces au format GPX.</p>
+
+		<h3>Menu Misc.</h3>
+
+      <p>Ce menu permet de dumper un certains nombre d'objets : polygones d'interdiction, compétiteurs, log des exéécutions de routage.<p>
+      <p> Il donne accès au rapport de simulation (résultat de la recherche du temps minimal pour effectuer des records (Virtual Regatta) ou simplement planifier un départ au moment optimal.</p>
+      <p> Il permet aussi l'importation de données Virtual Regatta et donne accès à une calculette liée à Virtual Regatta </p>
+
+		<h3>Menu Display</h3>
+
+   <p> Un tableau de bord temps réel, utile uniquement avec un GPS et un bateau réel en mouvement... </p>
 
 		<h3>Menu AIS/GPS</h3>
 
@@ -764,6 +794,8 @@ NMEA: COM4 38400
 		<h3>Menu Web-Sites</h3>
 
 		<p>Lance les URL associées avec la localisation (latitude longitude).</p>
+      <p>Consomme les API Windy pour un affichage synchronisé avc la Météo Windy. </p>
+
 		<h3>Menu Help</h3>
 
 		<p>Ce menu permet l’affichage de ce document, du help associé au mode
@@ -805,6 +837,18 @@ NMEA: COM4 38400
 
       <p> Tout en base de l'écran, la barre d'état affiche des informations générales sur la localisation.</p>
       <p> Des messages en vert d'information ou en rouge d'erreur peuvent s'y afficher.<p>
+
+		<h2>7.2. Resultats d'un routage</h2>
+
+<p>Suite à l'éxécution d'un routage, le routegram apparaît avec les informations d'état associées. </p>
+  <img src="images/routegram.png" alt="routegram" width="500" height="200">
+
+
+<p>Suite au choix du meilleurs moment de départ, le diagram suivant apparaît&nbsp;: </p>
+  <img src="images/bestdeparture.png" alt="best departure" width="500" height="200">
+
+<p>Suite à une course entre plusieurs colmpétiteurs, le tableau suivant apparaît&nbsp;: </p>
+  <img src="images/competitors.png" alt="best departure" width="500" height="100">
 
 
 <h1 id="chap8" style="page-break-inside: avoid">8. Trigonométrie</h1>
@@ -1122,12 +1166,15 @@ NMEA: COM4 38400
 
       <p>Le logiciel télécharge les fichiers Grib de Météo France.</p>
 
+      <h3>Modèle ARPEGE</h3>
+
       <p>Les données sélectionnées par le logiciel ont une résolution de 0.25°<p> 
       <p>Le seul time step disponible est de 3 heures.<p>
       <p>La prévision est au maximum de 102 heures (4 jours et 6 heures) <p>
 
       <p> Pour la prévision maximale à 102 heures, RCube télécharge 4 fichiers et les concatène.<p>
       <p> L'exemple qui suit indique la structure pour les 4 fichiers</p>
+      <p> Nter que ce sont les fichiers "SP1" qu'il faut télécharger (données basiques de surface).
 
 <pre>
 https://object.data.gouv.fr/meteofrance-pnt/pnt/2024-12-24T12:00:00Z/arpege/025/SP1/arpege__025__SP1__000H024H__2024-12-24T12:00:00Z.grib2
@@ -1137,6 +1184,16 @@ https://object.data.gouv.fr/meteofrance-pnt/pnt/2024-12-24T12:00:00Z/arpege/025/
 </pre>
       <p> Comme pour l'ECMWF, RCube applique un filtrage sur les indicateurs pertinents ("shortnames") et sur la zone géographique pour chaque fichier
  avant concaténation. </p>
+
+      <h3>Modèle AROME</h3>
+      
+      <p>Les données sélectionnées par le logiciel ont une résolution de 0.025; donc 100 fois plus volumineuses que avec les modèles habituels à 0.25° !<p>
+ 
+      <p>La prévision est au maximum de 4 jours<p>
+      <p>Il y a un fichier par time step. </p>
+      <p> Comme pour l'ECMWF et ARPEGE, RCube applique un filtrage sur les indicateurs pertinents ("shortnames") et sur la zone géographique pour chaque fichier
+ avant concaténation. </p>
+
 
 		<h2>10.5. Meteoconsult</h2>
 
@@ -1966,6 +2023,69 @@ SMTP_SCRIPT:     python3 /home/rr/routing/py/smtp.py  #script python pour l'envo
       <li>Le fichier polaire résultant (max des valeurs de toutes les polaires):&nbsp; VRrespol.csv</li>
       <li>Le fichier polaires de voiles donnant l'index de la voile utilisée:&nbsp; VRrespol.sailpol</li>
    </ul>
+
+<h1 id="chap19">19. Virtual Regatta </h1>
+	<h2>18.1. Principes généraux </h2>
+   Les joueurs de Virtual Regatta ont accès&nbsp;:
+   <ul>
+   <li> Au routeur embarqué de Virtual Regatta,</li> 
+   <li> Via le téléchargemet d'un plugin, au dashboard de l'ITYC <a href = "https://ityc.fr/">Inter Team Yacht Club</a>,</li>
+   <li> Au routeur <a href = "http://zezo.org/">Zezo</a>,</li>
+   <li> Au routeur <a href = "https://routage.vrzen.org/">VRZEN</a>.</li>
+   </ul>
+
+   <p>Par ailleurs, les autres routeurs utilisés sont notamment&nbsp;:
+   <ul>
+   <li> <a href = "https://www.webrouter.avalon-routing.com/">Avallon</a>,</li>
+   <li> <a href = "https://doradosail.com/">Dorado</a>,</li>
+   <li> <a href = "https://esail4vr.fr">esailVR</a>.</li>
+   </ul>
+
+   <p>Pour une meilleure efficacité sur Virtual Regatta, il convient de mettre à jour les fichiers GRIB toutes les 6 heures.
+      Le modèle Virtual Regatta s'appuie sur le GFS du NOAA avec la résolution de 0.25 °. </p>
+   <p> Dans l'idéal, il faudrait donc télécharger les GRIB vers&nbsp;: 5:00 UTC, 11:00 UTC, 17:00 UTC, 23:00 UTC.<p>
+   <p> En France, penser à ajouter 1 heure en hiver et 2 heures en été </p>
+   <p> Si l'on souhaite les prévisions à 16 jours, il convient d'attendre 30' supplémentaires et donc de réaliser les mises à jours 
+       à&nbsp;: 5:30 UTC, 11:30 UTC, 17:30 UTC, 23:30 UTC.</p >
+
+   <p> Pour le calcul des polaires Avalon/VPP, permet d'obtenir les polaires composites. <p>
+   <p> Dorado propose une approche "ensembliste" du calcul des isochrones. </p>
+
+   <h2>18.2. Liens avec RCUBE </h2>
+
+   <p> Le Dashboard ITYC permet d'exporter au format JSON l'ensemble des polaires (une par voile) dans un seul fichier. <p>
+   <p> Ce fichier foit être traité pour est réellement mis au format Json interprétable par la commande <code>jq</code>.
+
+   <h3> Génération des polaires du jeu </h3>
+
+   <p>Voir section 18.11 pour la génération à partir de ce fichier json des fichiers CSV (un par voile) puis de&nbsp;:
+   <ul>
+   <li> La polaire composite,</li>
+   <li> la polaire de voile.</li>
+   </ul>
+   <p> C'est cette polaire composite et la polaire de voile qui sont utilisés par RCUBE </p>
+
+   <p> La polaire de voile avec les couleurs associées à chaque voile est affichable via le menu polaire (case "dump").</p>
+   <p> Le routegram de la route inclue&nbsp;:</p>
+   <ul>
+   <li> Les changements de voiles avec le code couleur associé à la voile ,</li>
+   <li> l'évolution de l'énergie du joueur ou "stamina".</li>
+   </ul>
+   <p> De même, le dump de la route inclue le nom de la voile utilisée ainsi que le niveau d'énergie entre 0 et 100. </p> 
+
+   <h3> Calculette </h3>
+
+   Une calculette intégré à RCUBE permet pour chaque maneuvre (empannage, virement de bord, changement de voile) d'évaluer&nbsp;:
+   <ul>
+   <li> Le temps de la manoeuvre,</li>
+   <li> l'énergie perdue lors de la manoeuvre,</li>
+   <li> le temps pour récupérer un point.</li>
+   </ul>
+
+   <h3>Import des données de joueurs</h3>
+   <p>Le dashboard ITYC propose l'export au format CSV des caractéristiques des joueurs.</p>
+   <p>RCUBE permet l'import de ces données et en particulier des coordonnées (latitude, longitude).</p>
+   <p>Pour ce faire, le nom des compétiteurs à inclure doit être spécifié dans RCUBE en utilisant exactement les noms utilisé par Virtual Regatta. </p>
 
 </div>
 <div class="notes">
