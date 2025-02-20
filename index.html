@@ -398,6 +398,7 @@ mailutil.c
 option.c
 polar.c
 rutil.c
+rshputil.c
 show4.c
 
 aisgps.h
@@ -411,6 +412,7 @@ mailutil.h
 option.h
 polar.h
 rtypes.h
+rshputil.h
 rutil.h
 </pre>
 Ainsi que les fichiers&nbsp;:
@@ -519,7 +521,9 @@ MakeFile
 		<h4>web</h4>
 
       <p>Ce répertoire contient les fichiers html, js et json utilisés pour la consommation des API Web de Windy et Google map.</p>
-      <p>Pour l'API Google map, un fichier <code>googlemaptemplate.html</code> est utilisé pout générer le fichier <code>googlemap.html.</code>
+      <p>Pour l'API Google map, un fichier <code>googlemaptemplate.html</code> est utilisé pour générer le fichier <code>googlemap.html</code> 
+      afin de le compléter avec l'API Key. </p>
+      <p>Le fichier <code>googlemapparam.js</code> est généré.</p>
 
       <p>Pour l'API Windy, les fichiers <code>windyindex.html</code> et <code>windyscript.js</code> sont fixes et contiennent le code.
       <p>Les fichiers <code>windyboats.json</code> et <code>windyparam.js</code> sont générés lorsque l'on accède à Windy en mode API.</p>
@@ -1762,7 +1766,7 @@ grib_get_data -L &quot;%.2lf %.2lf&quot; -F &quot;%.2lf&quot; -m -999999 -w shor
             <td>grib.h</td><td>Interface de grib (prototypes des fonctions externes).</td>
          <tr>
          <tr>
-            <td>mailutil.c</td><td>Interface pour la gestion mail.</td>
+            <td>mailutil.c</td><td>Interface pour la gestion mail et curlget.</td>
          </tr>
          <tr>
             <td>mailutil.h</td><td>Interface de mailutil (prototypes des fonctions externes).</td>
@@ -1784,6 +1788,12 @@ grib_get_data -L &quot;%.2lf %.2lf&quot; -F &quot;%.2lf&quot; -m -999999 -w shor
          </tr>
          <tr>
             <td>polar.h</td><td>Interface de polar (prototypes des fonctions externes).</td>
+         <tr>
+         <tr>
+            <td>rshputil.c</td><td>Initialidation de SHP (pour fichiers shapefiles).</td>
+         </tr>
+         <tr>
+            <td>rshputil.h</td><td>Interface de rshputil (prototypes des fonctions externes).</td>
          <tr>
             <td>show4.c</td><td>Le main et les interfaces graphiques s'appuyant sur GTK4.</td>
          </tr>
