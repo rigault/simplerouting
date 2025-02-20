@@ -126,11 +126,6 @@ void optionManage (char option) {
    
       poiPrint ();
       break;
-   case 'n': // network
-      if (isServerAccessible ("http://www.google.com"))
-         printf ("Network OK\n");
-      else printf ("No network\n");
-      break;
    case 'p': // polar
       readPolar (true, par.polarFileName, &polMat, errMessage, sizeof (errMessage));
       polToStr (&polMat, buffer, MAX_SIZE_BUFFER);

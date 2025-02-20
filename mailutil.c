@@ -496,3 +496,118 @@ int imapGetUnseen (const char* imapServer, const char *username,
    return 1;
 }
 
+/*! curGet download URL and save the content in outputFile using system command */
+static bool curlGetSys(const char *url, const char *outputFile, char *errMessage, size_t maxLen) {
+   char command [MAX_SIZE_STD];
+   if (snprintf(command, sizeof(command), "curl -L --fail -o %s \"%s\" 2>/dev/null", outputFile, url) >= (int)sizeof(command)) {
+      snprintf(errMessage, maxLen, "Command too long");
+      return false;
+   }
+   int ret = system (command); // execute the commande
+   if (ret == -1) {
+      snprintf (errMessage, maxLen, "In curlGetSys: System call failed: %s", strerror(errno));
+      return false;
+   }
+
+   if (WIFEXITED(ret) && WEXITSTATUS(ret) == 0) { // Check the return value of the curl command
+      return true;
+   } else {
+      if (WIFEXITED(ret)) {
+         snprintf (errMessage, maxLen, "In curlGetSys: Curl failed with exit code: %d", WEXITSTATUS(ret));
+      } else {
+         snprintf (errMessage, maxLen, "In curlGetSys: Curl terminated abnormally");
+      }
+      return false;
+   }
+   printf ("File downloaded with system curl: %s\n", outputFile);
+}
+
+/*! curGet download URL and save the content in outputFile */
+bool curlGet (const char *url, const char *outputFile, char *errMessage, size_t maxLen) {
+   if (par.curlSys)
+      return curlGetSys (url, outputFile, errMessage, maxLen);
+
+   if (url == NULL || outputFile == NULL || errMessage == NULL || maxLen == 0) {
+      g_strlcpy (errMessage, "Invalid arguments", maxLen);
+      return false;
+   }
+   long http_code = 0;
+   CURL *curl = curl_easy_init();
+   if (curl == NULL) {
+      return false;
+   }
+   curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);
+   curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 2L); // Temps min. en secondes avant un timeout
+   curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, 102400L); // Par exemple 100 KB
+
+   // curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L); // Verbose activated
+
+   FILE *f = fopen(outputFile, "wb");
+   if (f == NULL) {
+      snprintf(errMessage, maxLen, "Error opening file: %s", outputFile);
+      curl_easy_cleanup(curl);
+      return false;
+   }
+
+   curl_easy_setopt (curl, CURLOPT_URL, url);
+   curl_easy_setopt (curl, CURLOPT_WRITEDATA, f); // no explicit WRITEFUNCTION 
+
+   // blocking mode activated
+   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+   curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
+
+   CURLcode res = curl_easy_perform(curl);
+   fflush(f); // Assure
+   fclose(f);
+
+   if (res != CURLE_OK) {
+      snprintf(errMessage, maxLen, "Curl error: %s", curl_easy_strerror(res));
+      curl_easy_cleanup(curl);
+      return false;
+   }
+
+   curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+   curl_easy_cleanup (curl);
+
+   if (http_code >= 400) {
+      snprintf(errMessage, maxLen, "HTTP error: %ld", http_code);
+      return false;
+   }
+   return true;
+}
+
+/*! check server accessibility */
+bool isServerAccessible (const char *url) {
+    CURL *curl;
+    CURLcode res;
+
+    curl = curl_easy_init ();
+
+    if (curl) {
+        curl_easy_setopt (curl, CURLOPT_URL, url);
+        curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
+        res = curl_easy_perform (curl);
+        if (res != CURLE_OK) {
+            fprintf (stderr, "In isServerAccessible, Error Curl request: %s\n", curl_easy_strerror(res));
+            curl_easy_cleanup (curl);
+            return false; // server not accessible request error
+        }
+
+        long http_code;
+        curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &http_code);
+
+        // 2xx means server accessible
+        if (http_code >= 200 && http_code < 300) {
+            curl_easy_cleanup(curl);
+            return true;
+        } else {
+            curl_easy_cleanup(curl);
+            return false; 
+        }
+    } else {
+        fprintf (stderr, "In isServerAccessible, Error Init curl.\n");
+        return false;
+    }
+}
+
+

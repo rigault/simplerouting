@@ -1,6 +1,5 @@
 /*! compilation: gcc -c polar.c `pkg-config --cflags glib-2.0` */
 #include <glib.h>
-#include <curl/curl.h>
 #include <float.h>   
 #include <limits.h>
 #include <ctype.h>

@@ -1,9 +1,9 @@
 /*! compilation: gcc -c rutil.c `pkg-config --cflags glib-2.0` */
 #define _POSIX_C_SOURCE 200809L // to avoid warning with -std=c11 when using popen function (Posix)
-#define MIN_NAME_LENGTH 3       // for poi. Minimul length to select poi
+#define MIN_NAME_LENGTH 3       // for poi. Minimul length to select pomei
+#define MAX_N_SHIP_TYPE 2       // for Virtual Regatta Stamina calculation
 
 #include <glib.h>
-#include <curl/curl.h>
 #include <float.h>   
 #include <limits.h>
 #include <ctype.h>
@@ -20,12 +20,26 @@
 #include <locale.h>
 #include "eccodes.h"
 #include "rtypes.h"
-#include "shapefil.h"
 #include "aisgps.h"
 #include "inline.h"
 #include "mailutil.h"
 
-/*! forbid zones is a set of polygons */
+
+/*! se aisgps file */
+MyGpsData my_gps_data; 
+
+/* For virtual regatta Stamina calculation */
+struct {
+   char name [MAX_SIZE_NAME];
+   double cShip;  
+   double tMin [3];
+   double tMax [3];
+} shipParam [MAX_N_SHIP_TYPE] = {
+   {"Imoca", 1.2, {300, 300, 420}, {660, 660, 600}}, 
+   {"Normal", 1.0, {300, 300, 336}, {660, 660, 480}}
+};
+
+/*! forbid ones is a set of polygons */
 MyPolygon forbidZones [MAX_N_FORBID_ZONE];
 
 /*! dictionnary of meteo services */
@@ -79,10 +93,6 @@ char *tIsSea = NULL;
 /*! poi sata strutures */ 
 Poi tPoi [MAX_N_POI];
 int nPoi = 0;
-
-/*! for shp file */
-int  nTotEntities = 0;              // cumulated number of entities
-Entity *entities = NULL;
 
 /*! geographic zone covered by grib file */
 Zone zone;                          // wind
@@ -332,90 +342,6 @@ char *formatThousandSep (char *buffer, size_t maxLen, long value) {
    }
    buffer [j] = '\0';
    return buffer;
-}
-
-/*! build entities based on .shp file */
-bool initSHP (const char* nameFile) {
-   int nEntities = 0;         // number of entities in current shp file
-   int nShapeType;
-   int k = 0;
-   int nMaxPart = 0;
-   double minBound[4], maxBound[4];
-   SHPHandle hSHP = SHPOpen (nameFile, "rb");
-   if (hSHP == NULL) {
-      fprintf (stderr, "In InitSHP, Error: Cannot open Shapefile: %s\n", nameFile);
-      return false;
-   }
-
-   SHPGetInfo (hSHP, &nEntities, &nShapeType, minBound, maxBound);
-   printf ("Geo nEntities  : %d, nShapeType: %d\n", nEntities, nShapeType);
-   printf ("Geo limits     : %.2lf, %.2lf, %.2lf, %.2lf\n", minBound[0], minBound[1], maxBound[0], maxBound[1]);
-
-   Entity *temp = (Entity *) realloc (entities, sizeof(Entity) * (nEntities + nTotEntities));
-   if (temp == NULL) {
-      fprintf (stderr, "In initSHP, Error realloc failed\n");
-      free (entities); // Optionnal if entities is NULL at beginning, but sure..
-      return false;
-   } else {
-      entities = temp;
-   }
-
-   for (int i = 0; i < nEntities; i++) {
-      SHPObject *psShape = SHPReadObject(hSHP, i);
-      if (psShape == NULL) {
-         fprintf (stderr, "In initSHP, Error Reading entity: %d\n", i);
-         continue;
-      }
-      k = nTotEntities + i;
-
-      entities[k].numPoints = psShape->nVertices;
-      entities[k].nSHPType = psShape->nSHPType;
-      if ((psShape->nSHPType == SHPT_POLYGON) || (psShape->nSHPType == SHPT_POLYGONZ) || (psShape->nSHPType == SHPT_POLYGONM) ||
-          (psShape->nSHPType == SHPT_ARC) || (psShape->nSHPType == SHPT_ARCZ) || (psShape->nSHPType == SHPT_ARCM)) {
-         entities[k].latMin = psShape->dfYMin;
-         entities[k].latMax = psShape->dfYMax;
-         entities[k].lonMin = psShape->dfXMin;
-         entities[k].lonMax = psShape->dfXMax;  
-      }    
-
-      // printf ("Bornes: %d, LatMin: %.2lf, LatMax: %.2lf, LonMin: %.2lf, LonMax: %.2lf\n", k, entities [i].latMin, entities [i].latMax, entities [i].lonMin, entities [i].lonMax);
-      if ((entities[k].points = malloc (sizeof(Point) * entities[k].numPoints)) == NULL) {
-         fprintf (stderr, "In initSHP, Error: malloc entity [k].numPoints failed with k = %d\n", k);
-         free (entities);
-         return false;
-      }
-      for (int j = 0; (j < psShape->nParts) && (j < MAX_INDEX_ENTITY); j++) {
-         if (j < MAX_INDEX_ENTITY)
-            entities[k].index [j] = psShape->panPartStart[j];
-         else {
-            fprintf (stderr, "In InitSHP, Error MAX_INDEX_ENTITY reached: %d\n", j);
-            break;
-         } 
-      }
-      entities [k].maxIndex = psShape->nParts;
-      if (psShape->nParts > nMaxPart) 
-         nMaxPart = psShape->nParts;
-
-      for (int j = 0; j < psShape->nVertices; j++) {
-         // mercatorToLatLon (psShape->padfY[j], psShape->padfX[j], &entities[k].points[j].lat, &entities[k].points[j].lon);
-         entities[k].points[j].lon = psShape->padfX[j];
-         entities[k].points[j].lat = psShape->padfY[j];
-      }
-         
-      SHPDestroyObject(psShape);
-   }
-   SHPClose(hSHP);
-   nTotEntities += nEntities;
-   // printf ("nMaxPart = %d\n", nMaxPart);
-   return true;
-}
-
-/*! free memory allocated */
-void freeSHP (void) {
-   for (int i = 0; i < nTotEntities; i++) {
-      free (entities[i].points);
-   }
-   free(entities);
 }
 
 /*! select most recent file in "directory" that contains "pattern" in name 
@@ -1546,86 +1472,6 @@ int buildGribUrl (int typeWeb, int topLat, int leftLon, int bottomLat, int right
    return hh;
 }
 
-/*! curGet download URL and save the content in outputFile using system command */
-bool curlGetSys(const char *url, const char *outputFile, char *errMessage, size_t maxLen) {
-   char command [MAX_SIZE_STD];
-   if (snprintf(command, sizeof(command), "curl -L --fail -o %s \"%s\" 2>/dev/null", outputFile, url) >= (int)sizeof(command)) {
-      snprintf(errMessage, maxLen, "Command too long");
-      return false;
-   }
-   int ret = system (command); // execute the commande
-   if (ret == -1) {
-      snprintf (errMessage, maxLen, "In curlGetSys: System call failed: %s", strerror(errno));
-      return false;
-   }
-
-   if (WIFEXITED(ret) && WEXITSTATUS(ret) == 0) { // Check the return value of the curl command
-      return true;
-   } else {
-      if (WIFEXITED(ret)) {
-         snprintf (errMessage, maxLen, "In curlGetSys: Curl failed with exit code: %d", WEXITSTATUS(ret));
-      } else {
-         snprintf (errMessage, maxLen, "In curlGetSys: Curl terminated abnormally");
-      }
-      return false;
-   }
-   printf ("File downloaded with system curl: %s\n", outputFile);
-}
-
-/*! curGet download URL and save the content in outputFile */
-bool curlGet (const char *url, const char *outputFile, char *errMessage, size_t maxLen) {
-   if (par.curlSys)
-      return curlGetSys (url, outputFile, errMessage, maxLen);
-
-   if (url == NULL || outputFile == NULL || errMessage == NULL || maxLen == 0) {
-      g_strlcpy (errMessage, "Invalid arguments", maxLen);
-      return false;
-   }
-   long http_code = 0;
-   CURL *curl = curl_easy_init();
-   if (curl == NULL) {
-      return false;
-   }
-   curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);
-   curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 2L); // Temps min. en secondes avant un timeout
-   curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, 102400L); // Par exemple 100 KB
-
-   // curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L); // Verbose activated
-
-   FILE *f = fopen(outputFile, "wb");
-   if (f == NULL) {
-      snprintf(errMessage, maxLen, "Error opening file: %s", outputFile);
-      curl_easy_cleanup(curl);
-      return false;
-   }
-
-   curl_easy_setopt (curl, CURLOPT_URL, url);
-   curl_easy_setopt (curl, CURLOPT_WRITEDATA, f); // no explicit WRITEFUNCTION 
-
-   // blocking mode activated
-   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-   curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
-
-   CURLcode res = curl_easy_perform(curl);
-   fflush(f); // Assure
-   fclose(f);
-
-   if (res != CURLE_OK) {
-      snprintf(errMessage, maxLen, "Curl error: %s", curl_easy_strerror(res));
-      curl_easy_cleanup(curl);
-      return false;
-   }
-
-   curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-   curl_easy_cleanup (curl);
-
-   if (http_code >= 400) {
-      snprintf(errMessage, maxLen, "HTTP error: %ld", http_code);
-      return false;
-   }
-   return true;
-}
-
 /*! export Waypoints to GPX */
 bool exportWpToGpx (const char *gpxFileName) {
    FILE *f;
@@ -1846,40 +1692,6 @@ bool infoDigest (const char *fileName, double *od, double *ld, double *rd, doubl
    return true;
 }
 
-/*! check server accessibility */
-bool isServerAccessible (const char *url) {
-    CURL *curl;
-    CURLcode res;
-
-    curl = curl_easy_init ();
-
-    if (curl) {
-        curl_easy_setopt (curl, CURLOPT_URL, url);
-        curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
-        res = curl_easy_perform (curl);
-        if (res != CURLE_OK) {
-            fprintf (stderr, "In isServerAccessible, Error Curl request: %s\n", curl_easy_strerror(res));
-            curl_easy_cleanup (curl);
-            return false; // server not accessible request error
-        }
-
-        long http_code;
-        curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &http_code);
-
-        // 2xx means server accessible
-        if (http_code >= 200 && http_code < 300) {
-            curl_easy_cleanup(curl);
-            return true;
-        } else {
-            curl_easy_cleanup(curl);
-            return false; 
-        }
-    } else {
-        fprintf (stderr, "In isServerAccessible, Error Init curl.\n");
-        return false;
-    }
-}
-
 /*! true if day light, false if night 
 // libnova required for this
 bool OisDayLight (time_t t, double lat, double lon) {
@@ -1934,4 +1746,41 @@ void initWayPoints (void) {
    wayPoints.t [0].lat = par.pDest.lat;
    wayPoints.t [0].lon = par.pDest.lon;
 }
+
+/*! for virtual Regatta. return penalty in seconds for manoeuvre type. Depend on tws and energy. Give also sTamina coefficient */
+double fPenalty (int shipIndex, int type, double tws, double energy, double *cStamina) {
+   if (type < 0 || type > 2) {
+      fprintf (stderr, "In fPenalty, type unknown: %d\n", type);
+      return -1;
+   };
+   const double kPenalty = 0.015;
+   double cShip = shipParam [shipIndex].cShip;
+   *cStamina = 2 - fmin (energy, 100.0) * kPenalty;
+   double tMin = shipParam [shipIndex].tMin [type];
+   double tMax = shipParam [shipIndex].tMax [type];
+   double fTws = 50.0 - 50.0 * cos (G_PI * ((fmax (10.0, fmin (tws, 30.0))-10.0)/(30.0 - 10.0)));
+   //printf ("cShip: %.2lf, cStamina: %.2lf, tMin: %.2lf, tMax: %.2lf, fTws: %.2lf\n", cShip, cStamina, tMin, tMax, fTws);
+   return  cShip * (*cStamina) * (tMin + fTws * (tMax - tMin) / 100.0);
+}
+
+/*! for virtual Regatta. return point loss with manoeuvre types. Depends on tws and fullPack */
+double fPointLoss (int shipIndex, int type, double tws, bool fullPack) {
+   const double fPCoeff = (type == 2 && fullPack) ? 0.8 : 1;
+   double loss = (type == 2) ? 0.2 : 0.1;
+   double cShip = shipParam [shipIndex].cShip;
+   double fTws = (tws <= 10.0) ? 0.02 * tws + 1 : 
+                 (tws <= 20.0) ? 0.03 * tws + 0.9 : 
+                 (tws <= 30) ? 0.05 * tws + 0.5 :  
+                 2.0;
+   return fPCoeff * loss * cShip * fTws;
+}
+
+/*! for virtual Regatta. return type in second to get back one energy point */
+double fTimeToRecupOnePoint (double tws) {
+   const double timeToRecupLow = 5;   // minutes
+   const double timeToRecupHigh = 15; // minutes
+   double fTws = 1.0 - cos (G_PI * (fmin (tws, 30.0)/30.0));
+   return 60 * (timeToRecupLow + fTws * (timeToRecupHigh - timeToRecupLow) / 2.0);
+}
+
 

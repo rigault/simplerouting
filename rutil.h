@@ -1,3 +1,5 @@
+extern MyGpsData my_gps_data; 
+
 /*! Zone description */
 extern Zone zone;                      // wind
 extern Zone currentZone;               // current
@@ -34,11 +36,7 @@ extern char *tIsSea;                   // array of byte. 0 if earth, 1 if sea
 extern Poi tPoi [MAX_N_POI];
 extern int nPoi;
 
-/*! for shp files */
-extern int    nTotEntities;
-extern Entity *entities;
-
-/*! for curlGet url */
+/*! for curlGet Meteo consult */
 extern const int delay [];
 extern const char *METEO_CONSULT_WIND_URL [];
 extern const char *METEO_CONSULT_CURRENT_URL [];
@@ -62,8 +60,6 @@ extern bool   compact (const char *dir, const char *inFile,\
 extern bool   concat (const char *prefix, const char *suffix, int limit0, int step0, int step1, int max, const char *fileRes);
 extern bool   isEmpty (const char *str);
 extern char   *formatThousandSep (char *buffer, size_t maxLen, int value);
-extern bool   initSHP (const char* nameFile);
-extern void   freeSHP (void);
 extern char   *buildRootName (const char *fileName, char *rootName, size_t maxLen);
 extern bool   isNumber (const char *name);
 extern double getCoord (const char *str, double min, double max);
@@ -91,9 +87,7 @@ extern char   *nearestPort (double lat, double lon, const char *fileName, char *
 extern int    poiToStr (bool portCheck, char *str, size_t maxLen);
 extern char   *dollarSubstitute (const char* str, char *res, size_t maxLen);
 extern char   *strCpyMaxWidth (const char *str, int n, char *res, size_t maxLen);
-extern bool   curlGet (const char *url, const char *outputFile, char *errMessage, size_t maxLen); 
 extern void   updateIsSeaWithForbiddenAreas (void);
-extern bool   isServerAccessible (const char *url);
 extern bool   exportWpToGpx (const char *gpxFileName);
 extern bool   exportTraceToGpx (const char *fileName, const char *gpxFileName);
 extern bool   addTraceGPS (const char *fileName);
@@ -107,3 +101,9 @@ extern bool   mostRecentFile (const char *directory, const char *pattern, char *
 extern int    buildMeteoConsultUrl (int type, int i, int delay, char *url, size_t maxLen);
 extern int    buildGribUrl (int typeWeb, int topLat, int leftLon, int bottomLat, int rightLon, int step, int step2, char *url, size_t maxLen);
 extern bool   buildGribMail (int type, double lat1, double lon1, double lat2, double lon2, char *object, char *command, size_t maxLen);
+extern double fPenalty (int shipIndex, int type, double tws, double energy, double *cStamina);
+extern double fPointLoss (int shipIndex, int type, double tws, bool fullPack);
+extern double fTimeToRecupOnePoint (double tws);
+
+
+

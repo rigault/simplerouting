@@ -45,6 +45,7 @@
 #include "editor.h"
 #include "dashboardVR.h"
 #include "displaytext.h"
+#include "rshputil.h"
 
 #ifdef _WIN32
 static const bool windowsOS = true;
@@ -549,14 +550,45 @@ static void windy (GSimpleAction *action, GVariant *parameter, gpointer *data) {
    g_thread_new ("windy", commandWindy, string);
 }
 
+/*! generate json description of isochrones */
+static GString *generateIsochronesJson () {
+   Pp pt;
+   int index;
+   GString *jsonString = g_string_new ("[\n");
+   Pp *newIsoc = NULL; // array of points
+   if ((newIsoc = malloc (MAX_SIZE_ISOC * sizeof(Pp))) == NULL) {
+      fprintf (stderr, "In generateIsochronesJson: error in memory newIsoc allocation\n");
+      return NULL;
+   }
+   
+   for (int i = 0; i < nIsoc; i += MAX (1, par.stepIsocDisp)) {
+      g_string_append_printf (jsonString, "   [\n"); 
+      index = isoDesc [i].first;
+      for (int j = 0; j < isoDesc [i].size; j++) {
+         newIsoc [j] = isocArray [i * MAX_SIZE_ISOC + index];
+         index += 1;
+         if (index == isoDesc [i].size) index = 0;
+      }
+      for (int k = 0; k < isoDesc [i].size; k++) {
+         pt = newIsoc [k]; 
+         g_string_append_printf (jsonString, "      [%.6lf, %.6lf],\n", pt.lat, pt.lon); 
+      }
+      g_string_append_printf (jsonString, "   ],\n"); 
+   }
+   g_string_append_printf (jsonString, "]\n"); 
+   free (newIsoc);
+   return jsonString;
+}
+
 /*! generate json description of track boats */
-static bool generateJson (const char *fileName, int index) {
-   GString *jsonString = g_string_new ("{\"result\": {\n");
+static GString *generateRoutesJson (int index) {
+   GString *jsonString = g_string_new ("{\n");
 
    // current route
    if (route.n > 0) {
-      g_string_append_printf (jsonString, "\"%s\": {\n\"heading\": %.0lf, \"rank\": %d, \"track\": [\n", 
-         competitors.t[0].name, route.t [index].lCap, 0); 
+      g_string_append_printf (jsonString, "\"%s\": {\n\"heading\": %.0lf, \"rank\": %d, \"duration\":%.2lf, \"totDist\":%.2lf, \"polar\":\"%s\", \"track\": [\n", 
+         competitors.t[0].name, route.t [index].lCap, 0, route.duration, route.totDist, route.polarFileName);
+
       for (int i = 0; i < route.n; i++) {
          g_string_append_printf (jsonString, "   [%.6f, %.6f],\n", route.t[i].lat, route.t[i].lon);
       }
@@ -583,15 +615,9 @@ static bool generateJson (const char *fileName, int index) {
       g_string_append_printf (jsonString, "]\n}\n");
    }
 
-   g_string_append_printf (jsonString, "}\n}\n");
+   g_string_append_printf (jsonString, "}\n");
    
-   if (! g_file_set_contents (fileName, jsonString->str, -1, NULL)) {
-      fprintf (stderr, "In generateJson: Error creating file: %s\n", fileName);
-      g_string_free (jsonString, TRUE);
-      return false;
-   }
-   g_string_free (jsonString, TRUE);
-   return true;
+   return jsonString;
 }
 
 /*! open windy using API 
@@ -599,21 +625,18 @@ static bool generateJson (const char *fileName, int index) {
    creation of json file for the routes
    launch navigator on local html file thar referenves javascript files */
 static void windyAPI (GSimpleAction *action, GVariant *parameter, gpointer *data) {
-   if (route.n == 0) {
+   /*if (route.n == 0) {
       windy (action, parameter, data);
       return;
-   }
+   }*/
    bool OK = true;
    const char *windyFile = "windyindex.html";
-   const char *windyBoats = "windyboats.json";
    const char *paramFile = "windyparam.js";
-   const char *navigator = "google-chrome --disable-web-security --user-data-dir=/tmp/chrome_dev";
    char *command = NULL;
-   int index = findIndexInRoute (&route, theTime);
-   time_t epochStartTime = gribDateTimeToEpoch (zone.dataDate [0], zone.dataTime [0]) + 3600 * route.t [index].time;
-
+   int index = (route.n == 0) ? 0 : findIndexInRoute (&route, theTime);
+   time_t epochStartTime = gribDateTimeToEpoch (zone.dataDate [0], zone.dataTime [0]);
+   epochStartTime += (route.n == 0) ? 0 : 3600 * route.t [index].time;
    char *fullWindyFile = g_build_filename (par.web, windyFile, NULL);
-   char *fullWindyBoats = g_build_filename (par.web, windyBoats, NULL);
    char *fullParamFile = g_build_filename (par.web, paramFile, NULL);
    GString *string = g_string_new ("");
 
@@ -626,14 +649,20 @@ static void windyAPI (GSimpleAction *action, GVariant *parameter, gpointer *data
    }
    g_string_append_printf (string, "[%.6f, %.6f]];\n", par.pDest.lat, par.pDest.lon);
 
+   if (route.n > 0) {
+      GString *routes = generateRoutesJson (index);
+      g_string_append_printf (string, "let routes = %s\n", routes->str);
+      g_string_free (routes, TRUE);
+
+      GString *isochrones = generateIsochronesJson ();
+      g_string_append_printf (string, "let isochrones = %s\n", isochrones->str);
+      g_string_free (isochrones, TRUE);
+   }
+
    printf ("File: %s\n%s\n", fullParamFile, string->str);
 
    if (! g_file_set_contents (fullParamFile, string->str, -1, NULL)) {
       infoMessage ("In Windy: Impossible to  create paramFile file", GTK_MESSAGE_ERROR);
-      OK = false;
-   }
-   if (OK && ! generateJson (fullWindyBoats, index)) {
-      infoMessage ("In Windy: Impossible to generate json file", GTK_MESSAGE_ERROR);
       OK = false;
    }
    if (OK && (command = malloc (MAX_SIZE_LINE)) == NULL) {
@@ -641,12 +670,12 @@ static void windyAPI (GSimpleAction *action, GVariant *parameter, gpointer *data
       OK = false;
    } 
    if (OK) {
-      snprintf (command, MAX_SIZE_LINE, "%s %s", navigator, fullWindyFile);
+      snprintf (command, MAX_SIZE_LINE, "%s %s", par.webkit, fullWindyFile);
       printf ("windy command  : %s\n", command);
       g_thread_new ("windy", commandRun, command);
    }
+   g_string_free (string, TRUE);
    g_free (fullWindyFile);
-   g_free (fullWindyBoats);
    g_free (fullParamFile);
 }
 
@@ -1384,7 +1413,9 @@ static void showUnicode (cairo_t *cr, const char *unicode, double x, double y) {
 static gboolean drawAllIsochrones0 (cairo_t *cr) {
    double x, y;
    Pp pt;
-   for (int i = 0; i < nIsoc; i += MAX (1, par.stepIsocDisp)) {
+   for (int i = 
+
+   0; i < nIsoc; i += MAX (1, par.stepIsocDisp)) {
       GdkRGBA color = colors [i % N_COLORS];
       cairo_set_source_rgba (cr, color.red, color.green, color.blue, color.alpha);
       for (int k = 0; k < isoDesc [i].size; k++) {
@@ -1440,7 +1471,7 @@ static gboolean drawAllIsochrones (cairo_t *cr, int style) {
    if (style == JUST_POINT) return drawAllIsochrones0 (cr);
 
    if ((newIsoc = malloc (MAX_SIZE_ISOC * sizeof(Pp))) == NULL) {
-      fprintf (stderr, "In drawAllIsocgrones: error in memory newIsoc allocation\n");
+      fprintf (stderr, "In drawAllIsochrones: error in memory newIsoc allocation\n");
       return -1;
    }
    
@@ -1468,7 +1499,6 @@ static gboolean drawAllIsochrones (cairo_t *cr, int style) {
             cairo_line_to (cr, x, y);
 	      }
          cairo_stroke(cr);
-
      }
 	  else { 									// curve if number of point >= 4 and style == 2
          int k;

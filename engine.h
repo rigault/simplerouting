@@ -20,5 +20,7 @@ extern void    logReport (int n);
 extern void    saveRoute (SailRoute *route);
 extern bool    exportRouteToGpx (const SailRoute *route, const gchar *filename);
 extern bool    dumpIsocToFile (const char *fileName);
+extern GString *routeToJson (int index);
+
 
 

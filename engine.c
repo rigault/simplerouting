@@ -22,9 +22,6 @@
 #include "rutil.h"
 #include "grib.h"
 
-extern double fPointLoss (int shipIndex, int type, double tws, bool fullPack);
-extern double fTimeToRecupOnePoint (double tws);
-
 #define MAX_N_INTERVAL  1000                    // for chooseDeparture
 #define LIMIT           50                      // for forwardSectorOptimize
 #define MIN_VMC_RATIO   0.8                     // for forwardSectorOptimize
@@ -1335,5 +1332,28 @@ bool exportRouteToGpx (const SailRoute *route, const gchar *fileName) {
    fclose (f);
    printf ("GPX file:%s generated\n", fileName);
    return true;
+}
+
+/*! generate json description of track boats */
+GString *routeToJson (int index) {
+   GString *jsonString = g_string_new ("{\n");
+
+   // current route
+   if (route.n > 0) {
+      g_string_append_printf (jsonString, "\"%s\": {\n\"heading\": %.0lf, \"rank\": %d, \"duration\":%.2lf, \"totDist\":%.2lf, \"polar\":\"%s\", \"track\": [\n", 
+         competitors.t[0].name, route.t [index].lCap, 0, route.duration, route.totDist, route.polarFileName);
+
+      for (int i = 0; i < route.n; i++) {
+         g_string_append_printf (jsonString, "   [%.6f, %.6f],\n", route.t[i].lat, route.t[i].lon);
+      }
+      if (route.destinationReached)
+         g_string_append_printf (jsonString, "   [%.6f, %.6f]\n", par.pDest.lat, par.pDest.lon);
+      else
+         g_string_append_printf (jsonString, "   [%.6f, %.6f]\n", route.t[route.n - 1].lat, route.t[route.n - 1].lon); // no comma
+
+      g_string_append_printf (jsonString, "]\n}\n");
+   }
+   g_string_append_printf (jsonString, "}\n");
+   return jsonString;
 }
 
