@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang = "fr">
+<head>
+<meta charset="UTF-8">
+<title>RCube</title>
+<link rel="icon" type="image/ico" href="favicon.ico">
+<link rel="stylesheet" type="text/css" href="r3help.css">
+<script src="marine.js"></script>
+</head>
+<body>
+<header> 
+   <div class="container">
+      <div class="menu">
+         <img src="images/routing.png" alt="Routing symbol" width="200" height="200">
+      </diV>
+   <div class="main">
+         <span class=titlename>Rcube</span>
+   </div>
+      <div class="notes">
+         <img src="images/screenshot.png" alt="screenshot" width="350" height="200">
+      </div>
+   </div>
+   <hr>
+</header>
+
+<div class="container">
+
+<div class="menu">
+<h2>Table des matières </h2>
+   <a href="#chap1">1. Introduction</a>
+   <a href="#chap2">2. Procédure d'installation </a>
+   <a href="#chap3">3. Documentation</a>
+   <a href="#chap4">4. Lancement de l'application</a>
+
+<p></p>
+
+    <table>
+      <caption>Acronymes et signification associée</caption>
+      <thead>
+         <tr>
+            <th>Acronyme</th><th>Littéral</th>
+         </tr>
+      </thead>
+      <tbody>
+         <tr>
+            <td>ECMWF</td><td>European Centre for <br>Medium-Range Weather Forecasts</td>
+         </tr>
+
+         <tr>
+            <td>GFS</td><td>Global Forecast System</td>
+         </tr>
+
+         <tr>
+            <td>GRIB</td><td>General Regularly-distributed <br>Information in Binary</td>
+         </tr>
+         <tr>
+            <td>NOAA</td><td>National Oceanic and Atmosphere <br>Administration</td>
+         </tr>
+         <tr>
+            <td>AWA</td><td>Apparent Wind Angle</td>
+         </tr>
+         <tr>
+            <td>AWS</td><td>Apparent Wind Speed</td>
+         </tr>
+         <tr>
+            <td>HDG</td><td>Heading</td>
+         </tr>
+         <tr>
+            <td>TWA</td><td>True Wind Angle</td>
+         </tr>
+         <tr>
+            <td>TWD</td><td>True Wind Direction</td>
+         <tr>
+            <td>TWS</td><td>True Wind Speed</td>
+         <tr>
+            <td>COG</td><td>Course Over Ground</td>
+         </tr>
+         <tr>
+            <td>SOG</td><td>Speed Over Ground</td>
+         </tr>
+         <tr>
+            <td>VMC</td><td>Velocity Made On Course</td>
+         </tr>
+         <tr>
+            <td>VMG</td><td>Velocity Made Good</td>
+         </tr>
+      </tbody>
+   </table>
+</div>
+
+<div class="main">
+
+<h1 id="chap1">1. Introduction</h1>
+<h1 id="chap2">2. Procédure d'installation coté serveur </h1>
+
+		<h3>Environnement Debian Ubuntu  </h3>
+		
+      <h4>Préliminaires</h4>
+<p> Vérifier que gcc est installé. Si ce n’est pas le cas, l’installer.</p>
+<pre><code>
+sudo apt install gcc
+</code></pre>
+
+		<h4>Installer les bibliothèques</h4>
+		<p>Installez les paquets nécessaires pour curl, eccodes, la Glib&nbsp;:</p>
+<pre>
+<code>
+sudo apt-get install -y libcurl4 libcurl4-openssl-dev 
+sudo apt-get install -y libeccodes0 libeccodes-dev
+sudo apt-get install libglib2.0-dev
+
+pkg-config --modversion glib-2.0  pour vérifier
+
+
+</code>
+</pre>
+
+      <h4>Construction du code</h4>
+
+      <p>Compilation et édition de lien avec gcc. Utiliser de préférence le script ccs ou éventuellement le Makefile.</p>
+<pre>
+<code>
+./ccs
+</code>
+</pre>
+		<p>Dans le répertoire d’exécution, on doit trouver les répertoires suivants&nbsp;:</p>
+		<pre>
+csources
+currentgrib
+geo
+grib
+helpdir
+isoc
+par
+pol
+rte
+trace
+</pre>
+
+		<h4>csources</h4>
+      <p>csources4 contient les programmes sources et le Makefile ainsi que ccs</p>
+
+		<p>La production du fichier exécutable nécessite les fichiers
+		sources .c et .h suivants&nbsp;:</p>
+<pre>
+engine.c
+grib.c
+polar.c
+rutil.c
+rserver.c
+
+engine.h
+grib.h
+inline.h
+polar.h
+rtypes.h
+rutil.h
+</pre>
+Ainsi que les fichiers&nbsp;:
+<pre>
+ccs
+MakeFile
+</pre>
+      <p> La commande de compilation et d’édition des liens est dans le
+		fichier shell exécutable&nbsp;:</p>
+<pre>
+<code>./ccs</code>
+</pre>
+		<p>Le Makefile peut aussi être utilisé.</p>
+		<pre>
+<code>Make</code>
+      </pre>
+		<h4>geo</h4>
+      <p>Le répertoire geo contient les fichiers géographiques.</p>
+		<li>Le fichier issea.txt permet de savoir si un point de la carte est «en mer» ou «à terre».</li>
+
+      </ul>
+
+		<h4>grib</h4>
+   
+      <p>Ce répertoire contient les fichiers Grib, téléchargés par une des méthodes proposées par le logiciel, ou obtenus via un autre logiciel, par exemple xygrib.</p>
+
+      <p> Il est utile que ce répertoire contienne au moins un fichier. C'est pourquoi il est conseillé de ne pas détruire le petit fichier Grib&nbsp;: reference.grb2.</p>
+		
+      <h4>currentgrib</h4>
+      
+      <p>Ce répertoire contient les fichiers Grib pour les courants.</p>
+
+
+		<h4>helpdir</h4>
+   
+		<h4>isoc</h4>
+      <p>Ce répertoire contient le Dump des isochrones au format csv, produits par le logiciel.</p>
+
+		<h4>par</h4>
+      <p>Ce répertoire contient les fichiers de paramètres (scénarios) suffixés par “.par”.</p>
+
+		<p>Le fichier “.par” par défaut est&nbsp;: <a href="../par/routing.par">routing.par</a>.</p>
+
+		<p>La description des paramètres se trouve dans le répertoire
+		helpdir, fichier <a href="docpar.txt">docpar.txt</a></p>
+
+		<h4>pol</h4>
+
+		<p>Ce répertoire contient les fichiers polaires au format ".pol" ou ".csv".</p>
+
+		<p>Les polaires suffixées par ".polwave.csv" sont des polaires de vagues, les autres
+		sont les polaires habituelles des bateaux.</p>
+	
+      <h4>rte</h4>
+
+      <p>Ce répertoire contient les fichiers dump des routes au format csv, créés par le logiciel.</p>
+
+<h1 id="chap3">3. Documentation</h1>
+
+<h1 id="chap4">4. Lancement de l'application</h1>
+		<p>Le lancement de l’application se fait via la commande&nbsp;:</p>
+		<code>
+./rserver
+      </code>
+
+
+<h1 id="chap10">10. Récupérer des fichiers Grib et les informations météorologiques</h1>
+		<h2>10.2. NOAA</h2>
+   <code>./r3noaa</code>
+
+      <h2>10.3. ECMWF</h2>
+   <code>./r3ecmwf</code>
+   
+   <p>Le répertoire csource contient le code C.</p>
+
+   <table>
+      <caption>Fichiers et actions associées</caption>
+      <thead>
+      <tr>
+         <th>Fichier</th><th>Commentaire</th>
+      </tr>
+      </thead>
+      <tbody>
+         <tr>
+            <td>rtypes.h</td><td>Définition des constantes générales <code>#defines</code>, des 
+            <code>enum</code> et des <code>typedef</code>.</td>
+         </tr>
+         <tr>
+            <td>inline.h</td><td>Définition des petites fonctions inline incluses dans les fichiers .c</td>
+         </tr>
+         <tr>
+            <td>engine.c</td><td>Cœur du programme avec calcul des isochrones.</td>
+         </tr>
+         <tr>
+            <td>engine.h</td><td>Interface de engine (prototypes des fonctions externes).</td>
+         </tr>
+         <tr>
+            <td>grib.c</td><td>Lecture des fichiers Grib et utilitaires Grib.</td>
+         </tr>
+         <tr>
+            <td>grib.h</td><td>Interface de grib (prototypes des fonctions externes).</td>
+         <tr>
+         <tr>
+            <td>rutil.c</td><td>Fonctions utiles non graphiques ne dépendant pas de GTK4.</td>
+         </tr>
+         <tr>
+            <td>rutil.h</td><td>Interface de rutil (prototypes des fonctions externes).</td>
+         <tr>
+         <tr>
+            <td>polar.c</td><td>Lectures des fichiers polaires et utilitaires associés.</td>
+         </tr>
+         <tr>
+            <td>polar.h</td><td>Interface de polar (prototypes des fonctions externes).</td>
+         <tr>
+         <tr>
+            <td>rserver.c</td><td>Le serveur.</td>
+         </tr>
+      </tbody>
+   </table>
+
+</div>
+<div class="notes">
+
+<h2>Liens </h2>
+
+<p><a href= "docpar.txt">Documentation sur les paramètres</a></p>
+<p><a href="https://nomads.ncep.noaa.gov/">Fichiers Grib NOAA</a></p>
+<p><a href="https://data.ecmwf.int/">Fichiers Grib ECMWF</a></p>
+<p><a href="https://meteo.data.gouv.fr/">Fichiers Grib Météo France</a></p>
+<p><a href="https://marine.meteoconsult.fr/services-marine/fichiers-grib">Fichiers Grib Meteo consult</a></p>
+
+<h2>Météo locale </h2>
+<table>
+   <tr>   
+      <td>Météo</td><td><div id = "meteo"></div></td>
+   </tr>
+   <tr>
+      <td>Température</td><td><div id = "temp"></div></td>
+   </tr>
+   <tr>
+      <td>Humidité</td><td><div id = "humide"></div></td>
+   </tr>
+   <tr>
+      <td>Vent</td><td><div id = "vent"></div></td>
+   </tr>
+   <tr>
+      <td>Pression</td><td><div id = "pression"></div></td>
+   </tr>
+</table>
+<p></p>
+
+<table>
+  <caption>Echelle Beaufort</caption>
+   <thead>
+   <tr>   
+      <th>Beaufort</th>
+      <th>Termes</th>
+      <th>Noeuds</th>
+      <th>Km/h</th>
+      <th>m/s</th>
+   </tr>
+   </thead>
+   <tr>
+      <td>0</td>
+      <td>Calme</td>
+      <td>0 à 1</td>
+      <td>0 à 1</td>
+      <td>0 à 1</td>
+   </tr>
+   <tr>
+      <td>1</td>
+      <td>Très légère brise</td>
+      <td>1 à 3</td>
+      <td>1 à 5</td>
+      <td>0.5 à 1.5</td>
+   </tr>
+   <tr>
+      <td>2</td>
+      <td>Légère brise</td>
+      <td>4 à 6</td>
+      <td>6 à 11</td>
+      <td>1.5 à 3.3</td>
+   </tr>
+   <tr>
+      <td>3</td>
+      <td>Petite brise</td>
+      <td>7 à 10</td>
+      <td>12 à 19</td>
+      <td>3.4 à 5.5</td>
+   </tr>
+   <tr>
+      <td>4</td>
+      <td>Jolie brise</td>
+      <td>11 à 16</td>
+      <td>29 à 28</td>
+      <td>5.6 à 8</td>
+   </tr>
+   <tr>
+      <td>5</td>
+      <td>Bonne brise</td>
+      <td>17 à 21</td>
+      <td>29 à 38</td>
+      <td>8 à 11</td>
+   </tr>
+   <tr>
+      <td>6</td>
+      <td>Vent frais</td>
+      <td>22 à 27</td>
+      <td>22 à 27</td>
+      <td>11 à 14</td>
+   </tr>
+   <tr>
+      <td>7</td>
+      <td>Grand frais</td>
+      <td>28 à 33</td>
+      <td>50 à 61</td>
+      <td>14 à 17</td>
+   </tr>
+   <tr>
+      <td>8</td>
+      <td>Coup de vent</td>
+      <td>34 à 40</td>
+      <td>62 à 74</td>
+      <td>17 à 21</td>
+   </tr>
+   <tr>
+      <td>9</td>
+      <td>Fort coup de vent</td>
+      <td>41 à 47</td>
+      <td>75 à 88</td>
+      <td>21 à 24.5</td>
+   </tr>
+   <tr>
+      <td>10</td>
+      <td>Tempête</td>
+      <td>48 à 55</td>
+      <td>89 à 102</td>
+      <td>24.4 à 28.4</td>
+   </tr>
+   <tr>
+      <td>11</td>
+      <td>Violente tempête</td>
+      <td>56 à 63</td>
+      <td>103 à 117</td>
+      <td>28.4 à 32.6</td>
+   </tr>
+   <tr>
+      <td>12</td>
+      <td>Ouragan</td>
+      <td>>= 64 </td>
+      <td>>= 118 </td>
+      <td>0 à 32.6</td>
+   </tr>
+</table>
+
+<h2>Les principaux sites marées en France</h2>
+<ul>
+   <li> <a href = "http://maree.info">Marée Info</a></li>
+   <li> <a href = "https://shom.fr">SHOM</a></li>
+</ul>
+
+<p><script src="https://services.data.shom.fr/hdm/vignette/petite/LE_POULIGUEN?locale=fr"></script></p>
+
+<h2>Autres liens utiles</h2>
+<ul>
+   <li> <a href = "https://www.premar-atlantique.gouv.fr/avis-urgents-aux-navigateurs"> AVURNAV Préfecture maritime</a></li>
+   <li> <a href = "https://francis-fustier.fr/"> MAC fanas : le site de Francis Fustier </a></li>
+   <li> <a href = "https://weather.mailasail.com/Franks-weather"> Weather by Frank Singleton </a></li>
+</ul>
+
+
+</div>
+
+</div>
+<hr>
+
+<footer>
+René Rigault, 2025
+</footer>
+
+</body>
+</html>

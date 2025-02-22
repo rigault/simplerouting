@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang = "fr">
+<head>
+   <title>Rcube</title>
+   <link rel="icon" type="image/ico" href="favicon.ico">
+   <link rel="stylesheet" type="text/css" href="r3.css">
+   <meta
+      charset="UTF-8"
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, shrink-to-fit=no"
+    />
+    <script src="https://unpkg.com/leaflet@1.4.0/dist/leaflet.js"></script>
+    <script src="https://api.windy.com/assets/map-forecast/libBoot.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="r3grib.js"></script>
+    <script src="r3polar.js"></script>
+    <script src="r3param.js"></script>
+    <script src="r3.js"></script>
+</head>
+<body>
+<div class="container">
+   <header>
+      <a href="http://www.google.com/maps"> Google Map</a> 
+      <a href="../../routing/helpdir/index.html"> Routing </a>
+      <a href="r3help.html"> Help </a>
+   </header>
+   <div id="windy">
+   </div>
+   <div id="spinnerOverlay" class="spinner-overlay">
+      <div class="spinner"></div>
+   </div>
+   <div id="tools">
+      <button class="btn" onclick="goBegin();"><i class="fas fa-stop"></i>🔄 Begin</button>
+      <button class="btn" onclick="stopAnim();"><i class="fas fa-stop"></i>⏹️ Stop</button>
+      <button class="btn" onclick="playAnim();"><i class="fas fa-play"></i>▶️  Play</button>
+      <button class="btn" onclick="backWard ();"><i class="fas fa-backward"></i>⏪ Back</button>
+      <button class="btn" onclick="forWard ();"><i class="fas fa-forward"></i>⏩ Forward</button>
+      <button class="btn" onclick="clearAll ();"><i class="fas fa-forward"></i>⏩ Clear</button>
+      <button class="btn" onclick="gribInfo ();"><i class="fas fa-forward"></i>Grib Info</button>
+      <button class="btn" onclick="polarInfo ();"><i class="fas fa-forward"></i>Polar</button>
+      <button class="btn" id="openModal"><i class="fas fa-forward"></i>Route Launch</button>
+      <div id="routeModal" class="modal">
+         <div class="modal-content">
+            <h3>Paramètres de Route</h3>
+            <label>Date et Heure de Départ :</label>
+            <input type="datetime-local" id="startTime">
+            
+            <label>Time Step :</label>
+            <select id="isoStep">
+               <option value="900">15 minutes</option>
+               <option value="1800">30 minutes</option>
+               <option selected="selected" value="3600">1 heure</option>
+               <option value="10800">3 heures</option>
+            </select>
+            
+            <label>Polar :</label>
+            <select id="polar">
+               <option value="ultim.csv">Ultim</option>
+               <option value="imoca.csv">Imoca</option>
+            </select>
+            
+            <label>Model :</label>
+            <select id="model">
+               <option value="ECMWF">ECMWF</option>
+               <option value="GFS">GFS</option>
+            </select>
+            
+            <label>
+               <input type="checkbox" id="forbidZones"> Forbid Zones
+            </label>
+            
+            <label>
+               <input type="checkbox" id="isoc"> Isochrones
+            </label>
+            
+            <button id="saveParams">Launch Route</button>
+            <button id="closeModal">Cancel</button>
+         </div>
+       </div>
+    
+      <script>
+         document.getElementById("openModal").addEventListener("click", function() {
+            document.getElementById("routeModal").style.display = "block";
+            let now = new Date ();
+            let toLocal = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+            document.getElementById("startTime").value = toLocal.toISOString().slice(0, 16);
+         });
+        
+         document.getElementById("closeModal").addEventListener("click", function() {
+            document.getElementById("routeModal").style.display = "none";
+         });
+        
+         document.getElementById("saveParams").addEventListener("click", function() {
+            routeParam = {
+                startTimeStr: document.getElementById("startTime").value,
+                isoStep: parseInt(document.getElementById("isoStep").value, 10),
+                polar: document.getElementById("polar").value,
+                model: document.getElementById("model").value,
+                forbid: document.getElementById("forbidZones").checked,
+                isoc: document.getElementById("isoc").checked
+            };
+            routeParam.startTime = new Date(routeParam.startTimeStr);
+            // Corriger en UTC si souhaité
+            //routeParam.startTime = new Date(routeParam.startTime.getTime() - routeParam.startTime.getTimezoneOffset() * 60000);
+            updateInfo (); 
+            console.log("Route Parameters:", routeParam);
+            request ();
+            document.getElementById("routeModal").style.display = "none";
+         });
+      </script>
+   </div>
+   <footer class="footer">
+      <span id = "infoRoute">Info</span>
+      <span id = "coords"></span>
+      <script>updateInfo ();</script>
+   </footer>
+</body>
+</html>

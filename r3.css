@@ -1,0 +1,211 @@
+﻿html, body {
+   font-family: verdana, arial, sans-serif;
+   font-size: 10px;
+   height: 100%;
+   margin: 0;
+   padding: 0;
+   display: flex;
+   flex-direction: column;
+}
+
+header {
+   background-color: black;
+}
+header a {
+   border: 0px solid white;
+   padding: 4px 8px;
+   font-size: 14px;
+   font-weight: bold;
+   text-decoration: none;
+   background-color: black;
+   color: white;
+   width: 90px;
+   display: inline-block;
+}
+header a:hover {
+   background-color: red;
+   color: white;
+}
+
+.container {
+   display: flex;
+   flex-direction: column;
+   height: 100vh;
+}
+
+.btn {
+   border: none;
+   padding: 10px 20px;
+   margin: 5px;
+   font-size: 18px;
+   cursor: pointer;
+   border-radius: 8px;
+   background-color: orange;
+   color: white;
+   transition: 0.3s;
+}
+.btn:hover {
+   background-color: black;
+}
+.btn:active {
+   transform: scale(0.95);
+}
+.btn i {
+   margin-right: 5px;
+}
+
+.footer {
+   position: fixed;
+   bottom: 0;
+   width: 100%;
+   background-color: #333;
+   color: white;
+   padding: 10px 20px;
+   text-align: left;
+   display: flex;
+   justify-content: space-between;
+   align-items: center;
+   font-size: 14px;
+}
+.footer .left {
+   display: flex;
+   align-items: center;
+   gap: 10px;
+}
+.footer .right {
+   display: flex;
+   align-items: center;
+   gap: 15px;
+}
+.footer i {
+   margin-right: 5px;
+}
+
+#windy {
+   flex: 1; /* Prend tout l'espace restant */
+   position: relative; /* Utile pour la carte Windy */
+}
+
+#tools {
+  height: 100px
+}
+
+#infoRoute {
+   font-size:16px; 
+   display: inline; /* ou flex si besoin */
+   /*width: 100%;*/
+   white-space: nowrap; /* Empêche les retours à la ligne */
+   overflow: hidden; /* Masque le débordement */
+   text-overflow: ellipsis; /* Ajoute "..." si trop long */
+}
+#coords {
+   font-size:12px;
+   width: 150px; 
+}
+
+/* Styles du menu contextuel */
+#context-menu {
+   position: absolute;
+   background: #ffffff;
+   border-radius: 8px;
+   box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2);
+   padding: 10px;
+   display: flex;
+   flex-direction: column;
+   gap: 8px;
+   z-index: 1000;
+   min-width: 160px;
+}
+
+/* Style des boutons du menu contextuel */
+.context-button {
+   background: #0078D4;
+   color: white;
+   border: none;
+   padding: 10px;
+   border-radius: 6px;
+   cursor: pointer;
+   text-align: left;
+   font-size: 14px;
+   transition: background 0.2s;
+}
+
+.context-button:hover {
+   background: #005EA6;
+}
+
+.context-button:active {
+   background: #004C8C;
+}
+.modal {
+   display: none;
+   position: fixed;
+   top: 0;
+   left: 0;
+   width: 100%;
+   height: 100%;
+   background: rgba(0, 0, 0, 0.5);
+}
+.modal-content {
+   background: white;
+   padding: 20px;
+   margin: 10% auto;
+   width: 300px;
+   border-radius: 10px;
+}
+.modal-content label {
+   display: block;
+   margin: 10px 0 5px;
+}
+.modal-content select, .modal-content input {
+   width: 100%;
+   padding: 5px;
+}
+
+.modal-content label {
+   display: block;
+   align-items: center;
+   gap: 8px; /* Ajoute un espace entre la case et le texte */
+}
+
+.modal-content label input[type="checkbox"] {
+   margin: 0;
+   width: 16px;
+   height: 16px;
+}
+
+.modal-content button {
+   margin-top: 30px; /*Ajoute de l'espace entre le formulaire et les boutons */
+   padding: 10px; Augmente la zone cliquable */
+}
+
+/* Style du spinner */
+.spinner {
+   border: 8px solid rgba(243, 243, 243, 0.6);
+   border-top: 8px solid #3498db;
+   border-radius: 50%;
+   width: 60px;
+   height: 60px;
+   animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+   0% { transform: rotate(0deg); }
+   100% { transform: rotate(360deg); }
+}
+
+/* Overlay du spinner qui recouvre la carte */
+.spinner-overlay {
+   position: absolute;
+   top: 0;
+   left: 0;
+   width: 100%;
+   height: 100%;
+   background-color: rgba(0, 0, 0, 0.2); /* Fond noir avec faible opacité */
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   z-index: 1000;
+   display: none; /* Caché par défaut */
+}
+
