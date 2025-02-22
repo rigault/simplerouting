@@ -1,17 +1,9 @@
 /*! compilation: gcc -c polar.c `pkg-config --cflags glib-2.0` */
 #include <glib.h>
-#include <float.h>   
-#include <limits.h>
-#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
-#include <sys/time.h>
-#include <sys/stat.h>
-#include <dirent.h>
-#include <unistd.h>
-#include <time.h>
 #include <math.h>
 #include <locale.h>
 #include "rtypes.h"
@@ -158,7 +150,7 @@ double maxValInPol (const PolMat *mat) {
    return max;
 }
 
-/*! return VMG: angle and speed at TWSi : pres */
+/*! return VMG: angle and speed at TWS : pres */
 void bestVmg (double tws, PolMat *mat, double *vmgAngle, double *vmgSpeed) {
    *vmgSpeed = -1;
    double vmg;
@@ -204,5 +196,37 @@ char *polToStr (const PolMat *mat, char *str, size_t maxLen) {
    snprintf (line, MAX_SIZE_LINE, "Max                     : %.2lf\n", maxValInPol (mat));
    g_strlcat (str, line, maxLen);
    return str;
+}
+
+/*! write polar information in GString */
+GString *polToJson (const char *fileName) {
+   char polarName [MAX_SIZE_FILE_NAME];
+   char errMessage [MAX_SIZE_LINE];
+   PolMat mat;
+   GString *jString = g_string_new ("");
+   buildRootName (fileName, polarName, sizeof (polarName));
+
+   if (!readPolar (false, polarName, &mat, errMessage, sizeof (errMessage))) {
+      fprintf (stderr, "In polToJson Error: %s\n", errMessage);
+      g_string_append_printf (jString, "{}\n");
+      return jString;
+   }
+   if ((mat.nLine < 2) || (mat.nCol < 2)) {
+      fprintf (stderr, "In polToJson Error: no value in: %s\n", polarName);
+      g_string_append_printf (jString, "{}\n");
+      return jString;
+   }
+   g_string_append_printf (jString, "{\"polarName\": \"%s\", \"nLine\": %d, \"nCol\":%d, \"max\":%.2lf, \"array\":\n[\n", 
+                           polarName, mat.nLine, mat.nCol, maxValInPol (&mat));
+
+   for (int i = 0; i < mat.nLine ; i++) {
+      g_string_append_printf (jString, "[");
+      for (int j = 0; j < mat.nCol - 1; j++) {
+         g_string_append_printf (jString, "%.4f, ", mat.t [i][j]);
+      }
+      g_string_append_printf (jString, "%.4f]%s\n", mat.t [i][mat.nCol -1], (i < mat.nLine - 1) ? "," : "");
+   }
+   g_string_append_printf (jString, "]}\n");
+   return jString;
 }
 

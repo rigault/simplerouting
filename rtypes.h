@@ -24,7 +24,7 @@
 #define CSV_SEP_POLAR         ";\t"             // for polar no comma because decimal separator may be comma 
 #define GPS_TIME_OUT          2000000           // 2 seconds
 //#define WORKING_DIR           "/home/rr/routing/"
-#define WORKING_DIR           "" //ATT          // Default Working Dir if nothing specified in routing.par fike
+#define WORKING_DIR           "" //ATT          // Default Working Dir if nothing specified in routing.par file
 #define PARAMETERS_FILE       WORKING_DIR"par/routing.par" // default parameter file
 #define TEMP_FILE_NAME        "routing.tmp"     // temporary file
 #define PROG_LOGO             "routing.png"     // logo file
@@ -300,7 +300,7 @@ typedef struct {
 
 /*! Point for Sail Route  */
 typedef struct {
-   double stamina; // for virtual Regatta stamina managemnt
+   double stamina; // for virtual Regatta stamina management
    double lat;
    double lon;
    int    id;
@@ -488,6 +488,7 @@ typedef struct {
       bool open;
    } nmea [N_MAX_NMEA_PORTS];
    int nNmea;                                // number of ports activated
+   int serverPort;                           // for rserver
 } Par;
 
 /*! for point of interest management */

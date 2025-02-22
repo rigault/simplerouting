@@ -5,27 +5,22 @@
 
 #include <glib.h>
 #include <float.h>   
-#include <limits.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
-#include <sys/time.h>
 #include <sys/stat.h>
 #include <dirent.h>
 #include <unistd.h>
 #include <time.h>
 #include <math.h>
 #include <locale.h>
-#include "eccodes.h"
 #include "rtypes.h"
-#include "aisgps.h"
 #include "inline.h"
-#include "mailutil.h"
+struct tm;
 
-
-/*! se aisgps file */
+/*! see aisgps file */
 MyGpsData my_gps_data; 
 
 /* For virtual regatta Stamina calculation */
@@ -1142,8 +1137,9 @@ bool readParam (const char *fileName) {
          buildRootName (str, par.parInfoFileName, sizeof (par.parInfoFileName));
       else if (sscanf (pLine, "LOG:%254s", str) > 0)
          buildRootName (str, par.logFileName, sizeof (par.logFileName));
-      else if (sscanf (pLine, "WEB:%254s", str) > 0)
+      else if ((sscanf (pLine, "WEB:%254s", str) > 0) || (strstr (pLine, "WEB:") != NULL)) {
          buildRootName (str, par.web, sizeof (par.web));
+      }
       else if (sscanf (pLine, "OPT:%d", &par.opt) > 0);
       else if (sscanf (pLine, "J_FACTOR:%d", &par.jFactor) > 0);
       else if (sscanf (pLine, "K_FACTOR:%d", &par.kFactor) > 0);
@@ -1179,6 +1175,7 @@ bool readParam (const char *fileName) {
          forbidZoneAdd (pLine, par.nForbidZone);
          par.nForbidZone += 1;
       }
+      else if (sscanf (pLine, "SERVER_PORT:%d", &par.serverPort) > 0);
       else if (sscanf (pLine, "SMTP_SERVER:%255s", par.smtpServer) > 0);
       else if (sscanf (pLine, "SMTP_USER_NAME:%255s", par.smtpUserName) > 0);
       else if (sscanf (pLine, "MAIL_PW:%255s", par.mailPw) > 0);
@@ -1328,6 +1325,7 @@ bool writeParam (const char *fileName, bool header, bool password) {
    fprintf (f, "WINDY_API_KEY:   %s\n", par.windyApiKey);
    fprintf (f, "GOOGLE_API_KEY:  %s\n", par.googleApiKey);
    fprintf (f, "WEBKIT:          %s\n", par.webkit);
+   fprintf (f, "SERVER_PORT:     %d\n", par.serverPort);
    fprintf (f, "SMTP_SERVER:     %s\n", par.smtpServer);
    fprintf (f, "SMTP_USER_NAME:  %s\n", par.smtpUserName);
    fprintf (f, "IMAP_SERVER:     %s\n", par.imapServer);

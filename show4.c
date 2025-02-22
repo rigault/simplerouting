@@ -550,36 +550,6 @@ static void windy (GSimpleAction *action, GVariant *parameter, gpointer *data) {
    g_thread_new ("windy", commandWindy, string);
 }
 
-/*! generate json description of isochrones */
-static GString *generateIsochronesJson () {
-   Pp pt;
-   int index;
-   GString *jsonString = g_string_new ("[\n");
-   Pp *newIsoc = NULL; // array of points
-   if ((newIsoc = malloc (MAX_SIZE_ISOC * sizeof(Pp))) == NULL) {
-      fprintf (stderr, "In generateIsochronesJson: error in memory newIsoc allocation\n");
-      return NULL;
-   }
-   
-   for (int i = 0; i < nIsoc; i += MAX (1, par.stepIsocDisp)) {
-      g_string_append_printf (jsonString, "   [\n"); 
-      index = isoDesc [i].first;
-      for (int j = 0; j < isoDesc [i].size; j++) {
-         newIsoc [j] = isocArray [i * MAX_SIZE_ISOC + index];
-         index += 1;
-         if (index == isoDesc [i].size) index = 0;
-      }
-      for (int k = 0; k < isoDesc [i].size; k++) {
-         pt = newIsoc [k]; 
-         g_string_append_printf (jsonString, "      [%.6lf, %.6lf],\n", pt.lat, pt.lon); 
-      }
-      g_string_append_printf (jsonString, "   ],\n"); 
-   }
-   g_string_append_printf (jsonString, "]\n"); 
-   free (newIsoc);
-   return jsonString;
-}
-
 /*! generate json description of track boats */
 static GString *generateRoutesJson (int index) {
    GString *jsonString = g_string_new ("{\n");
@@ -654,7 +624,7 @@ static void windyAPI (GSimpleAction *action, GVariant *parameter, gpointer *data
       g_string_append_printf (string, "let routes = %s\n", routes->str);
       g_string_free (routes, TRUE);
 
-      GString *isochrones = generateIsochronesJson ();
+      GString *isochrones = isochronesToJson ();
       g_string_append_printf (string, "let isochrones = %s\n", isochrones->str);
       g_string_free (isochrones, TRUE);
    }
@@ -5870,8 +5840,10 @@ static void gribInfoDisplay (const char *fileName, Zone *zone, int type) {
    bool isTimeStepOK = true;
  
    for (size_t i = 0; i < N_METEO_ADMIN; i++) // search name of center
-     if (meteoTab [i].id == zone->centreId) 
-        g_strlcpy (centreName, meteoTab [i].name, sizeof (centreName));
+      if (meteoTab [i].id == zone->centreId) {
+         g_strlcpy (centreName, meteoTab [i].name, sizeof (centreName));
+         break;
+      }
          
    snprintf (line, sizeof (line), "Centre ID: %ld %s   Ed. number: %ld", zone->centreId, centreName, zone->editionNumber);
 

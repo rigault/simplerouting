@@ -1,9 +1,10 @@
 /*! compilation: gcc -c option.c `pkg-config --cflags glib-2.0` */
+#include <math.h>
 #include <glib.h>
 #include <stdbool.h>
 #include <string.h>
 #include <stdio.h>
-#include <sys/time.h>
+#include <stdlib.h>
 #include "rtypes.h"
 #include "rutil.h"
 #include "inline.h"

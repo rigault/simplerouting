@@ -8,8 +8,6 @@
 /*! compilation: gcc -c engine.c `pkg-config --cflags glib-2.0` */
 #include <glib.h>
 #include <float.h>   
-#include <limits.h>
-#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -426,7 +424,7 @@ void saveRoute (SailRoute *route) {
 }
 
 
-/* free space for history route */
+/*! free space for history route */
 void freeHistoryRoute () {
    free (historyRoute.r);
    historyRoute.r = NULL;
@@ -1334,14 +1332,50 @@ bool exportRouteToGpx (const SailRoute *route, const gchar *fileName) {
    return true;
 }
 
+/*! generate json description of isochrones */
+GString *isochronesToJson () {
+   Pp pt;
+   int index;
+   GString *jsonString = g_string_new ("[\n");
+   Pp *newIsoc = NULL; // array of points
+   if ((newIsoc = malloc (MAX_SIZE_ISOC * sizeof(Pp))) == NULL) {
+      fprintf (stderr, "In generateIsochronesJson: error in memory newIsoc allocation\n");
+      return NULL;
+   }
+   
+   for (int i = 0; i < nIsoc; i += MAX (1, par.stepIsocDisp)) {
+      g_string_append_printf (jsonString, "   [\n"); 
+      index = isoDesc [i].first;
+      for (int j = 0; j < isoDesc [i].size; j++) {
+         newIsoc [j] = isocArray [i * MAX_SIZE_ISOC + index];
+         index += 1;
+         if (index == isoDesc [i].size) index = 0;
+      }
+      int max = isoDesc [i].size;
+      for (int k = 0; k < max; k++) {
+         pt = newIsoc [k];
+         g_string_append_printf (jsonString, "      [%.6lf, %.6lf]%s\n", pt.lat, pt.lon, (k < max - 1) ? ","  : ""); 
+      }
+      g_string_append_printf (jsonString, "   ]%s\n", (i < nIsoc -1) ? "," : ""); // no comma for last value 
+   }
+   g_string_append_printf (jsonString, "]\n"); 
+   free (newIsoc);
+   return jsonString;
+}
+
 /*! generate json description of track boats */
-GString *routeToJson (int index) {
+GString *routeToJson (int index, bool isoc) {
    GString *jsonString = g_string_new ("{\n");
 
    // current route
    if (route.n > 0) {
-      g_string_append_printf (jsonString, "\"%s\": {\n\"heading\": %.0lf, \"rank\": %d, \"duration\":%.2lf, \"totDist\":%.2lf, \"polar\":\"%s\", \"track\": [\n", 
-         competitors.t[0].name, route.t [index].lCap, 0, route.duration, route.totDist, route.polarFileName);
+      g_string_append_printf (jsonString, "\"%s\": {\n\"heading\": %.0lf, \"rank\": %d, \"duration\":%.2lf, \"totDist\":%.2lf, \n",
+         competitors.t[0].name, route.t [index].lCap, 0, route.duration, route.totDist);
+
+      g_string_append_printf (jsonString, "\"calculationTime\": %.4lf, ", route.calculationTime);
+
+      g_string_append_printf (jsonString, "\"polar\": \"%s\", \"grib\": \"%s\", \"gribCurrent\": \"%s\", \"track\": [\n", 
+         route.polarFileName, par.gribFileName, par.currentGribFileName);
 
       for (int i = 0; i < route.n; i++) {
          g_string_append_printf (jsonString, "   [%.6f, %.6f],\n", route.t[i].lat, route.t[i].lon);
@@ -1353,7 +1387,13 @@ GString *routeToJson (int index) {
 
       g_string_append_printf (jsonString, "]\n}\n");
    }
+   if (isoc) {
+      GString *isocString = isochronesToJson ();
+      g_string_append_printf (jsonString, ",\n\"_isoc\": \n%s", isocString->str);
+      g_string_free (isocString, TRUE);
+   }
    g_string_append_printf (jsonString, "}\n");
    return jsonString;
 }
+
 

@@ -1,11 +1,13 @@
 #!/bin/bash
-gcc -c rserver.c $(pkg-config --cflags --libs glib-2.0)
-gcc -Wall -Wextra -pedantic -Werror -Wformat=2 -std=c11 -O2 -c engine.c `pkg-config --cflags glib-2.0`
-gcc -Wall -Wextra -pedantic -Werror -Wformat=2 -std=c11 -O1 -c grib.c `pkg-config --cflags glib-2.0`
-gcc -Wall -Wextra -pedantic -Werror -Wformat=2 -std=c11 -O1 -c polar.c `pkg-config --cflags glib-2.0`
-gcc -Wno-format-nonliteral -c rutil.c `pkg-config --cflags glib-2.0` 
+CFLAGS="-Wall -Wextra -Wpedantic -Wformat=2 -Wwrite-strings -Wredundant-decls -Wmissing-include-dirs -Wnested-externs -std=c11 -O2"
+gcc $CFLAGS -c engine.c `pkg-config --cflags glib-2.0`
+gcc $CFLAGS -c grib.c `pkg-config --cflags glib-2.0`
+gcc $CFLAGS -c polar.c `pkg-config --cflags glib-2.0`
+gcc $CFLAGS -Wno-format-nonliteral -c rutil.c `pkg-config --cflags glib-2.0` 
+gcc $CFLAGS -c rserver.c $(pkg-config --cflags --libs glib-2.0)
+#gcc $CFLAGS -Wall -Wextra -pedantic -Werror -Wformat=2 -std=c11 -c rserver.c $(pkg-config --cflags --libs glib-2.0)
 
-gcc rserver.o rutil.o grib.o polar.o engine.o -o rserver -std=c11 -leccodes -lshp -lm `pkg-config --cflags --libs glib-2.0`
+gcc rserver.o rutil.o grib.o polar.o engine.o -o rserver -std=c11 -leccodes -lm `pkg-config --cflags --libs glib-2.0`
 rm -f *.o
 mv rserver ../.
 

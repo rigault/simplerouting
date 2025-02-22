@@ -1,23 +1,18 @@
 long/*! compilation: gcc -c grib.c `pkg-config --cflags glib-2.0` */
 #include <glib.h>
-#include <float.h>   
-#include <limits.h>
-#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
-#include <sys/time.h>
-#include <sys/stat.h>
-#include <dirent.h>
-#include <unistd.h>
 #include <time.h>
 #include <math.h>
+#include <sys/stat.h>
 #include <locale.h>
 #include "eccodes.h"
 #include "rtypes.h"
 #include "rutil.h"
 #include "inline.h"
+#include <grib_api.h>  // for ProductKind
 
 #define  EPSILON 0.001        // for G_APPROX_VALUE
 
@@ -889,4 +884,69 @@ char *gribToStr (const Zone *zone, char *str, size_t maxLen) {
    g_strlcat (str, line, maxLen);   
    return str;
 }
+
+/*! write grib meta information in GString */
+GString *gribToJson (const char *fileName) {
+   char gribName [MAX_SIZE_FILE_NAME];
+   struct stat st;
+   char str0 [MAX_SIZE_NAME] = "";
+   char str1 [MAX_SIZE_NAME] = "";
+   char centreName [MAX_SIZE_NAME] = "";
+   Zone gZone;
+   GString *jString = g_string_new ("");
+   buildRootName (fileName, gribName, sizeof (gribName));
+
+   if (stat (gribName, &st) != 0) {
+      fprintf (stderr, "In gribToJson Error stat: %s\n", gribName);
+      g_string_append_printf (jString, "{}\n");
+      return jString;
+   }
+   if ((! readGribLists (gribName, &gZone)) || (! readGribParameters (gribName, &gZone))) {
+      fprintf (stderr, "In gribToJson Error reading: %s\n", gribName);
+      g_string_append_printf (jString, "{}\n");
+      return jString;
+   }
+   if (gZone.nbLat == 0) {
+      fprintf (stderr, "In gribToJson Error no value available in: %s\n", gribName);
+      g_string_append_printf (jString, "{}\n");
+      return jString;
+   }
+   for (size_t i = 0; i < N_METEO_ADMIN; i++) {// search name of center
+      if (meteoTab [i].id == zone.centreId) {
+         g_strlcpy (centreName, meteoTab [i].name, sizeof (centreName));
+         break;
+      }
+   }
+   g_string_append_printf (jString, "{\"centreID\": %ld, \"centreName\": \"%s\", \"edNumber\": %ld, \n", 
+                           gZone.centreId, centreName, gZone.editionNumber);
+   
+   newDate (gZone.dataDate [0], gZone.dataTime [0]/100, str0, sizeof (str0));
+   newDate (gZone.dataDate [0], gZone.dataTime [0]/100 + gZone.timeStamp [gZone.nTimeStamp -1], str1, sizeof (str1));
+   g_string_append_printf (jString, "\"runStart\": \"%s\", \"runEnd\": \"%s\", \n", str0, str1);
+
+   g_string_append_printf (jString, "\"topLat\": %.6f, \"leftLon\": %.6f, \"bottomLat\": %.6f, \"rightLon\": %.6f, \n",  
+                           gZone.latMax, gZone.lonLeft, gZone.latMin, gZone.lonRight);
+
+   g_string_append_printf (jString, "\"latStep\": %.4f, \"lonStep\": %.4f, \n", 
+                           gZone.latStep, gZone.lonStep);
+
+   g_string_append_printf (jString, "\"nLat\": %ld, \"nLon\": %ld, \"nValues\": %ld, \"nTimeStamp\": %ld, \"timeStamps\": \n[", 
+                           gZone.nbLat, gZone.nbLon, gZone.numberOfValues, gZone.nTimeStamp);
+
+   for (size_t i = 0; i < gZone.nTimeStamp; i += 1) {
+      g_string_append_printf (jString, "%ld%s", gZone.timeStamp [i], (i < gZone.nTimeStamp -1) ? ", " : ""); // no comma for last
+   }
+   g_string_append_printf (jString, "],\n");
+
+   g_string_append_printf (jString, "\"nShortName\": %zu, \"shortNames\": \n[", gZone.nShortName);
+   for (size_t i = 0; i < gZone.nShortName; i += 1) {
+      g_string_append_printf (jString, "\"%s\"%s", gZone.shortName [i], (i < gZone.nShortName -1) ? ", " : ""); // no comma for last
+   }
+   g_string_append_printf (jString, "],\n");
+   g_string_append_printf (jString, "\"fileName\": \"%s\", \"fileSize\": %ld\n", gribName, st.st_size);
+   g_string_append_printf (jString, "}\n");
+   
+   return jString;
+}
+
 
