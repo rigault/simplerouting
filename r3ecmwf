@@ -1,0 +1,139 @@
+#!/bin/bash
+
+# Paramètre : délai en heures (5 heures pour ECMWF)
+DELAY=5
+
+# Valeurs par défaut des coordonnées
+TOP_LAT=53
+LEFT_LON=-26
+BOTTOM_LAT=36
+RIGHT_LON=16
+
+# Nom de base des fichiers
+ECMWF_ROOT_GRIB_URL="https://data.ecmwf.int/forecasts"
+ROOT="R3_ECMWF_Inter"
+
+# Liste des shortnames
+SHORTNAMES="10u/10v/gust/msl/prmsl/prate"
+
+# Si les coordonnées sont passées en arguments, les utiliser
+if [ $# -eq 4 ]; then
+    TOP_LAT=$1
+    LEFT_LON=$2
+    BOTTOM_LAT=$3
+    RIGHT_LON=$4
+    echo "🌍 Zone définie par l'utilisateur : TOP_LAT=$TOP_LAT, LEFT_LON=$LEFT_LON, BOTTOM_LAT=$BOTTOM_LAT, RIGHT_LON=$RIGHT_LON"
+else
+    echo "🌍 Utilisation des valeurs par défaut : TOP_LAT=$TOP_LAT, LEFT_LON=$LEFT_LON, BOTTOM_LAT=$BOTTOM_LAT, RIGHT_LON=$RIGHT_LON"
+fi
+
+# Dossier de destination
+mkdir -p grib
+
+# Fonction pour compacter et découper géographiquement
+compact() {
+    local inFile="$1"
+    local outFile="$2"
+
+    # Compactage avec grib_copy pour les shortnames
+    grib_copy -w shortName=$SHORTNAMES "$inFile" "compacted.tmp"
+    if [ $? -ne 0 ]; then
+        echo "⚠️ Erreur lors du compactage avec grib_copy pour $inFile"
+        return 1
+    fi
+
+    # Découpe géographique avec wgrib2
+    wgrib2 "compacted.tmp" -small_grib "$LEFT_LON:$RIGHT_LON" "$BOTTOM_LAT:$TOP_LAT" "$outFile" >/dev/null
+    if [ $? -ne 0 ]; then
+        echo "⚠️ Erreur lors du découpage géographique avec wgrib2 pour $inFile"
+        return 1
+    fi
+
+    # Nettoyage du fichier temporaire
+    rm -f "compacted.tmp"
+    return 0
+}
+
+# Récupération de l'heure UTC actuelle et ajustement avec le délai
+now=$(date -u +"%Y%m%d %H")
+YYYYMMDD=$(echo "$now" | cut -d' ' -f1)
+hour=$(echo "$now" | cut -d' ' -f2)
+
+# Convertir `hour` en base 10 pour éviter l'erreur octale
+hour=$((10#$hour - DELAY))
+if [ "$hour" -lt 0 ]; then
+    YYYYMMDD=$(date -u -d "$YYYYMMDD -1 day" +"%Y%m%d")
+    hour=$((hour + 24))
+fi
+
+# Trouver le dernier run GFS valide (00, 06, 12, 18)
+hour=$((hour / 6 * 6))
+
+# Formater HH sur 2 chiffres
+HH=$(printf "%02d" "$hour")
+
+echo "📅 Run ECMWF sélectionné : $YYYYMMDD/$HH (décalage de $DELAY heures)"
+
+# URL de base avec variables dynamiques
+base_url="${ECMWF_ROOT_GRIB_URL}/${YYYYMMDD}/${HH}z/ifs/0p25/oper/"
+
+# Flag pour vérifier si la première boucle a été parcourue entièrement
+first_loop_completed=true
+
+# Première boucle : step de 0 à 144 (pas de 3)
+for step in $(seq 0 3 144); do
+    # Calcul du nom de fichier et de l'URL
+    fileName=$(printf "%4d%02d%02d%02d0000-%dh-oper-fc.grib2" $(echo $YYYYMMDD | cut -c1-4) $(echo $YYYYMMDD | cut -c5-6) $(echo $YYYYMMDD | cut -c7-8) $HH $step)
+    file_url="${base_url}${fileName}"
+    output_file="grib/${ROOT}${fileName}"
+
+    echo "📥 Téléchargement de $output_file..."
+    curl -s -o "$output_file" "$file_url"
+    
+    if [ $? -ne 0 ] || [ ! -s "$output_file" ]; then
+        echo "⚠️ Échec du téléchargement de $output_file, arrêt des téléchargements."
+        first_loop_completed=false
+        break
+    fi
+
+    # Compactage et découpe du fichier téléchargé
+    compact "$output_file" "grib/${ROOT}_compacted_${fileName}"
+    if [ $? -ne 0 ]; then
+        echo "⚠️ Erreur lors du compactage et découpage de $output_file, arrêt du script."
+        first_loop_completed=false
+        break
+    fi
+done
+
+# Si la première boucle n'a pas été complétée, on ne fait pas la deuxième
+if [ "$first_loop_completed" = true ]; then
+   # Deuxième boucle : step de 150 à 240 (pas de 6)
+   for step in $(seq 150 6 240); do
+      # Calcul du nom de fichier et de l'URL
+      fileName=$(printf "%4d%02d%02d%02d0000-%dh-oper-fc.grib2" $(echo $YYYYMMDD | cut -c1-4) $(echo $YYYYMMDD | cut -c5-6) $(echo $YYYYMMDD | cut -c7-8) $HH $step)
+      file_url="${base_url}${fileName}"
+      output_file="grib/${ROOT}${fileName}"
+
+      echo "📥 Téléchargement de $output_file..."
+      curl -s -o "$output_file" "$file_url"
+    
+      if [ $? -ne 0 ] || [ ! -s "$output_file" ]; then
+         echo "⚠️ Échec du téléchargement de $output_file, arrêt des téléchargements."
+         break
+      fi
+
+      # Compactage et découpe du fichier téléchargé
+      compact "$output_file" "grib/${ROOT}_compacted_${fileName}"
+      if [ $? -ne 0 ]; then
+         echo "⚠️ Erreur lors du compactage et découpage de $output_file."
+         break
+      fi
+   done
+fi
+
+# Concaténation des fichiers en un seul
+echo "🔄 Concaténation des fichiers en ${ROOT}_BIG.grb..."
+cat grib/${ROOT}_compacted_*.grb > grib/R3_ECMWF_BIG.grb
+
+echo "✅ Téléchargements, compactage et concaténation terminés."
+

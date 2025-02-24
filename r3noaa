@@ -1,0 +1,97 @@
+#!/bin/bash
+
+# Paramètre : délai en heures (doit être un multiple de 6 pour suivre les runs GFS)
+DELAY=4
+
+# Valeurs par défaut des coordonnées
+TOP_LAT=53
+LEFT_LON=-26
+BOTTOM_LAT=36
+RIGHT_LON=16
+
+# Nom de base des fichiers
+ROOT="R3_NOOA_Inter"
+
+rm -f grib/$ROOT*
+
+# Si l'utilisateur passe 4 arguments, les utiliser à la place des valeurs par défaut
+if [ $# -eq 4 ]; then
+    TOP_LAT=$1
+    LEFT_LON=$2
+    BOTTOM_LAT=$3
+    RIGHT_LON=$4
+    echo "🌍 Zone définie par l'utilisateur : TOP_LAT=$TOP_LAT, LEFT_LON=$LEFT_LON, BOTTOM_LAT=$BOTTOM_LAT, RIGHT_LON=$RIGHT_LON"
+else
+    echo "🌍 Utilisation des valeurs par défaut : TOP_LAT=$TOP_LAT, LEFT_LON=$LEFT_LON, BOTTOM_LAT=$BOTTOM_LAT, RIGHT_LON=$RIGHT_LON"
+fi
+
+# Dossier de destination
+mkdir -p grib
+
+# Récupération de l'heure UTC actuelle et ajustement avec le délai
+now=$(date -u +"%Y%m%d %H")
+YYYYMMDD=$(echo "$now" | cut -d' ' -f1)
+hour=$(echo "$now" | cut -d' ' -f2)
+
+# Convertir `hour` en base 10 pour éviter l'erreur octale
+hour=$((10#$hour - DELAY))
+if [ "$hour" -lt 0 ]; then
+    YYYYMMDD=$(date -u -d "$YYYYMMDD -1 day" +"%Y%m%d")
+    hour=$((hour + 24))
+fi
+
+# Trouver le dernier run GFS valide (00, 06, 12, 18)
+hour=$((hour / 6 * 6))
+
+# Formater HH sur 2 chiffres correctement
+HH=$(printf "%02d" "$hour")
+
+echo "📅 Run GFS sélectionné : $YYYYMMDD/$HH (décalage de $DELAY heures)"
+
+# URL de base avec variables dynamiques
+base_url="https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl?dir=/gfs.${YYYYMMDD}/${HH}/atmos&file=gfs.t${HH}z.pgrb2.0p25.f"
+
+# Paramètres de la région
+region_params="&subregion=&toplat=$TOP_LAT&leftlon=$LEFT_LON&rightlon=$RIGHT_LON&bottomlat=$BOTTOM_LAT"
+
+# Flag pour vérifier si la première boucle a été parcourue entièrement
+first_loop_completed=true
+
+# Première boucle : step de 000 à 120 (pas de 1)
+for step in $(seq -w 0 120); do
+    file_url="${base_url}${step}&var_GUST=on&var_PRMSL=on&var_PRATE=on&var_UGRD=on&var_VGRD=on&lev_10_m_above_ground=on&lev_surface=on&lev_mean_sea_level=on${region_params}"
+    output_file="grib/${ROOT}${step}.grb"
+    
+    echo "📥 Téléchargement de $output_file..."
+    curl -s -o "$output_file" "$file_url"
+    
+    if [ $? -ne 0 ] || [ ! -s "$output_file" ]; then
+        echo "⚠️ Échec du téléchargement de $output_file, arrêt des téléchargements."
+        first_loop_completed=false
+        break
+    fi
+done
+
+# Si la première boucle n'a pas été complétée, on ne fait pas la deuxième
+if [ "$first_loop_completed" = true ]; then
+   # Deuxième boucle : step de 123 à 384 (pas de 3)
+   for step in $(seq -w 123 3 384); do
+      file_url="${base_url}${step}&var_GUST=on&var_PRMSL=on&var_PRATE=on&var_UGRD=on&var_VGRD=on&lev_10_m_above_ground=on&lev_surface=on&lev_mean_sea_level=on${region_params}"
+      output_file="grib/${ROOT}${step}.grb"
+    
+      echo "📥 Téléchargement de $output_file..."
+      curl -s -o "$output_file" "$file_url"
+    
+      if [ $? -ne 0 ] || [ ! -s "$output_file" ]; then
+           echo "⚠️ Échec du téléchargement de $output_file, arrêt des téléchargements."
+         break
+      fi
+   done
+fi
+
+# Concaténation des fichiers en un seul
+echo "🔄 Concaténation des fichiers en ${ROOT}_BIG.grb..."
+cat grib/${ROOT}*.grb > grib/R3_NOAA_BIG.grb
+
+echo "✅ Téléchargements et concaténation terminés."
+
