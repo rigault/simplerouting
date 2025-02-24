@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include "eccodes.h"
 #include <glib.h>
 #include <locale.h>
 #include "rtypes.h"
@@ -18,20 +19,23 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#define PORT                   8080        // default HTTP Request may be changed in routing.par
+#define SERVER_PORT            8080        // default HTTP Request may be changed in routing.par
 #define MAX_SIZE_REQUEST       2048        // Max size from request client
 #define MAX_SIZE_RESOURCE_NAME 256         // Max size polar or grib name
 
-enum {REQ_TEST, REQ_ROUTING, REQ_BEST_DEP, REQ_RACE, REQ_POLAR, REQ_GRIB}; // type of request
+const char *filter[] = { ".csv", ".pol", ".grb", ".grb2", NULL }; // global fiter for REQ_DIR request
+
+enum {REQ_TEST, REQ_ROUTING, REQ_BEST_DEP, REQ_RACE, REQ_POLAR, REQ_GRIB, REQ_DIR}; // type of request
 
 char parameterFileName [MAX_SIZE_FILE_NAME];
 
+/*! Client Request description */
 typedef struct {
    int type;                                 // type of request
    time_t epochStart;                        // epoch time to start routing
-   time_t epochStop;                         // epoch time to stop routing
-   int timeStep;                             // isoc time step
-   int timeInterval;                         // for REQ_BEST_DEP time interval in seconds etween each try
+   time_t timeWindow;                        // time window in seconds for bestTimeDeparture
+   int timeStep;                             // isoc time step in seconds
+   int timeInterval;                         // for REQ_BEST_DEP time interval in seconds between each try
    bool isoc;                                // true if isochrones requested
    int nBoats;                               // number of boats
    struct {
@@ -46,7 +50,139 @@ typedef struct {
    } wp [MAX_N_WAY_POINT];                   // way points
    char polarName [MAX_SIZE_RESOURCE_NAME];  // polar file name
    char gribName  [MAX_SIZE_RESOURCE_NAME];  // grib file name
+   char dirName   [MAX_SIZE_RESOURCE_NAME];  // remote directory name
+   bool sortByName;                          // true id directory should be sorted by name, false if sorted by modif date
 } ClientRequest;
+
+/*! Structure to store file information. */
+typedef struct {
+   char *name;
+   off_t size;
+   time_t mtime;
+} FileInfo;
+
+/*! Comparator to sort by name (ascending order) */
+static gint compareByName (gconstpointer a, gconstpointer b) {
+   const FileInfo *fa = a;
+   const FileInfo *fb = b;
+   return g_strcmp0(fa->name, fb->name);
+}
+
+/*! Comparator to sort by modification date (most recent first) */
+static gint compareByMtime (gconstpointer a, gconstpointer b) {
+   const FileInfo *fa = a;
+   const FileInfo *fb = b;
+   if (fa->mtime < fb->mtime)
+      return 1;
+   else if (fa->mtime > fb->mtime)
+      return -1;
+   else
+      return 0;
+}
+
+/*! Checks if the filename matches one of the suffixes in the filter */
+static gboolean matchFilter (const char *filename, const char **filter) {
+   if (filter == NULL)
+      return TRUE;
+   for (int i = 0; filter[i] != NULL; i++) {
+      if (g_str_has_suffix (filename, filter[i]))
+         return TRUE;
+   }
+   return FALSE;
+}
+
+/*!
+ * Function: listDirToJson
+ * -----------------------
+ * Lists the regular files in the directory constructed from root/dir,
+ * applies a suffix filter if provided, sorts the list either by name or by
+ * modification date (most recent first), and generates a JSON string containing
+ * an array of arrays in the format [filename, size, modification date].
+ *
+ * In case of an error (e.g., unable to open the directory), the error is printed
+ * to the console and a corresponding JSON error response is returned.
+ */
+GString *listDirToJson (char *root, char *dir, bool sortByName, const char **filter) {
+   GString *json = g_string_new("");
+   GError *error = NULL;
+
+   // Build the full directory path.
+   gchar *full_path = g_build_filename(root, dir, NULL);
+   GDir *gdir = g_dir_open(full_path, 0, &error);
+   if (!gdir) {
+      fprintf (stderr, "In listDirToJson Error opening directory '%s': %s", full_path, error->message);
+      g_string_assign (json, "{\"error\": \"Error opening directory\"}");
+      g_error_free (error);
+      g_free (full_path);
+      return json;
+   }
+
+   // List to store each file's information.
+   GList *files_list = NULL;
+   const gchar *filename;
+   while ((filename = g_dir_read_name(gdir)) != NULL) {
+      // Apply the suffix filter.
+      if (!matchFilter (filename, filter))
+         continue;
+
+      // Build the full file path.
+      gchar *file_path = g_build_filename (full_path, filename, NULL);
+      struct stat st;
+      if (stat (file_path, &st) != 0) {
+         fprintf (stderr, "In listDirToJson Error retrieving information for '%s'", file_path);
+         g_free (file_path);
+         continue;
+      }
+      // Process only regular files.
+      if (!S_ISREG (st.st_mode)) {
+         g_free (file_path);
+         continue;
+      }
+      // Allocate and fill the FileInfo structure.
+      FileInfo *info = g_new (FileInfo, 1);
+      info->name = g_strdup (filename);
+      info->size = st.st_size;
+      info->mtime = st.st_mtime;
+      files_list = g_list_append (files_list, info);
+      g_free (file_path);
+   }
+   g_dir_close (gdir);
+   g_free (full_path);
+
+   // Sort the list based on the requested criteria.
+   if (sortByName)
+      files_list = g_list_sort (files_list, compareByName);
+   else
+      files_list = g_list_sort (files_list, compareByMtime);
+
+   // Construct the JSON string.
+   g_string_assign (json, "[\n");
+   for (GList *l = files_list; l != NULL; l = l->next) {
+      FileInfo *info = (FileInfo *)l->data;
+      // Convert the modification date to a string (format "YYYY-MM-DD HH:MM:SS").
+      struct tm *tm_info = localtime (&(info->mtime));
+      char time_str [20];
+      strftime (time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", tm_info);
+      // Escape the filename for JSON.
+      char *escaped_name = g_strescape (info->name, NULL);
+      // Add a JSON array for this file.
+      g_string_append_printf (json, "   [\"%s\", %ld, \"%s\"]", escaped_name, info->size, time_str);
+      g_free (escaped_name);
+      if (l->next != NULL)
+         g_string_append (json, ",\n");
+   }
+   g_string_append(json, "\n]\n");
+
+   // Free allocated memory.
+   for (GList *l = files_list; l != NULL; l = l->next) {
+      FileInfo *info = (FileInfo *)l->data;
+      g_free (info->name);
+      g_free (info);
+   }
+   g_list_free (files_list);
+
+   return json;
+}
 
 /*! Make initialization  
    return false if readParam or readGribAll fail */
@@ -137,7 +273,7 @@ static bool decodeHttpReq (const char *req, ClientRequest *clientReq) {
       }
       
       else if (g_str_has_prefix(parts[i], "boat=")) {
-         char *boats_part = parts[i] + strlen ("boat="); // Partie après "waypoints="
+         char *boats_part = parts[i] + strlen ("boat="); // After boats=="
          if (!boats_part) {
             g_strfreev(parts);
             return false;  // parsing error
@@ -149,7 +285,7 @@ static bool decodeHttpReq (const char *req, ClientRequest *clientReq) {
             char name [MAX_SIZE_NAME];
             printf ("att 1 _ i: %d\n", i);
             double lat, lon;
-            if (sscanf(boats_coords[i], "%[^,], %lf, %lf", name, &lat, &lon) == 3) {
+            if (sscanf(boats_coords[i], "%63[^,], %lf, %lf", name, &lat, &lon) == 3) {
                printf ("att 2 _ i: %d\n", i);
                g_strlcpy (clientReq->boats [clientReq->nBoats].name, name, MAX_SIZE_NAME);
                clientReq->boats [clientReq->nBoats].lat = lat;
@@ -197,9 +333,9 @@ static bool decodeHttpReq (const char *req, ClientRequest *clientReq) {
          }
       }
       // timeStop extraction
-      else if (g_str_has_prefix(parts[i], "timeStop=")) {
-         char *timeStop_part = parts[i] + strlen ("timeStop=");
-         if (timeStop_part && sscanf (timeStop_part, "%ld", &clientReq->epochStop) != 1) {
+      else if (g_str_has_prefix(parts[i], "timeWindow=")) {
+         char *timeWindow_part = parts[i] + strlen ("timeWindow=");
+         if (timeWindow_part && sscanf (timeWindow_part, "%ld", &clientReq->timeWindow) != 1) {
             g_strfreev(parts);
             return false;  // timeStop parsing error
          }
@@ -236,6 +372,21 @@ static bool decodeHttpReq (const char *req, ClientRequest *clientReq) {
          }
          printf ("grib found: %s\n", clientReq->gribName);
       }
+      // dir Name
+      else if (g_str_has_prefix (parts[i], "dir=")) {
+         char *dir_part = parts[i] + strlen ("dir=");
+         if (dir_part && sscanf (dir_part, "%255s;", clientReq->dirName) != 1) {
+            g_strfreev(parts);
+            return false;  // parsing error
+         }
+         printf ("dir found: %s\n", clientReq->dirName);
+      }
+      // sortbyname true or false
+      else if (g_str_has_prefix (parts[i], "sortByName=")) {
+         char *sort_part = parts[i] + strlen("sortByName=");
+         if (g_strstr_len (sort_part, 4, "true") != NULL)
+            clientReq->sortByName = true;
+      }
    }
    g_strfreev(parts);
    
@@ -260,6 +411,7 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
    competitors.n = clientReq->nBoats;
    for (int i = 0; i < clientReq->nBoats; i += 1) {
       g_strlcpy (competitors.t [i].name, clientReq -> boats [i].name, MAX_SIZE_NAME);
+      printf ("competitor name: %s\n", competitors.t [i].name);
       competitors.t [i].lat = clientReq -> boats [i].lat;
       competitors.t [i].lon = clientReq -> boats [i].lon;
    }
@@ -290,7 +442,15 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
    }
 
    par.tStep = clientReq->timeStep / 3600.0;
-   
+
+   // specific for bestTimeDeparture
+   chooseDeparture.count = 0;
+   chooseDeparture.tInterval = clientReq->timeInterval / 3600.0;
+   chooseDeparture.tBegin = par.startTimeInHours;
+   if (clientReq->timeWindow > 0)
+      chooseDeparture.tEnd = chooseDeparture.tBegin + (clientReq->timeWindow / 3600.0);
+   else
+      chooseDeparture.tEnd = INT_MAX; // all grib window Grib time will be used.
    return true;
 }
 
@@ -348,13 +508,12 @@ static void serveStaticFile (int client_socket, const char *requested_path) {
 static GString *launchAction (ClientRequest *clientReq) {
    GString *res = g_string_new ("");
    char checkMessage [MAX_SIZE_LINE];
-   //GString *polar = g_string_new ("");
    printf ("client.req = %d\n", clientReq->type);
    switch (clientReq->type) {
    case REQ_ROUTING:
       if (checkParamAndUpdate (clientReq, checkMessage, sizeof (checkMessage))) {
          routingLaunch ();
-         GString *jsonRoute = routeToJson (0, clientReq->isoc);
+         GString *jsonRoute = allCompetitorsToJson (0, clientReq->isoc);
          g_string_append_printf (res, "%s", jsonRoute->str);
          g_string_free (jsonRoute, TRUE);
       }
@@ -363,26 +522,49 @@ static GString *launchAction (ClientRequest *clientReq) {
       }
       break;
    case REQ_TEST:
-       g_string_append_printf (res,"{\"_test\":\"OK\"}\n"); 
-       break;
+      g_string_append_printf (res, "{\"Prog-version\": \"%s, %s, %s\",\n", PROG_NAME, PROG_VERSION, PROG_AUTHOR);
+      g_string_append_printf (res, "\" Compilation-date\": \"%s\",\n", __DATE__);
+      g_string_append_printf (res, "\" GLIB-version\": %d.%d.%d, \n \"ECCODES-version\": \"%s\"\n}\n",
+            GLIB_MAJOR_VERSION, GLIB_MINOR_VERSION, GLIB_MICRO_VERSION, ECCODES_VERSION_STR);
+      break;
    case REQ_BEST_DEP:
-       bestTimeDeparture (); // ATT not terminated
-       break;
+      if (checkParamAndUpdate (clientReq, checkMessage, sizeof (checkMessage))) {
+         printf ("Launch bestTimeDesparture\n");
+         printf ("begin: %d, end: %d\n", chooseDeparture.tBegin, chooseDeparture.tEnd);
+         bestTimeDeparture (); // ATT not terminated
+         GString *bestTimeReport = bestTimeReportToJson (&chooseDeparture, clientReq->isoc);
+         g_string_append_printf (res, "%s", bestTimeReport->str);
+         g_string_free (bestTimeReport, TRUE);
+      }
+      else {
+         g_string_append_printf (res,"{\"_checkId\":\"%s\"}\n", checkMessage);
+      }
+      break;
    case REQ_RACE:
-        competitors.runIndex = -1; // useless ?
-        allCompetitors (); // ATT not terminated
-       break;
+      if (checkParamAndUpdate (clientReq, checkMessage, sizeof (checkMessage))) {
+         printf ("Launch AllCompetitors\n");
+         allCompetitors (); // ATT not terminated
+         GString *jsonRoutes = allCompetitorsToJson (competitors.n, clientReq->isoc);
+         g_string_append_printf (res, "%s", jsonRoutes->str);
+         g_string_free (jsonRoutes, TRUE);
+      }
+      else {
+         g_string_append_printf (res,"{\"_checkId\":\"%s\"}\n", checkMessage);
+      }
+      break;
    case REQ_POLAR:
       res = polToJson (clientReq->polarName);
       break;
    case REQ_GRIB:
       res = gribToJson (clientReq->gribName);
       break;
+   case REQ_DIR:
+      res = listDirToJson (par.workingDir, clientReq->dirName, clientReq->sortByName, filter);
+      break;
       // g_string_append_printf (res, "%s", polar->str);
       break;
    default:;
    }
-   //g_string_free (polar, TRUE);
    return res;
 }
 
@@ -498,6 +680,7 @@ int main (int argc, char *argv[]) {
 
    if (setlocale (LC_ALL, "C") == NULL) {                // very important for printf decimal numbers
       fprintf (stderr, "Server Error: setlocale failed");
+      return EXIT_FAILURE;
       exit (EXIT_FAILURE);
    }
 
@@ -507,30 +690,30 @@ int main (int argc, char *argv[]) {
       g_strlcpy (parameterFileName, PARAMETERS_FILE, sizeof (parameterFileName));
 
    if (! initRouting (parameterFileName))
-      exit (EXIT_FAILURE);
+      return EXIT_FAILURE;
 
    // Socket 
    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
       perror ("In main, Error creating socket");
-      exit (EXIT_FAILURE);
+      return EXIT_FAILURE;
    }
 
    // Define server parameters address port
    address.sin_family = AF_INET;
    address.sin_addr.s_addr = INADDR_ANY;
-   if (par.serverPort == 0) par.serverPort = PORT;
+   if (par.serverPort == 0) par.serverPort = SERVER_PORT;
    address.sin_port = htons (par.serverPort);
 
    // Bind socket with port
    if (bind (server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
       perror ("In main, Error socket bind"); 
-      exit (EXIT_FAILURE);
+      return EXIT_FAILURE;
    }
 
    // Listen connexions
    if (listen (server_fd, 3) < 0) {
       perror ("In main: error listening");
-      exit (EXIT_FAILURE);
+      return EXIT_FAILURE;
    }
    printf ("Server listen on port: %d\n", par.serverPort);
 

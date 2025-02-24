@@ -3877,7 +3877,7 @@ static void cbSimulationReport (GtkDrawingArea *area, cairo_t *cr,
    cairo_rectangle (cr, xLeft + chooseDeparture.bestCount * xk, yBottom - h, rectangleWidth, h);
    cairo_fill (cr);
 
-   // oone orange vertical rectangle for the poulidor value
+   // one orange vertical rectangle for the poulidor value
    if (poulidorCount != -1) {
       CAIRO_SET_SOURCE_RGB_ORANGE (cr);
       h = (int) chooseDeparture.t [poulidorCount] * yk;

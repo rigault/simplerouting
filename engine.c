@@ -1051,7 +1051,7 @@ void *routingLaunch () {
 
    gettimeofday (&t1, NULL);
    ut1 = t1.tv_sec * MILLION + t1.tv_usec;
-   route.calculationTime = (double) ((ut1-ut0)/MILLION);
+   route.calculationTime = (double) ((ut1-ut0)/ 1000000.0); // in seconds
    route.destinationReached = (ret > 0);
    if (storeRoute (&route, &par.pOr, &lastClosest, lastStepDuration))
       g_atomic_int_set (&route.ret, ret); // route.ret is positionned just before ending. route.ret is shared between threads !
@@ -1364,36 +1364,146 @@ GString *isochronesToJson () {
 }
 
 /*! generate json description of track boats */
-GString *routeToJson (int index, bool isoc) {
-   GString *jsonString = g_string_new ("{\n");
+static GString *routeToJson (SailRoute *route, int index, bool isoc) {
+   //GString *jString = g_string_new ("{\n");
+   GString *jString = g_string_new ("");
 
    // current route
-   if (route.n > 0) {
-      g_string_append_printf (jsonString, "\"%s\": {\n\"heading\": %.0lf, \"rank\": %d, \"duration\":%.2lf, \"totDist\":%.2lf, \n",
-         competitors.t[0].name, route.t [index].lCap, 0, route.duration, route.totDist);
+   if (route->n > 0) {
+      int iComp = (route->competitorIndex < 0) ? 0 : route->competitorIndex;
+      g_string_append_printf (jString, "\"%s\": {\n\"heading\": %.0lf, \"rank\": %d, \"duration\":%d, \"totDist\":%.2lf, \n",
+         competitors.t[iComp].name, route->t [index].lCap, 0, (int) (route->duration * 3600), route->totDist);
 
-      g_string_append_printf (jsonString, "\"calculationTime\": %.4lf, ", route.calculationTime);
+      printf ("in routeToJson index: %d, name: %s\n", route->competitorIndex, competitors.t[route->competitorIndex].name);
 
-      g_string_append_printf (jsonString, "\"polar\": \"%s\", \"grib\": \"%s\", \"gribCurrent\": \"%s\", \"track\": [\n", 
-         route.polarFileName, par.gribFileName, par.currentGribFileName);
+      g_string_append_printf (jString, "\"calculationTime\": %.4lf, ", route->calculationTime);
 
-      for (int i = 0; i < route.n; i++) {
-         g_string_append_printf (jsonString, "   [%.6f, %.6f],\n", route.t[i].lat, route.t[i].lon);
+      g_string_append_printf (jString, "\"polar\": \"%s\", \"grib\": \"%s\", \"gribCurrent\": \"%s\", \"track\": [\n", 
+         route->polarFileName, par.gribFileName, par.currentGribFileName);
+
+      for (int i = 0; i < route->n; i++) {
+         g_string_append_printf (jString, "   [%.6f, %.6f],\n", route->t[i].lat, route->t[i].lon);
       }
-      if (route.destinationReached)
-         g_string_append_printf (jsonString, "   [%.6f, %.6f]\n", par.pDest.lat, par.pDest.lon);
+      if (route->destinationReached)
+         g_string_append_printf (jString, "   [%.6f, %.6f]\n", par.pDest.lat, par.pDest.lon);
       else
-         g_string_append_printf (jsonString, "   [%.6f, %.6f]\n", route.t[route.n - 1].lat, route.t[route.n - 1].lon); // no comma
+         g_string_append_printf (jString, "   [%.6f, %.6f]\n", route->t[route->n - 1].lat, route->t[route->n - 1].lon); // no comma
 
-      g_string_append_printf (jsonString, "]\n}\n");
+      g_string_append_printf (jString, "]\n}\n");
    }
    if (isoc) {
       GString *isocString = isochronesToJson ();
-      g_string_append_printf (jsonString, ",\n\"_isoc\": \n%s", isocString->str);
-      g_string_free (isocString, TRUE);
+      if (isocString != NULL) {
+         g_string_append_printf (jString, ",\n\"_isoc\": \n%s", isocString->str);
+         g_string_free (isocString, TRUE);
+      }
    }
-   g_string_append_printf (jsonString, "}\n");
-   return jsonString;
+   //g_string_append_printf (jString, "}\n");
+   return jString;
+}
+
+/*! translate competitor table to Json */
+static GString *competitorsReportJson (CompetitorsList *lComp) {
+   char strDep [MAX_SIZE_DATE];
+   GString *jString = g_string_new ("\"_report\": {\n");
+   if (lComp->n == 0) {
+      g_string_append_printf (jString, "{}\n");
+      return jString;
+   }
+   Competitor mainCompetitor = lComp->t [0];
+   if (lComp->n > 1)
+      qsort (lComp->t, lComp->n, sizeof (Competitor), compareDuration);
+   newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours, strDep, sizeof (strDep)); 
+
+   g_string_append_printf (jString, "\"nComp\": %d, \"startTimeStr\": \"%s\", \"isocTimeStep\": %d, \"polar\": \"%s\", \"array\": \n[\n",
+         lComp->n, strDep, (int) (3600 * par.tStep), route.polarFileName);
+   
+   for (int i = 0; i < lComp->n; i++) {
+      double dist;
+      if (strcmp (mainCompetitor.name, lComp->t [i].name) == 0)
+         dist = 0.0;
+      else
+         dist = orthoDist (lComp->t [i].lat, lComp->t [i].lon, mainCompetitor.lat, mainCompetitor.lon);
+
+      g_string_append_printf (jString, "{\"name\": \"%s\", \"lat\": %.4lf, \"lon\": %.4lf, \"distToMain\": %.2lf,", 
+            lComp->t[i].name, lComp->t [i]. lat, lComp->t [i].lon, dist);
+
+      int toBestDelay = 3600 * (lComp->t [i].duration - lComp->t [0].duration);
+      int toMainDelay = 3600 * (lComp->t [i].duration - mainCompetitor.duration);
+
+      g_string_append_printf (jString, "\"ETA\": \"%s\", \"distDone\": %.2lf, \"toBestDelay\": %d, \"toMainDelay\": %d",
+            lComp->t[i].strETA, lComp->t[i].dist, toBestDelay, toMainDelay);
+
+      g_string_append_printf (jString, "%s", (i < lComp->n - 1) ? "},\n": "}\n");
+   }
+
+   g_string_append_printf (jString, "]\n}\n");
+   return jString;
+}
+
+/*! Translate routes to Json, including isochrones for most recent competitor only
+   and report if number of competitor >= 1 */ 
+GString *allCompetitorsToJson (int n, bool isoc) {
+   GString *res = g_string_new ("{\n");
+   GString *jRoute = routeToJson (&route, 0, isoc); // only most recent route with isochrones 
+   g_string_append_printf (res, "%s", jRoute->str);
+   g_string_free (jRoute, TRUE);
+   int maxHistory = MIN (n - 1, historyRoute.n);
+   if (n > 0) {
+       g_string_append_printf (res, ",\n");
+      for (int i = 0; i < maxHistory; i += 1) {
+         GString *jRoute = routeToJson (&historyRoute.r[i], 0, false); 
+         g_string_append_printf (res, "%s, ", jRoute->str);
+         g_string_free (jRoute, TRUE);
+      }
+      GString *report = competitorsReportJson (&competitors);
+      g_string_append_printf (res, "%s", report->str);
+      g_string_free (report, TRUE);
+   }
+   g_string_append_printf (res, "}\n");
+   return res;
+}
+
+/*! Produce meta info and table linked to bestTimeDeparture */ 
+GString *bestTimeReportToJson (ChooseDeparture *chooseDeparture, bool isoc) {
+   GString *res = g_string_new ("{\n");
+   if (chooseDeparture->count == 0) {
+      g_string_append_printf (res, "\"_warning\": \"No competitors\"}\n");
+      return res;
+   }
+   GString *jRoute = routeToJson (&route, 0, isoc); // only most recent route with isochrones 
+   g_string_append_printf (res, "%s,\n", jRoute->str);
+   g_string_free (jRoute, TRUE);
+
+   GString *jString = g_string_new ("\"_bestTimeReport\": {\n");
+   if (chooseDeparture->count == 0) {
+      g_string_append_printf (jString, "{}\n");
+      return jString;
+   }
+   int tBegin = chooseDeparture->tBegin;
+   int tEnd = chooseDeparture->tEnd;
+   int tStop = chooseDeparture->tStop;
+   int bestTime = chooseDeparture->bestTime;
+   int tInterval = 3600 * chooseDeparture->tInterval;
+
+   g_string_append_printf (jString, "\"count\": %d, \"bestCount\": %d, \"tBegin\": %d, \"tEnd\": %d, \"tStop\": %d,\"tInterval\": %d,\n",
+         chooseDeparture->count, chooseDeparture->bestCount, tBegin, tEnd, tStop, tInterval);
+
+   g_string_append_printf (jString, "\"minDuration\": %.2lf, \"maxDuration\": %.2lf, \"bestTime\": %d,\n",
+          chooseDeparture->minDuration,  chooseDeparture->maxDuration, bestTime);
+   
+   g_string_append_printf (jString, "\"array\": \n[");
+
+   for (int count = 0; count < chooseDeparture->count; count += 1) {
+      int val = (int ) 3600 * chooseDeparture->t [count];
+      g_string_append_printf (jString, "%d%s", val, ((count < chooseDeparture->count - 1) ? ", ": ""));
+   }
+
+   g_string_append_printf (jString, "]\n}\n");
+
+   g_string_append_printf (res, "%s}\n", jString->str);
+   g_string_free (jRoute, TRUE);
+   return res;
 }
 
 
