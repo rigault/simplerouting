@@ -1,4 +1,5 @@
 const boatName = "pistache";
+const REQ_TYPE = 3;
 let routeParam = {};
 routeParam.isoStep = 3600 // 1 h;
 routeParam.startTime = new Date ();
@@ -44,6 +45,74 @@ const BoatIcon = L.icon({
    iconAnchor: [12, 12],
    popupAnchor: [0, 0],
 });
+
+function printReport(report) {
+  // Déstructuration des propriétés du rapport
+  const { nComp, startTimeStr, isocTimeStep, polar, array } = report;
+
+  // Construction du contenu HTML pour les métadonnées
+  let htmlContent = `
+    <div style="text-align: left;">
+      <h2>Métadonnées</h2>
+      <p><strong>nComp :</strong> ${nComp}</p>
+      <p><strong>Start Time :</strong> ${startTimeStr}</p>
+      <p><strong>Isoc Time Step :</strong> ${isocTimeStep} sec</p>
+      <p><strong>Polar :</strong> ${polar}</p>
+    </div>
+  `;
+
+  // Si le tableau 'array' existe et contient des éléments, on crée un tableau HTML
+  if (Array.isArray(array) && array.length > 0) {
+    htmlContent += `
+      <h3>Données du tableau</h3>
+      <table style="width:100%; border-collapse: collapse;" border="1">
+        <thead>
+          <tr>
+            <th>Nom</th>
+            <th>Latitude</th>
+            <th>Longitude</th>
+            <th>Dist To Main</th>
+            <th>ETA</th>
+            <th>Dist Done</th>
+            <th>To Best Delay</th>
+            <th>To Main Delay</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+    // Pour chaque élément, on crée une ligne de tableau
+    array.forEach(item => {
+      htmlContent += `
+          <tr>
+            <td>${item.name}</td>
+            <td>${item.lat}</td>
+            <td>${item.lon}</td>
+            <td>${item.distToMain}</td>
+            <td>${item.ETA}</td>
+            <td>${item.distDone}</td>
+            <td>${item.toBestDelay}</td>
+            <td>${item.toMainDelay}</td>
+          </tr>
+      `;
+    });
+    htmlContent += `
+        </tbody>
+      </table>
+    `;
+  }
+
+  // Utilisation de Swal.fire pour afficher le popup avec le contenu HTML construit
+  Swal.fire({
+    title: 'Report',
+    html: htmlContent,
+    width: '600px',
+    showCloseButton: true,
+    focusConfirm: false,
+    confirmButtonText: 'OK',
+    confirmButtonColor: '#FFA500' // Code hexadécimal pour l'orange
+  });
+}
+
 
 function drawPolyline(coords, color) {
     if (!coords || coords.length < 2) return;
@@ -109,7 +178,7 @@ function request () {
 
    const boats = `${boatName}, ${myWayPoints[0][0]}, ${myWayPoints[0][1]}`; // name, lat, lon
    const epoch = Math.floor (routeParam.startTime.getTime () / 1000);
-   const requestBody = `boat=${boats}&waypoints=${waypoints}&timeStep=${routeParam.isoStep}&timeStart=${epoch}&polar=${routeParam.polar}&model=${routeParam.model}&forbid=${routeParam.forbid}&isoc=${routeParam.isoc}`;
+   const requestBody = `type=${REQ_TYPE}&boat=${boats}&waypoints=${waypoints}&timeStep=${routeParam.isoStep}&timeStart=${epoch}&polar=${routeParam.polar}&model=${routeParam.model}&forbid=${routeParam.forbid}&isoc=${routeParam.isoc}`;
 
    console.log ("request: " + requestBody);
    const spinnerOverlay = document.getElementById("spinnerOverlay");
@@ -126,13 +195,10 @@ function request () {
    })
    .then(response => response.json())  // Si la réponse est JSON
    .then(data => {
-      // console.log(JSON.stringify(data, null, 2));  // Affichage propre avec indentation
+      console.log(JSON.stringify(data, null, 2));  // Affichage propre avec indentation
       firstKey = Object.keys(data)[0]; // name of the key
-      if (firstKey == "_isoc") {
-         alert ("hello");
-         const isocArray = data["_isoc"];
-         console.log ("IsocArray = " + isocArray)
-      }
+      console.log("REPORT:" + JSON.stringify(data._report, null, 2));
+      printReport (data._report);
       if (firstKey.startsWith("_"))
          Swal.fire({
             title: "Warning",
@@ -147,7 +213,7 @@ function request () {
             console.log("Tableau _isoc :", isocArray);
             updateWindyMap(route, isocArray);
          } else {
-            console.warn("Clé _isoc non trouvée dans la réponse du serveur");
+            //console.warn("Clé _isoc non trouvée dans la réponse du serveur");
             updateWindyMap(route, []);
          }
          updateInfo ();

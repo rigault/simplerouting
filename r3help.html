@@ -5,21 +5,14 @@
 <title>RCube</title>
 <link rel="icon" type="image/ico" href="favicon.ico">
 <link rel="stylesheet" type="text/css" href="r3help.css">
-<script src="marine.js"></script>
 </head>
 <body>
 <header> 
    <div class="container">
       <div class="menu">
-         <img src="images/routing.png" alt="Routing symbol" width="200" height="200">
-      </diV>
+      </div>
    <div class="main">
          <span class=titlename>Rcube</span>
-   </div>
-      <div class="notes">
-         <img src="images/screenshot.png" alt="screenshot" width="350" height="200">
-      </div>
-   </div>
    <hr>
 </header>
 
@@ -31,6 +24,10 @@
    <a href="#chap2">2. Procédure d'installation </a>
    <a href="#chap3">3. Documentation</a>
    <a href="#chap4">4. Lancement de l'application</a>
+   <a href="#chap5">5. API</a>
+   <a href="#chap6">5. Fichier de configuration du serveur</a>
+   <a href="#chap7">7. Scripts</a>
+   <a href="#chap8">8. Code source</a>
 
 <p></p>
 
@@ -92,30 +89,53 @@
 
 <h1 id="chap1">1. Introduction</h1>
 <h1 id="chap2">2. Procédure d'installation coté serveur </h1>
+</p> De façon générale, l'installation du serveur suppose&nbsp;:</p>
 
-		<h3>Environnement Debian Ubuntu  </h3>
+<ul>
+<li>La disponibilité d'un serveur accessible d'Internet,</li>
+<li>l'ouverture par le firewall des ports 80 ou 8080,</li>
+<lI>l'installation de l'environnement (gcc, ecodes, glib) sur le serveur,</li>
+<lI>l'installation de curl pour les scripts permettant d'aller chercher les fichiers Grib,</li>
+<li>le téléchargement des fichiers sources dans un répertoire <code>csources</code>,</li>
+<li>la compilation et l'édition de lien de ces sources,</li>
+<li>l'adaptation du fichier de configuration <code>routing.par</code> pour notamment les chemins d'accès (wd, www), </li>
+<li>la construction de l'arboresence avec les répertoires nécessaires,</li>
+<li>l'installation des scripts de téléchargement des fichier grib,</li>
+<li>la présence d'au moins un fichier polaire dans le répertoire <code>pol</code>,</li>
+<li>la présence d'au moins un fichier grib dans le répertoire <code>grib</code>. Utilisation recommandée d'un
+des scripts de téléchargement pour celà,</li>
+<li>la présence des fichiers statiques html, js, css dans le répertoire <code>www</code></li>
+<li>l'assurance que le fichier javascript <code>r3param.js</code> contient la clef d'accès à Windy et le nom ou l'adresse IP du serveur
+avec le numéro de port choisi côté serveur (80 ou 8080 en général). </li>
+<li>Le lancement du serveur</li>
+<li>Quelques tests en mode client avec curl.</li>
+<li>Un test avec un navigateur est maintenant possible ;-)</li>
+</ul>
+<p>Les commandes qui suivent sont données pour un environnement Debian Ubuntu.<p>
 		
-      <h4>Préliminaires</h4>
+      <h2>Préliminaires</h2>
 <p> Vérifier que gcc est installé. Si ce n’est pas le cas, l’installer.</p>
 <pre><code>
 sudo apt install gcc
 </code></pre>
 
-		<h4>Installer les bibliothèques</h4>
+		<h2>Installer les bibliothèques</h2>
 		<p>Installez les paquets nécessaires pour curl, eccodes, la Glib&nbsp;:</p>
 <pre>
 <code>
 sudo apt-get install -y libcurl4 libcurl4-openssl-dev 
 sudo apt-get install -y libeccodes0 libeccodes-dev
 sudo apt-get install libglib2.0-dev
-
+</code>
+</pre>
+Pour vérifier que la GLIB est bien insttallée, faire éventuellement&nbsp;
+<pre>
+<code>
 pkg-config --modversion glib-2.0  pour vérifier
-
-
 </code>
 </pre>
 
-      <h4>Construction du code</h4>
+      <h2>Construction du code</h2>
 
       <p>Compilation et édition de lien avec gcc. Utiliser de préférence le script ccs ou éventuellement le Makefile.</p>
 <pre>
@@ -137,8 +157,8 @@ rte
 trace
 </pre>
 
-		<h4>csources</h4>
-      <p>csources4 contient les programmes sources et le Makefile ainsi que ccs</p>
+		<h3>csources</h3>
+      <p>csources contient les programmes sources et le Makefile ainsi que ccs.</p>
 
 		<p>La production du fichier exécutable nécessite les fichiers
 		sources .c et .h suivants&nbsp;:</p>
@@ -170,29 +190,30 @@ MakeFile
 		<pre>
 <code>Make</code>
       </pre>
-		<h4>geo</h4>
+		<h3>geo</h3>
       <p>Le répertoire geo contient les fichiers géographiques.</p>
 		<li>Le fichier issea.txt permet de savoir si un point de la carte est «en mer» ou «à terre».</li>
 
       </ul>
 
-		<h4>grib</h4>
+		<h3>grib</h3>
    
       <p>Ce répertoire contient les fichiers Grib, téléchargés par une des méthodes proposées par le logiciel, ou obtenus via un autre logiciel, par exemple xygrib.</p>
 
       <p> Il est utile que ce répertoire contienne au moins un fichier. C'est pourquoi il est conseillé de ne pas détruire le petit fichier Grib&nbsp;: reference.grb2.</p>
 		
-      <h4>currentgrib</h4>
+      <h3>currentgrib</h3>
       
-      <p>Ce répertoire contient les fichiers Grib pour les courants.</p>
+      <p>Ce répertoire   contient les fichiers Grib pour les courants.</p>
 
 
-		<h4>helpdir</h4>
+		<h3>www</h3>
+      <p>Ce répertoire contient les fichiers html, css, js text statiques.<p>
    
-		<h4>isoc</h4>
-      <p>Ce répertoire contient le Dump des isochrones au format csv, produits par le logiciel.</p>
+		<h3>isoc</h3>
+      <p>Ce répertoire contient le Dump des isochrones au format csv ou GPX, produits par le logiciel.</p>
 
-		<h4>par</h4>
+		<h3>par</h3>
       <p>Ce répertoire contient les fichiers de paramètres (scénarios) suffixés par “.par”.</p>
 
 		<p>Le fichier “.par” par défaut est&nbsp;: <a href="../par/routing.par">routing.par</a>.</p>
@@ -200,33 +221,361 @@ MakeFile
 		<p>La description des paramètres se trouve dans le répertoire
 		helpdir, fichier <a href="docpar.txt">docpar.txt</a></p>
 
-		<h4>pol</h4>
+		<h3>pol</h3>
 
 		<p>Ce répertoire contient les fichiers polaires au format ".pol" ou ".csv".</p>
 
 		<p>Les polaires suffixées par ".polwave.csv" sont des polaires de vagues, les autres
 		sont les polaires habituelles des bateaux.</p>
 	
-      <h4>rte</h4>
+      <h3>rte</h3>
 
-      <p>Ce répertoire contient les fichiers dump des routes au format csv, créés par le logiciel.</p>
+      <p>Ce répertoire contient les fichiers dump des routes au format csv ou GPX créés par le logiciel.</p>
 
 <h1 id="chap3">3. Documentation</h1>
+   <p>La documenttation est constituée&nbsp;:</p>
+   <ul>
+   <li>Des fichiers html, css que vous lisez et qui sont dans le répertoire <code>www</code></li>
+   <li>du document <code>docpar.txt</code> dans le même répertoire,</li>
+   <li>de la documentation produite par doxygen,</li>
+   <li>github héberge aussi les sources du projet et un certain nombre de commentaires. </li>
+   </ul>
 
 <h1 id="chap4">4. Lancement de l'application</h1>
 		<p>Le lancement de l’application se fait via la commande&nbsp;:</p>
-		<code>
-./rserver
-      </code>
+		<code>./rserver [parameter file]</code>
+   <p>Si le nom du fichier de paramètre est absent, le serveur utilise "routing.par". </p>
+
+<h1 id="chap5">5. API</h1>
+<h2> Présentation </h2>
+   <p> L'API est une API REST. Les requêtes sont des requêtes HTTP POST sur le port spécifié dans "routing.par".
+   <p> Exemple&nbsp;: </p>
+<code> SERVER_PORT = 8080 </code>
+<p>Par défaut, si rien de précisé, le port 8080 est utilisé. On peut spécifier le port 80, mais le lancement du serveur doit se faire en mode root.</p>
+<p> Exemple de requête&nbsp;: </p>
+<code><pre>curl http://localhost:8080 -d "type=1&amp;boat=hoho, 47.0, -3.0&amp;waypoints=47.5,-3.0;47.0,-5.0&amp;timeStep=3600&amp;isoc=false"
+</pre></code>
+<p>La commande curl envoie sur le port 8080 (ici au serveur local) la requête HTTP POST dont le contenu est spécifié après -d.</p>
+<p>Le résultat de la requête est une réponse JSON.</p>
+<p>Exemple de réponse&nbsp;:</p>
+<code><pre>
+{
+  "peinard": {
+    "heading": 50,
+    "rank": 0,
+    "duration": 24289,
+    "totDist": 127.38,
+    "calculationTime": 0.2051,
+    "polar": "Ultim.csv",
+    "grib": "/home/rr/routing/grib/NOAA-2025-02-24-06Z-03-384.grb",
+    "gribCurrent": "",
+    "track": [
+      [ 
+        47.000000,
+        -3.000000
+      ],
+      [ 
+        47.097327,
+        -2.829926
+      ]
+    ]
+  }
+}
+</pre></code>
+
+<h2> Détail de la requête </h2>
+<p> L'ordre dans le quel les paramètres sont indiqués n'a pas d'importance.</p>
+<p> Il sont séparés par l'esperluette &amp;.</p>
+
+<p> Exemple&nbsp;: </p>
+<code><pre>type=1&amp;boat=hoho, 47.0, -3.0&amp;waypoints=47.5,-3.0;47.0,-5.0&amp;timeStep=3600&amp;isoc=false</pre></code>
+
+<h3>Type de la requête</h3>
+   <table>
+      <caption>Type de la requête</caption>
+      <thead>
+      <tr>
+         <th>Val</th><th>Sémantique</th><th>Commentaire</th>
+      </tr>
+      </thead>
+      <tbody>
+         <tr>
+            <td>0</td><td>Test</td><td>Pour vérifier réponse serveur.</td>
+         </tr>
+         <tr>
+            <td>1</td><td>Demande de routage pour un seul bateau</td><td>La principale requête. Par défaut.</td>
+         </tr>
+         <tr>
+            <td>2</td><td>Demande de routage pour plusieurs bateaux.</td><td>Pour course.</td>
+         </tr>
+         <tr>
+            <td>3</td><td>Recherche de la meilleure date de départ.</td><td></td>
+         </tr>
+         <tr>
+            <td>4</td><td>Demande de polaire.</td><td>Le nom de la polaire doit être donné.<td></td>
+         </tr>
+         <tr>
+            <td>5</td><td>Demande des infos Grib.</td><td>Le nom du fichier doit être donné.</td>
+         </tr>
+         <tr>
+            <td>6</td><td>Liste un répertoire sur le serveur.</td><td>Le nom du répertoire doit être donné.</td>
+         </tr>
+      </tbody>
+   </table>
+
+<h3>Paramètres de la requêtes</h3>
+<p> Le tableau suivant indique pour chaque paramètre les dépendance par rapport au type.</p>
+
+   <table>
+      <caption>Paramètres de la requête</caption>
+      <thead>
+      <tr>
+         <th>Key</th><th>Type/unités</th><th>Value</th><th>Dépendances</th><th>Valeur par défaut</th>
+      </tr>
+      </thead>
+      <tbody>
+         <tr>
+            <td>type</td><td>Entier (0..6)</td><td>Type de la requête.<td>NA</td></td><td>1</td>
+         </tr>
+         <tr>
+            <td>boat</td><td>Liste de triplets name, lat, lon;</td><td>Liste les bateaux.</td><td>Pour requêtes 1, 2, 3</td><td>Non</td>
+         </tr>
+         <tr>
+            <td>waypoints</td><td>Liste de couples lat, lon;</td><td>Liste les Waypoints.</td><td>Pour requêtes 1, 2, 3</td><td>Non</td>
+         </tr>
+         <tr>
+            <td>isoc</td><td>Booléen: true | false</td><td>Demande les isochronesi.</td><td>Pour requêtes 1, 2, 3</td><td>false</td>
+         </tr>
+         <tr>
+            <td>timeStep</td><td>Entier (secondes)</td><td>Valeur du temps entre chaque isochrone.</td><td>Pour requêtes 1, 2, 3</td><td>3600</td> 
+         </tr>
+         <tr>
+            <td>timeStart</td><td>Entier (secondes)</td><td>Date de départ en temps Epoch Unix.</td><td>Pour requêtes 1, 2, 3</td><td>Valeur actuelle (now) du temps Epoch (Unix).</td>
+         </tr>
+         <tr>
+            <td>timeWindow</td><td>Entier (secondes)</td><td>Fenetre de temps en seconde pour la recherche de la meilleure date de départ.</td><td>Pour requête 3</td><td>Infini</td>
+         </tr>
+         <tr>
+            <td>timeInterval</td><td>Entier (secondes)</td><td>Intervalle de temps entre chaque essai pour la recherche de le meilleure date de départ.</td><td>Pour requête 3</td><td>3600</td>
+         </tr>
+         <tr>
+            <td>polar</td><td>Chaîne de caractères</td><td>Nom de la polaire.</td><td>Pour requête 4.</td><td>3600</td>
+         </tr>
+         <tr>
+            <td>grib</td><td>Chaîne de caractères</td><td>Nom du fichier grib.</td><td>Pour requête 5.</td><td>3600</td>
+         </tr>
+         <tr>
+            <td>dir</td><td>Chaîne de caractères</td><td>Nom de répertoire. (soit "grib" soit "pol").</td><td>Pour requête 6.</td><td>vide</td>
+         </tr>
+         <tr>
+            <td>sortByName</td><td>Booléen: true | false</td><td>Tri des fichiers par noms si vrai, par date si faux.</td><td>Pour requête 6.</td><td>false</td>
+         </tr>
+      </tbody>
+   </table>
+
+<h3>Utilisation</h3>
+<h4>Requête test type= 0</h4>
+<p>Permet de vérifier la présence du serveur. </p>
+
+<p>Exemple de Requête&nbsp;:</p>
+curl http://localhost:8080 -d "type=0"
+
+<p>Réponse du serveur&nbsp;:</p>
+<pre>
+{"Prog-version": "RCube, 0.1, René Rigault",
+" Compilation-date": "Feb 24 2025",
+" GLIB-version": 2.80.0, 
+ "ECCODES-version": "2.34.1"
+}
+</pre>
+<h4>Requête de routage pour un seul bateau type=1</h4>
+<p>Lance un routage. </p>
+
+<p>Exemple de Requête&nbsp;:</p>
+<pre>
+curl http://localhost:8080 -d "type=1&amp;boat=hoho, 47.0,-3.0&amp;waypoints=47.5,-3.0;47.0,-5.0&amp;timeStep=3600&amp;isoc=false"
+</pre>
+
+<p>Réponse du serveur&nbsp;:</p>
+<p>Une route en JSON est générée pour le bateau.</p>
+<p>Si le paramètre "isoc" est position à <code>true</code>, l'isochrone de la route est envoyée.</p>
+<pre>
+{
+"hoho": {
+"heading": 64, "rank": 0, "duration":24980, "totDist":132.34, 
+"calculationTime": 0.1772, "polar": "Ultim.csv", "grib": "/home/rr/routing/grib/NOAA-2025-02-24-06Z-03-384.grb", "gribCurrent": "", "track": [
+   [47.000000, -3.000000],
+   [47.092509, -2.721889],
+   [47.447861, -2.919492],
+   [47.500000, -3.000000],
+   [47.540740, -3.402737],
+   [47.392568, -3.574660],
+   [47.106095, -4.125318],
+   [47.000000, -5.000000]
+]
+}
+}
+</pre>
+
+<h4>Requête de recherche de la meilleure date de départ type=2</h4>
+
+<p>Exemple de Requête&nbsp;:</p>
+<pre>
+curl http://localhost:8080 -d "type=2&amp;boat=hoho,47.0,-3.0;titi,47.5,3.0;&amp;waypoints=47.5,-3.0;47.0,-5.0&amp;timeStep=3600&amp;isoc=false"
+</pre>
+
+<p>Réponse du serveur&nbsp;:</p>
+<p>La route Json est celle qui correspond à la date de départ sélectionnée.</p>
+<p>Un rapport est généré. Il inclut le tableau résumant l'ensemble des essais avec la durées pour chaque essai.</p>
+
+<pre>
+{
+"hoho": {
+"heading": 14, "rank": 0, "duration":16342, "totDist":123.09,
+"calculationTime": 0.0417, "polar": "Ultim.csv", "grib": "/home/rr/routing/grib/NOAA-2025-02-24-06Z-03-384.grb", "gribCurrent": "", "track": [
+   [47.000000, -3.000000],
+   [47.413674, -2.848767],
+   [47.500000, -3.000000],
+   [47.227617, -3.713071],
+   [46.972285, -4.480671],
+   [47.000000, -5.000000]
+]
+}
+,
+"_bestTimeReport": {
+"count": 10, "bestCount": 7, "tBegin": 16, "tEnd": 26, "tStop": 26,"tInterval": 3600,
+"minDuration": 4.54, "maxDuration": 6.98, "bestTime": 23,
+"array":
+[25119, 24289, 23520, 21319, 17182, 16692, 16363, 16342, 16768, 17168]
+}
+}
+</pre>
 
 
-<h1 id="chap10">10. Récupérer des fichiers Grib et les informations météorologiques</h1>
-		<h2>10.2. NOAA</h2>
-   <code>./r3noaa</code>
+<h4>Requête de routage pour plusieurs bateaux type=3</h4>
+<p>Lance un routage. </p>
 
-      <h2>10.3. ECMWF</h2>
-   <code>./r3ecmwf</code>
-   
+<p>Exemple de Requête&nbsp;:</p>
+<pre>
+curl http://localhost:8080 -d "type=3&amp;boat=hoho,47.0,-3.0;titi,47.5,3.0;&amp;waypoints=47.5,-3.0;47.0,-5.0&amp;timeStep=3600&amp;isoc=false"
+</pre>
+
+<p>Réponse du serveur&nbsp;:</p>
+<p>Une route en JSON est générée pour chaque bateau.</p>
+<p>Si le paramètre isoc est positionné, alors les isochrones ne sont envoyés que pour le premier bateau.</p>
+<p>Un rapport de comparaison des bateaux termine la séquence.</p>
+
+<pre>
+{
+"hoho": {
+"heading": 62, "rank": 0, "duration":24912, "totDist":131.36,
+"calculationTime": 0.1779, "polar": "Ultim.csv", "grib": "/home/rr/routing/grib/NOAA-2025-02-24-06Z-03-384.grb", "gribCurrent": "", "track": [
+   [47.000000, -3.000000],
+   ...
+   [47.000000, -5.000000]
+]
+}
+,
+"titi": {
+"heading": 0, "rank": 0, "duration":1328400, "totDist":0.00,
+"calculationTime": 0.0114, "polar": "Ultim.csv", "grib": "/home/rr/routing/grib/NOAA-2025-02-24-06Z-03-384.grb", "gribCurrent": "", "track": [
+   [47.500000, 3.000000],
+   ...
+   [47.500000, 3.000000]
+]
+}
+, "_report": {
+"nComp": 2, "startTimeStr": "2025-02-24 22:17", "isocTimeStep": 3600, "polar": "Ultim.csv", "array":
+[
+{"name": "hoho", "lat": 47.0000, "lon": -3.0000, "distToMain": 0.00,"ETA": "2025-02-25 05:12", "distDone": 81.84, "toBestDelay": 0, "toMainDelay": 0},
+{"name": "titi", "lat": 47.5000, "lon": 3.0000, "distToMain": 246.14,"ETA": "No Solution", "distDone": inf, "toBestDelay": -2147483648, "toMainDelay": -2147483648}
+]
+}
+}
+</pre>
+
+<h4>Chargement de la polaire type=4</h4>
+<p>Exemple de Requête&nbsp;:</p>
+<pre>
+curl http://localhost:8080 -d "type=5&amp;grib=grib/reference.grb2"
+</pre>
+<p>Réponse du serveur&nbsp;:</p>
+<p>Le serveur envoie en Json la polair en Json sous forme d'un tableau à deux dimensions.</p>
+
+<h4>Méta information sur un fichier Grib type=5</h4>
+<p>Exemple de Requête&nbsp;:</p>
+<pre>
+curl http://localhost:8080 -d "type=4&amp;polar=pol/first260.pol"
+</pre>
+
+<p>Réponse du serveur&nbsp;:</p>
+<p>Les méta information sur le grib et non le fichier Grib lui même. <p>
+
+<h4>Répertoire type=6</h4>
+<p>Liste le réperoire donné en paramètre <code>dir=</code>. Ce peut être&nbsp;:</p>
+<ul>
+<li><code>pol</code> pour la liste des fichiers polaires,</li>
+<li><code>grib</code> pour la liste des fichiers grib.</li>
+</ul>
+<p>Le paramètre complémentaire <code>sortByName</code> permet d'obtenir la liste des fichiers trés par nom.</p>
+<p>Par défait, les fichiers sont énvoyés du plus récent au plus ancien selon leurs dates de modification.</p>
+
+<p>Exemple de Requête&nbsp;:</p>
+<pre>
+curl http://localhost:8080 -d "type=6&amp;dir=pol&amp;sortByName=true"
+</pre>
+<p>Réponse du serveur&nbsp;:</p>
+Chaque ligne de tableau est de la forme&nbsp;:
+<pre>
+[nom fichier, taille fichier, date de modification]
+
+[
+   ["2024-VR-VG-RR.csv", 2162, "2025-01-11 01:52:20"],
+   ["2025-Imoca.csv", 4188, "2025-01-03 19:07:14"],
+   ["Dufou500GV+FocOriginal.pol", 665, "2024-05-04 15:57:52"]
+]
+
+</pre>
+
+<h1 id="chap6">6. Fichier de configuration du serveur</h1>
+
+   <p>Un autre nom de fichier peut être spécifié dans la ligne de commande au lancement du serveur. </p>
+
+   <p>Les fichiers suffixés par ".par" sont situés dans le répertoire "par".</p>
+
+   <p>Le fichier par défaut est "routing.par" et est essentiel pour le bon fonctionnement de RCube.</p>
+
+   <p>Un fichier ".par" est un fichier texte comportant des lignes de la forme&nbsp;:</p>
+
+   <p><samp>NOM: valeur</samp></p>
+
+   <p>Des commentaires peuvent être ajoutés après le signe "#".</p>
+
+   <p>Exemple&nbsp;:</p>
+<pre><samp>
+WD:                           # Working directory
+SERVER_PORT: 80               # TCP PORT
+WEB:/home/rr/routing/client   # static files directory: html, css js etc
+
+...
+</samp></pre>
+
+   <p>Informations sur les paramètres&nbsp;: <a href="docpar.txt">docpar.txt</a></p>
+
+   <p>Exemple de fichier par&nbsp;: <a href="../par/routing.par">../par/routing.par</a></p>
+
+<h1 id="chap7">7. Scripts</h1>
+<p>Des scripts permettent de récupérer les fichiers grib. Ils peuvent être ajoutés dans la cron table pour 
+automatiser la récupération aux dates T, T+6h, T+12h, T+18h.</p>
+
+<ul>
+<li>r3noaa&nbsp;: pour télécharger les Grib de la NOAA (modèle GFS);</li>
+<li>r3ecmwf&nbsp;: pour télécharger les Grib de l'ECMWF (modèle CEP).</li>
+</ul>
+
+
+<h1 ="chap8">8. Code source</h1>
+<h2> Présentation </h2>
    <p>Le répertoire csource contient le code C.</p>
 
    <table>
