@@ -1,8 +1,8 @@
 const DEFAULT_TWS = 15;
 
-// show polar info
-function polarInfo() {
-    const formData = `type=4&polar=${polarName}`;
+/* show polar info */
+function polarInfo(polarName) {
+    const formData = `type=4&polar=pol/${polarName}`;
 
     fetch(apiUrl, {
         method: "POST",
@@ -191,5 +191,63 @@ function generatePolarPlotly(data) {
     });
 
     updatePlot(initialTWS);
+}
+
+/* choose a polar then launch polarInfo */
+function choosePolar(currentPolar) {
+    const formData = "type=6&dir=pol&sortByName=true";
+
+    fetch(apiUrl, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (!Array.isArray(data) || data.length === 0) {
+            Swal.fire("Erreur", "Aucun fichier polaire trouvé", "error");
+            return;
+        }
+
+        // Création du menu déroulant SANS la taille et la date
+        const fileOptions = data.map(file => {
+            const selected = file[0] === currentPolar ? "selected" : "";
+            return `<option value="${file[0]}" ${selected}>${file[0]}</option>`;
+        }).join("");
+
+        // Affichage de la boîte de dialogue
+        Swal.fire({
+            title: "Sélectionnez un fichier",
+            html: `
+                <div class="swal-wide">
+                    <select id="polarSelect" class="swal2-select">
+                        ${fileOptions}
+                    </select>
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: "Valider",
+            cancelButtonText: "Annuler",
+            customClass: { popup: "swal-wide" },
+            preConfirm: () => {
+                const selectedFile = document.getElementById("polarSelect").value;
+                if (!selectedFile) {
+                    Swal.showValidationMessage("Veuillez sélectionner un fichier.");
+                }
+                return selectedFile;
+            }
+        }).then(result => {
+            if (result.isConfirmed) {
+                polarName = result.value; // Mise à jour du fichier sélectionné
+                polarInfo(polarName);
+            }
+        });
+    })
+    .catch(error => {
+        console.error("Erreur lors de la requête :", error);
+        Swal.fire("Erreur", "Impossible de récupérer la liste des fichiers", "error");
+    });
 }
 

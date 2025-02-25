@@ -16,6 +16,7 @@
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <script src="r3grib.js"></script>
     <script src="r3polar.js"></script>
+    <script src="r3displaycomp.js"></script>
     <script src="r3param.js"></script>
     <script src="r3.js"></script>
 </head>
@@ -38,8 +39,9 @@
       <button class="btn" onclick="backWard ();"><i class="fas fa-backward"></i>⏪ Back</button>
       <button class="btn" onclick="forWard ();"><i class="fas fa-forward"></i>⏩ Forward</button>
       <button class="btn" onclick="clearAll ();"><i class="fas fa-forward"></i>⏩ Clear</button>
-      <button class="btn" onclick="gribInfo ();"><i class="fas fa-forward"></i>Grib Info</button>
-      <button class="btn" onclick="polarInfo ();"><i class="fas fa-forward"></i>Polar</button>
+      <button class="btn" onclick="gribInfo (gribName);"><i class="fas fa-forward"></i>Grib Info</button>
+      <button class="btn" onclick="chooseGrib (gribName);"><i class="fas fa-forward"></i>Grib Choose</button>
+      <button class="btn" onclick="choosePolar (polarName);"><i class="fas fa-forward"></i>Polar Choose</button>
       <button class="btn" id="openModal"><i class="fas fa-forward"></i>Route Launch</button>
       <div id="routeModal" class="modal">
          <div class="modal-content">
@@ -53,12 +55,6 @@
                <option value="1800">30 minutes</option>
                <option selected="selected" value="3600">1 heure</option>
                <option value="10800">3 heures</option>
-            </select>
-            
-            <label>Polar :</label>
-            <select id="polar">
-               <option value="ultim.csv">Ultim</option>
-               <option value="imoca.csv">Imoca</option>
             </select>
             
             <label>Model :</label>
@@ -96,7 +92,6 @@
             routeParam = {
                 startTimeStr: document.getElementById("startTime").value,
                 isoStep: parseInt(document.getElementById("isoStep").value, 10),
-                polar: document.getElementById("polar").value,
                 model: document.getElementById("model").value,
                 forbid: document.getElementById("forbidZones").checked,
                 isoc: document.getElementById("isoc").checked

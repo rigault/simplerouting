@@ -209,3 +209,57 @@ header a:hover {
    display: none; /* Caché par défaut */
 }
 
+/*--------------------------------------------------------------------------------------*/
+/* for polarChoose dialoc select box */
+.swal-wide {
+    width: 400px !important; /* Largeur fixe */
+    max-width: 90vw !important; /* Évite un dépassement sur petits écrans */
+    overflow: hidden !important; /* Supprime le débordement */
+}
+
+/* Conteneur principal pour éviter le débordement */
+.swal2-html-container {
+    max-width: 100% !important; /* Empêche un élargissement inutile */
+    overflow-x: hidden !important; /* Supprime le scroll horizontal */
+    padding: 10px 0 !important; /* Évite un padding excessif qui causerait un débordement */
+}
+
+/* Réduction de la largeur du menu déroulant */
+.swal2-select {
+    width: 75% !important; /* Réduit uniquement le select */
+    max-width: 280px !important; /* Empêche l'expansion */
+    font-size: 16px;
+    white-space: nowrap; /* Garde les noms sur une seule ligne */
+    text-overflow: ellipsis; /* Coupe proprement les noms trop longs */
+    display: block;
+    margin: 0 auto; /* Centre le select dans la boîte */
+}
+
+/* Suppression de la barre de scroll globale */
+.swal2-popup {
+    overflow-x: hidden !important; /* Bloque toute tentative de scroll horizontal */
+}
+
+/* Style du bouton de validation */
+.swal2-confirm {
+    background-color: orange !important;
+    border-color: orange !important;
+}
+
+/* for displayComp () Swal box */
+.comp-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.comp-table th, .comp-table td {
+    padding: 8px;
+    border: 1px solid #ddd;
+    text-align: center;
+}
+
+.comp-table thead {
+    background-color: #f2f2f2;
+}
+
+

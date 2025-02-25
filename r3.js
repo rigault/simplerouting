@@ -1,4 +1,5 @@
 const boatName = "pistache";
+const compet = "jojo, 47.0, -2.0";
 const REQ_TYPE = 3;
 let routeParam = {};
 routeParam.isoStep = 3600 // 1 h;
@@ -19,7 +20,7 @@ let animation;
 let marker;
 let map;
 let store;
-let pOr = [47, -2];
+let pOr = [46, -3];
 let pDest = [46, -5];
 let loxoRoute = null;
 let origine = null;
@@ -172,13 +173,16 @@ function request () {
    const timeStep = 3600;  // Remplace par la vraie valeur
    const timeStart = 3600; // Remplace par la vraie valeur
    //const waypoints = myWayPoints.map(wp => `${wp[0]},${wp[1]}`).join(";"); 
-   const waypoints = myWayPoints.slice(1) // to remove first elemnt
+   //const waypoints = myWayPoints.slice(1) // to remove first elemnt
+   const waypoints = myWayPoints.slice(1) // to remove first element
       .map(wp => `${wp[0]},${wp[1]}`)
       .join(";");
 
-   const boats = `${boatName}, ${myWayPoints[0][0]}, ${myWayPoints[0][1]}`; // name, lat, lon
+   //const boats = `${boatName}, ${myWayPoints[0][0]}, ${myWayPoints[0][1]}`; // name, lat, lon
+   const boats = `${boatName}, ${myWayPoints[0][0]}, ${myWayPoints[0][1]};${compet}`; // name, lat, lon
+   
    const epoch = Math.floor (routeParam.startTime.getTime () / 1000);
-   const requestBody = `type=${REQ_TYPE}&boat=${boats}&waypoints=${waypoints}&timeStep=${routeParam.isoStep}&timeStart=${epoch}&polar=${routeParam.polar}&model=${routeParam.model}&forbid=${routeParam.forbid}&isoc=${routeParam.isoc}`;
+   const requestBody = `type=${REQ_TYPE}&boat=${boats}&waypoints=${waypoints}&timeStep=${routeParam.isoStep}&timeStart=${epoch}&polar=pol/${polarName}&model=${routeParam.model}&forbid=${routeParam.forbid}&isoc=${routeParam.isoc}`;
 
    console.log ("request: " + requestBody);
    const spinnerOverlay = document.getElementById("spinnerOverlay");
@@ -197,8 +201,8 @@ function request () {
    .then(data => {
       console.log(JSON.stringify(data, null, 2));  // Affichage propre avec indentation
       firstKey = Object.keys(data)[0]; // name of the key
-      console.log("REPORT:" + JSON.stringify(data._report, null, 2));
-      printReport (data._report);
+      //console.log("REPORT:" + JSON.stringify(data._report, null, 2));
+      //printReport (data._report);
       if (firstKey.startsWith("_"))
          Swal.fire({
             title: "Warning",
@@ -207,6 +211,7 @@ function request () {
             confirmButtonText: "OK"
          });
       else {
+         displayComp (data ["_report"]);
          route = data;
          if ("_isoc" in data) {
             const isocArray = data["_isoc"];

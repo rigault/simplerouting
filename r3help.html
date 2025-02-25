@@ -126,14 +126,22 @@ sudo apt install gcc
 sudo apt-get install -y libcurl4 libcurl4-openssl-dev 
 sudo apt-get install -y libeccodes0 libeccodes-dev
 sudo apt-get install libglib2.0-dev
+sudo apt-get install libeccodes-tools  # pour les outils ligne de commande
 </code>
 </pre>
-Pour vérifier que la GLIB est bien insttallée, faire éventuellement&nbsp;
+Pour vérifier que la GLIB est bien installée, faire éventuellement&nbsp;
 <pre>
 <code>
 pkg-config --modversion glib-2.0  pour vérifier
 </code>
 </pre>
+   <h3>wgrib2</h3>
+   <p>RCube utilise dans le script r3ecmf <code>wgrib2</code> pour extraire une région.<p>
+   <p> Si grib2 n'est pas installé, le téléchargement direct des fichiers ECMWF et ou Météo France n'est pas possible </p>
+   <p> Le logiciel fonctionne avec la NOAA même sans wgrib2.</p>
+   <p>
+   <p>Pour l'installation, le script suivant est recommandé&nbsp;:</p>
+   <code>https://gist.github.com/wxguy/945d18af773c2208a33a5e0429a4b813/revisions</code>
 
       <h2>Construction du code</h2>
 
