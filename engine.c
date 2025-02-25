@@ -1367,19 +1367,22 @@ GString *isochronesToJson () {
 static GString *routeToJson (SailRoute *route, int index, bool isoc) {
    //GString *jString = g_string_new ("{\n");
    GString *jString = g_string_new ("");
+   
 
    // current route
    if (route->n > 0) {
       int iComp = (route->competitorIndex < 0) ? 0 : route->competitorIndex;
+      gchar *gribBaseName = g_path_get_basename (par.gribFileName);
+      gchar *gribCurrentBaseName = g_path_get_basename (par.currentGribFileName);
+
       g_string_append_printf (jString, "\"%s\": {\n\"heading\": %.0lf, \"rank\": %d, \"duration\":%d, \"totDist\":%.2lf, \n",
          competitors.t[iComp].name, route->t [index].lCap, 0, (int) (route->duration * 3600), route->totDist);
 
-      printf ("in routeToJson index: %d, name: %s\n", route->competitorIndex, competitors.t[route->competitorIndex].name);
-
       g_string_append_printf (jString, "\"calculationTime\": %.4lf, ", route->calculationTime);
-
       g_string_append_printf (jString, "\"polar\": \"%s\", \"grib\": \"%s\", \"gribCurrent\": \"%s\", \"track\": [\n", 
-         route->polarFileName, par.gribFileName, par.currentGribFileName);
+         route->polarFileName, gribBaseName, gribCurrentBaseName);
+      g_free (gribBaseName);
+      g_free (gribCurrentBaseName);
 
       for (int i = 0; i < route->n; i++) {
          g_string_append_printf (jString, "   [%.6f, %.6f],\n", route->t[i].lat, route->t[i].lon);

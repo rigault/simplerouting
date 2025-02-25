@@ -258,7 +258,11 @@ static void logRequest (const char* fileName, const char *remote_addr, const cha
 /*! decode request from client and fill ClientRequest structure 
    return true if correct false if impossible to decode */
 static bool decodeHttpReq (const char *req, ClientRequest *clientReq) {
-   clientReq->nWp = 0;
+   memset (clientReq, 0, sizeof (ClientRequest));
+   clientReq->type = 1;              // default: routingLaunch   
+   clientReq->timeStep = 3600;   
+   clientReq->timeInterval = 3600;   
+
    char **parts = g_strsplit(req, "&", -1);
 
    for (int i = 0; parts[i]; i++) {
@@ -395,6 +399,7 @@ static bool decodeHttpReq (const char *req, ClientRequest *clientReq) {
 
 /*! check validity of parameters */
 static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, size_t maxLen) {
+   char strPolar [MAX_SIZE_FILE_NAME];
    // printf ("startInfo after: %s, startTime: %lf\n", asctime (&startInfo), par.startTimeInHours);
    if ((clientReq->nBoats == 0) || (clientReq->nWp == 0)) {
       snprintf (checkMessage, maxLen, "1: No boats or no Waypoints");
@@ -451,6 +456,21 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
       chooseDeparture.tEnd = chooseDeparture.tBegin + (clientReq->timeWindow / 3600.0);
    else
       chooseDeparture.tEnd = INT_MAX; // all grib window Grib time will be used.
+
+   // change polar if requested
+   if (clientReq->polarName [0] != '\0') {
+      buildRootName (clientReq->polarName, strPolar, sizeof (strPolar));
+      printf ("polar found: %s\n", strPolar);
+      if (strncmp (par.polarFileName, strPolar, strlen (strPolar)) != 0) {
+         printf ("readPolar: %s\n", strPolar);
+         if (readPolar (false, strPolar, &polMat, checkMessage, maxLen)) {
+            g_strlcpy (par.polarFileName, strPolar, sizeof (par.polarFileName));
+            printf ("Polar loaded   : %s\n", strPolar);
+            return true;
+         }
+         return false;
+      }  
+   }
    return true;
 }
 
@@ -507,7 +527,7 @@ static void serveStaticFile (int client_socket, const char *requested_path) {
 /*! launch action and retuen GString after execution */
 static GString *launchAction (ClientRequest *clientReq) {
    GString *res = g_string_new ("");
-   char checkMessage [MAX_SIZE_LINE];
+   char checkMessage [MAX_SIZE_TEXT];
    printf ("client.req = %d\n", clientReq->type);
    switch (clientReq->type) {
    case REQ_ROUTING:
@@ -524,7 +544,7 @@ static GString *launchAction (ClientRequest *clientReq) {
    case REQ_TEST:
       g_string_append_printf (res, "{\"Prog-version\": \"%s, %s, %s\",\n", PROG_NAME, PROG_VERSION, PROG_AUTHOR);
       g_string_append_printf (res, "\" Compilation-date\": \"%s\",\n", __DATE__);
-      g_string_append_printf (res, "\" GLIB-version\": %d.%d.%d, \n \"ECCODES-version\": \"%s\"\n}\n",
+      g_string_append_printf (res, "\" GLIB-version\": \"%d.%d.%d\", \n \"ECCODES-version\": \"%s\"\n}\n",
             GLIB_MAJOR_VERSION, GLIB_MINOR_VERSION, GLIB_MICRO_VERSION, ECCODES_VERSION_STR);
       break;
    case REQ_BEST_DEP:
@@ -553,7 +573,10 @@ static GString *launchAction (ClientRequest *clientReq) {
       }
       break;
    case REQ_POLAR:
-      res = polToJson (clientReq->polarName);
+      if (clientReq->polarName [0] != '\0')
+         res = polToJson (clientReq->polarName);
+      else
+         res = polToJson (par.polarFileName);
       break;
    case REQ_GRIB:
       res = gribToJson (clientReq->gribName);
@@ -573,9 +596,7 @@ static void handleClient (int client_fd, struct sockaddr_in *client_addr) {
    char saveBuffer [MAX_SIZE_REQUEST];
    char buffer [MAX_SIZE_REQUEST];
    const char *user_agent = "Unknown";
-   ClientRequest clientReq = {0};
-   clientReq.type = 1;              // default: routingLaunch   
-   clientReq.timeInterval = 3600;   
+   ClientRequest clientReq;
 
    // read HTTP request
    int bytes_read = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
