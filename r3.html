@@ -4,21 +4,19 @@
    <title>Rcube</title>
    <link rel="icon" type="image/ico" href="favicon.ico">
    <link rel="stylesheet" type="text/css" href="r3.css">
-   <meta
-      charset="UTF-8"
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, shrink-to-fit=no"
-    />
-    <script src="https://unpkg.com/leaflet@1.4.0/dist/leaflet.js"></script>
-    <script src="https://api.windy.com/assets/map-forecast/libBoot.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-    <script src="r3grib.js"></script>
-    <script src="r3polar.js"></script>
-    <script src="r3displaycomp.js"></script>
-    <script src="r3param.js"></script>
-    <script src="r3.js"></script>
+   <meta charset="UTF-8" name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no">
+   <script src="https://unpkg.com/leaflet@1.4.0/dist/leaflet.js"></script>
+   <script src="https://api.windy.com/assets/map-forecast/libBoot.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+   <script src="r3grib.js"></script>
+   <script src="r3polar.js"></script>
+   <script src="r3displaycomp.js"></script>
+   <script src="r3besttime.js"></script>
+   <script src="r3routereport.js"></script>
+   <script src="r3param.js"></script>
+   <script src="r3.js"></script>
 </head>
 <body>
 <div class="container">
@@ -39,7 +37,6 @@
       <button class="btn" onclick="backWard ();"><i class="fas fa-backward"></i>⏪ Back</button>
       <button class="btn" onclick="forWard ();"><i class="fas fa-forward"></i>⏩ Forward</button>
       <button class="btn" onclick="clearAll ();"><i class="fas fa-forward"></i>⏩ Clear</button>
-      <button class="btn" onclick="gribInfo (gribName);"><i class="fas fa-forward"></i>Grib Info</button>
       <button class="btn" onclick="chooseGrib (gribName);"><i class="fas fa-forward"></i>Grib Choose</button>
       <button class="btn" onclick="choosePolar (polarName);"><i class="fas fa-forward"></i>Polar Choose</button>
       <button class="btn" id="openModal"><i class="fas fa-forward"></i>Route Launch</button>
@@ -62,6 +59,9 @@
                <option value="ECMWF">ECMWF</option>
                <option value="GFS">GFS</option>
             </select>
+
+            <label>Bateau :</label>
+            <select id="boatSelect"></select> <!-- Sélect dynamique pour les bateaux -->
             
             <label>
                <input type="checkbox" id="forbidZones"> Forbid Zones
@@ -70,13 +70,48 @@
             <label>
                <input type="checkbox" id="isoc"> Isochrones
             </label>
-            
+
+            <button id="toggleOptions" class="small-button">⚙️ Options avancées</button>
+
+            <div id="advancedOptions" class="hidden">
+               <label>Time Interval (optionnel) :</label>
+               <select id="timeInterval">
+                  <option value="0">Aucun</option>
+                  <option value="900">15 minutes</option>
+                  <option value="1800">30 minutes</option>
+                  <option value="3600">1 heure</option>
+                  <option value="7200">2 heures</option>
+                  <option value="10800">3 heures</option>
+                  <option value="21600">6 heures</option>
+               </select>
+
+               <label>N Try (optionnel) :</label>
+               <input type="number" id="nTry" min="0" max="384">
+            </div>
+            <hr>
             <button id="saveParams">Launch Route</button>
             <button id="closeModal">Cancel</button>
          </div>
        </div>
     
       <script>
+         document.getElementById("toggleOptions").addEventListener("click", function() {
+            let optionsDiv = document.getElementById("advancedOptions");
+            optionsDiv.style.display = (optionsDiv.style.display === "none" || optionsDiv.style.display === "") ? "block" : "none";
+         });
+         // Remplir dynamiquement le select avec les noms des bateaux
+         const boatSelect = document.getElementById("boatSelect");
+            let option = document.createElement("option");
+            option.value = 0; // Stocke l'index first is 0 for all competitors
+            option.textContent = "All";
+            boatSelect.appendChild (option);
+
+         boatNames.forEach((name, index) => {
+            let option = document.createElement("option");
+            option.value = index + 1; // Reals boats begin at index 1
+            option.textContent = name;
+            boatSelect.appendChild (option);
+         });
          document.getElementById("openModal").addEventListener("click", function() {
             document.getElementById("routeModal").style.display = "block";
             let now = new Date ();
@@ -93,14 +128,17 @@
                 startTimeStr: document.getElementById("startTime").value,
                 isoStep: parseInt(document.getElementById("isoStep").value, 10),
                 model: document.getElementById("model").value,
+                iBoat: parseInt(document.getElementById("boatSelect").value, 10), // Récupère l'index sélectionné
                 forbid: document.getElementById("forbidZones").checked,
-                isoc: document.getElementById("isoc").checked
+                isoc: document.getElementById("isoc").checked,
+                timeInterval: parseInt (document.getElementById ("timeInterval").value, 10),
+                nTry: parseInt(document.getElementById("nTry").value, 10) || 0 // si vide, 0
             };
             routeParam.startTime = new Date(routeParam.startTimeStr);
             // Corriger en UTC si souhaité
             //routeParam.startTime = new Date(routeParam.startTime.getTime() - routeParam.startTime.getTimezoneOffset() * 60000);
             updateInfo (); 
-            console.log("Route Parameters:", routeParam);
+            console.log ("Route Parameters:", routeParam);
             request ();
             document.getElementById("routeModal").style.display = "none";
          });
@@ -111,5 +149,6 @@
       <span id = "coords"></span>
       <script>updateInfo ();</script>
    </footer>
+</div>
 </body>
 </html>

@@ -1,12 +1,23 @@
-const boatName = "pistache";
-const compet = "jojo, 47.0, -2.0";
-const REQ_TYPE = 3;
+/* jshint esversion: 6 */
+
+const competitors = [["pistache", 46, -3], ["jojo", 47, -4], ["titi", 48, -5]];
+const boatNames = competitors.map (competitor => competitor[0]);
+let boatName = boatNames [0];
+
+console.log (boatNames); // ["pistache", "jojo", "titi"]
+
+let gribName;
 let routeParam = {};
-routeParam.isoStep = 3600 // 1 h;
+routeParam.iBoat = 1;
+routeParam.isoStep = 3600; // 1 h
 routeParam.startTime = new Date ();
 routeParam.model = 0;
 routeParam.forbid =  0;
 routeParam.polar = "";
+routeParam.timeInterval = 0; // 0 means nor used
+routeParam.nTry = 0;         // 0 mean only 1 try
+routeParam.timeWindow = 0;
+
 let rCubeInfo = "© René Rigault";
 let index = 0;
 const options = {
@@ -18,9 +29,10 @@ const options = {
 let bounds;
 let animation;
 let marker;
+let markers = [];
 let map;
 let store;
-let pOr = [46, -3];
+let pOr = competitors [0].slice (1);
 let pDest = [46, -5];
 let loxoRoute = null;
 let origine = null;
@@ -33,6 +45,10 @@ myWayPoints.push (pDest);
 let polylineMyWayPoints = null; // Stocke la ligne
 let route = null;  // Variable globale pour stocker la route
 let isochroneLayerGroup;
+
+// equivalent côté serveur : enum {REQ_TEST, REQ_ROUTING, REQ_BEST_DEP, REQ_RACE, REQ_POLAR, REQ_GRIB, REQ_DIR}; // type of request
+
+const REQ = {TEST: 0, ROUTING: 1, BEST_DEP: 2, RACE: 3, POLAR: 4, GRIB: 5, DIR: 6}; 
 
 const MARKER = encodeURIComponent(`<?xml version="1.0" encoding="UTF-8" standalone="no"?>
         <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
@@ -47,113 +63,44 @@ const BoatIcon = L.icon({
    popupAnchor: [0, 0],
 });
 
-function printReport(report) {
-  // Déstructuration des propriétés du rapport
-  const { nComp, startTimeStr, isocTimeStep, polar, array } = report;
-
-  // Construction du contenu HTML pour les métadonnées
-  let htmlContent = `
-    <div style="text-align: left;">
-      <h2>Métadonnées</h2>
-      <p><strong>nComp :</strong> ${nComp}</p>
-      <p><strong>Start Time :</strong> ${startTimeStr}</p>
-      <p><strong>Isoc Time Step :</strong> ${isocTimeStep} sec</p>
-      <p><strong>Polar :</strong> ${polar}</p>
-    </div>
-  `;
-
-  // Si le tableau 'array' existe et contient des éléments, on crée un tableau HTML
-  if (Array.isArray(array) && array.length > 0) {
-    htmlContent += `
-      <h3>Données du tableau</h3>
-      <table style="width:100%; border-collapse: collapse;" border="1">
-        <thead>
-          <tr>
-            <th>Nom</th>
-            <th>Latitude</th>
-            <th>Longitude</th>
-            <th>Dist To Main</th>
-            <th>ETA</th>
-            <th>Dist Done</th>
-            <th>To Best Delay</th>
-            <th>To Main Delay</th>
-          </tr>
-        </thead>
-        <tbody>
-    `;
-    // Pour chaque élément, on crée une ligne de tableau
-    array.forEach(item => {
-      htmlContent += `
-          <tr>
-            <td>${item.name}</td>
-            <td>${item.lat}</td>
-            <td>${item.lon}</td>
-            <td>${item.distToMain}</td>
-            <td>${item.ETA}</td>
-            <td>${item.distDone}</td>
-            <td>${item.toBestDelay}</td>
-            <td>${item.toMainDelay}</td>
-          </tr>
-      `;
-    });
-    htmlContent += `
-        </tbody>
-      </table>
-    `;
-  }
-
-  // Utilisation de Swal.fire pour afficher le popup avec le contenu HTML construit
-  Swal.fire({
-    title: 'Report',
-    html: htmlContent,
-    width: '600px',
-    showCloseButton: true,
-    focusConfirm: false,
-    confirmButtonText: 'OK',
-    confirmButtonColor: '#FFA500' // Code hexadécimal pour l'orange
-  });
-}
-
-
 function drawPolyline(coords, color) {
-    if (!coords || coords.length < 2) return;
-
-    L.polyline(coords, {
-        color: color,
-        weight: 1,
-        opacity: 0.7
-    }).addTo(isochroneLayerGroup);
+   if (!coords || coords.length < 2) return;
+   L.polyline(coords, {
+      color: color,
+      weight: 1,
+      opacity: 0.7
+   }).addTo(isochroneLayerGroup);
 }
 
-function updateWindyMap(route, isocArray = []) {
-    // Tracer la route principale
-   if (!route || !route[boatName] || !route[boatName].track) {
-      console.error("Données de route invalides !");
+function updateWindyMap (route, isocArray = []) {
+   // Tracer la route principale
+   if (!route || !route [boatName] || !route [boatName].track) {
+      console.error ("Données de route invalides !");
       return;
    }
-     // Vider les anciens isochrones
-    isochroneLayerGroup.clearLayers();
+   // Vider les anciens isochrones
+   isochroneLayerGroup.clearLayers();
 
-    // Si _isoc est présent, tracer chaque isochrone
-    if (Array.isArray(isocArray)) {
-        isocArray.forEach(isochrone => {
-            drawPolyline(isochrone, "blue"); // Couleur rouge pour les isochrones
-        });
-    }
+   // Si _isoc est présent, tracer chaque isochrone
+   if (Array.isArray(isocArray)) {
+      isocArray.forEach(isochrone => {
+         drawPolyline(isochrone, "blue"); // Couleur rouge pour les isochrones
+      });
+   }
 
    const track = route[boatName].track;
    gribName = route[boatName].grib;
 
-    // Convertir le format pour Windy (Leaflet)
+   // Convertir le format pour Windy (Leaflet)
    const latlngs = track.map(([lat, lon]) => [lat, lon]);
-   //console.log("Coordonnées de la route :", latlngs);
+  //console.log("Coordonnées de la route :", latlngs);
    console.log(JSON.stringify(latlngs, null, 2));  // Affichage propre avec indentation
 
    // Si exite, l'ancienne  route change de couleur
    if (window.routePolyline) {
       window.routePolyline.setStyle({ color: 'pink' }); 
    }
-   window.routePolyline = L.polyline(latlngs, {color: 'black'}).addTo(map);
+   window.routePolyline = L.polyline (latlngs, {color: 'black'}).addTo(map);
    if (marker)
       marker.remove ();
       marker = L.marker(track[index], {
@@ -170,19 +117,24 @@ function updateWindyMap(route, isocArray = []) {
 
 function request () {
    // Préparer les données
-   const timeStep = 3600;  // Remplace par la vraie valeur
-   const timeStart = 3600; // Remplace par la vraie valeur
-   //const waypoints = myWayPoints.map(wp => `${wp[0]},${wp[1]}`).join(";"); 
-   //const waypoints = myWayPoints.slice(1) // to remove first elemnt
    const waypoints = myWayPoints.slice(1) // to remove first element
       .map(wp => `${wp[0]},${wp[1]}`)
       .join(";");
 
-   //const boats = `${boatName}, ${myWayPoints[0][0]}, ${myWayPoints[0][1]}`; // name, lat, lon
-   const boats = `${boatName}, ${myWayPoints[0][0]}, ${myWayPoints[0][1]};${compet}`; // name, lat, lon
-   
+   // reqType selection
+   const reqType = (routeParam.iBoat == 0) ? REQ.RACE : (routeParam.nTry > 1) ? REQ.BEST_DEP: REQ.ROUTING; 
+   let boats;
+   if (reqType == REQ.RACE)
+      boats = competitors.map(competitor => competitor.join(", ")).join("; ") + ";";
+      // "pistache, 46, -3; jojo, 47, -4; titi, 48, -5;"
+   else
+      boats = competitors[routeParam.iBoat - 1].join(", ") + ";"; // "pistache, 47.0, -2.0"
+
+   console.log ("boats:" + boats);
+
+   routeParam.timeWindow = routeParam.nTry * routeParam.timeInterval;
    const epoch = Math.floor (routeParam.startTime.getTime () / 1000);
-   const requestBody = `type=${REQ_TYPE}&boat=${boats}&waypoints=${waypoints}&timeStep=${routeParam.isoStep}&timeStart=${epoch}&polar=pol/${polarName}&model=${routeParam.model}&forbid=${routeParam.forbid}&isoc=${routeParam.isoc}`;
+   const requestBody = `type=${reqType}&boat=${boats}&waypoints=${waypoints}&timeStep=${routeParam.isoStep}&timeStart=${epoch}&polar=pol/${polarName}&model=${routeParam.model}&forbid=${routeParam.forbid}&isoc=${routeParam.isoc}&timeWindow=${routeParam.timeWindow}&timeInterval=${routeParam.timeInterval}`;
 
    console.log ("request: " + requestBody);
    const spinnerOverlay = document.getElementById("spinnerOverlay");
@@ -190,7 +142,7 @@ function request () {
    // Afficher le spinner sur la carte
    spinnerOverlay.style.display = "flex";
 
-   fetch(apiUrl, {
+   fetch (apiUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded"
@@ -202,7 +154,6 @@ function request () {
       console.log(JSON.stringify(data, null, 2));  // Affichage propre avec indentation
       firstKey = Object.keys(data)[0]; // name of the key
       //console.log("REPORT:" + JSON.stringify(data._report, null, 2));
-      //printReport (data._report);
       if (firstKey.startsWith("_"))
          Swal.fire({
             title: "Warning",
@@ -211,7 +162,21 @@ function request () {
             confirmButtonText: "OK"
          });
       else {
-         displayComp (data ["_report"]);
+         switch (reqType) {
+         case REQ.RACE: 
+            displayComp (data ["_report"]);
+            break;
+         case REQ.BEST_DEP: 
+            let startEpoch = epoch;
+            displayBestTimeHistogram (data ["_bestTimeReport"], startEpoch);
+            break;
+         case REQ.ROUTING:
+            boatName = firstKey;
+            console.log ("boatName: " + boatName);
+            showRouteReport (data, boatName);
+            break;
+         default:;
+         }
          route = data;
          if ("_isoc" in data) {
             const isocArray = data["_isoc"];
@@ -296,7 +261,7 @@ function addPOI(lat, lon) {
 }
 
 // Fonction pour mettre à jour la ligne reliant les waypoints
-function updateMyWayPointsRoute() {
+function updateMyWayPointsRoute () {
     // Supprimer l'ancienne polyline si elle existe
    //if (pOr) pOr.remove ();
    //if (origin) origin.remove ();
@@ -377,11 +342,11 @@ const updateIconStyle = () => {
       icon.style.transform = `${
          icon.style.transform
       } rotateZ(${heading}deg)`;
-      icon.style.transformOrigin = 'center'
+      icon.style.transformOrigin = 'center';
    }
 };
 
-function move(firstTrack, n) {
+function move (firstTrack, n) {
    index += n;
    if (index >= firstTrack.length) {
       index = 0;
@@ -391,7 +356,7 @@ function move(firstTrack, n) {
    }
    let time = new Date(routeParam.startTime.getTime() + index * routeParam.isoStep * 1000);
    //let time = routeParam.epoch + index * routeParam.isoStep;
-   console.log ("index:" + index + " time: " + time); 
+   // console.log ("index:" + index + " time: " + time); 
    let newLatLng = firstTrack[index]; // New position
    marker.setLatLng(newLatLng);       // Move the mark
 
@@ -436,11 +401,11 @@ function playAnim() {
          index = 0;
       }
       let time = new Date(routeParam.startTime.getTime() + index * routeParam.isoStep * 1000);
-      let newLatLng = firstTrack[index]; // New position
-      marker.setLatLng(newLatLng);       // Move the mark
-      store.set ('timestamp', time);     // update Windy time
-      marker.setLatLng(firstTrack[index]); // Déplace le marqueur
-      // map.panTo(firstTrack[index]); // Centre la carte sur le marqueur
+      let newLatLng = firstTrack[index];     // New position
+      marker.setLatLng(newLatLng);           // Move the mark
+      store.set ('timestamp', time);         // update Windy time
+      marker.setLatLng(firstTrack[index]);   // Déplace le marqueur
+      // map.panTo(firstTrack[index]);       // Centre la carte sur le marqueur
       updateHeading (firstTrack);
       index += 1;
    }, 500); // Intervalle de mise à jour en ms
@@ -472,7 +437,8 @@ function updateInfo () {
    }
    const lastDate = new Date(routeParam.startTime.getTime() + n * routeParam.isoStep * 1000);
    document.getElementById("infoRoute").innerHTML = boatName + "    ⏱️Isoc Type Step: " + convertToHHMM (routeParam.isoStep);
-   document.getElementById("infoRoute").innerHTML += "    🚀Start Time: " + routeParam.startTime.toLocaleString() + "    🎯ETA: " + lastDate.toLocaleString ();
+   document.getElementById("infoRoute").innerHTML += "    🚀Start Time: " 
+      + routeParam.startTime.toLocaleString() + "    🎯ETA: " + lastDate.toLocaleString ();
    document.getElementById("infoRoute").innerHTML += "    ⏱️Duration: " + convertToHHMM (duration);
    document.getElementById("infoRoute").innerHTML += "    📏Distance: " + totDist;
    document.getElementById("infoRoute").innerHTML += "    ⛵Polar: " + routeParam.polar + "   " + rCubeInfo; 
@@ -501,8 +467,8 @@ function closeContextMenu() {
     }
 }
 
-// Création du menu contextuel avec un design moderne
-function showContextMenu(e) {
+// Création du menu contextuel 
+function showContextMenu (e) {
     //e.preventDefault();
     closeContextMenu(); // Ferme l'ancien menu si présent
 
@@ -559,13 +525,12 @@ windyInit (options, windyAPI => {
    map.fitBounds (bounds); // ajust le recentrage
 
    isochroneLayerGroup = L.layerGroup().addTo(map);
-   var popup = L.popup();
 
    // Associer l'événement contextmenu à la carte
-   map.on("contextmenu", showContextMenu);
+   map.on ("contextmenu", showContextMenu);
    //document.addEventListener("click", closeContextMenu);  // Fermer le menu sur clic ailleurs
 
-   map.on('mousemove', function (event) {
+   map.on ('mousemove', function (event) {
         let lat = event.latlng.lat; //
         let lon = event.latlng.lng; 
         document.getElementById('coords').textContent = toDMSString (lat, lon);
@@ -573,7 +538,7 @@ windyInit (options, windyAPI => {
    updateMyWayPointsRoute ();
    // Handle some events. We need to update the rotation of icons ideally each time
    // leaflet re-renders. them.
-   map.on('zoom', updateIconStyle);
-   map.on('zoomend', updateIconStyle);
-   map.on('viewreset', updateIconStyle);
+   map.on ('zoom', updateIconStyle);
+   map.on ('zoomend', updateIconStyle);
+   map.on ('viewreset', updateIconStyle);
 });

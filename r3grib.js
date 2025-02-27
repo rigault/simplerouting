@@ -1,3 +1,5 @@
+/* jshint esversion: 6 */
+
 /* display meta information about remote grib file */
 function gribInfo (gribName) {
     const formData = `type=5&grib=grib/${gribName}`;

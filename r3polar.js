@@ -1,4 +1,4 @@
-const DEFAULT_TWS = 15;
+/* jshint esversion: 6 */
 
 /* show polar info */
 function polarInfo(polarName) {
@@ -27,7 +27,6 @@ function polarInfo(polarName) {
 // dump polar table
 function showPolarTable(data) {
     let windSpeeds = data.array[0].slice(1).map(v => parseFloat(v)).filter(v => !isNaN(v));
-    let twaValues = data.array.slice(1).map(row => parseFloat(row[0])).filter(v => !isNaN(v));
 
     let tableHTML = "<table border='1' style='border-collapse: collapse; width: 100%; text-align: center;'>";
     tableHTML += "<tr style='font-weight: bold; background-color: #FFA500; color: white;'><th>TWA / TWS</th>";

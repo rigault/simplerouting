@@ -28,6 +28,8 @@
    <a href="#chap6">5. Fichier de configuration du serveur</a>
    <a href="#chap7">7. Scripts</a>
    <a href="#chap8">8. Code source</a>
+   <a href="#chap9">9. Chargement des Grib</a>
+
 
 <p></p>
 
@@ -88,6 +90,11 @@
 <div class="main">
 
 <h1 id="chap1">1. Introduction</h1>
+
+<p>Le serveur est essentiellement constitué du logiciel <code>rServer</code> qui gère une API REST pour le calcul cde routes.</p>
+<p>Il héberge aussi des pages statuques (html, css, js...) utiles à l'application. C'est donc aussi un petit serveur Web</p>
+<p>Un utilitaire <code>r3gribget</code> doit être lancé périodiquement pour récupérer les grib (NOAA, ECMWF). </p>
+
 <h1 id="chap2">2. Procédure d'installation coté serveur </h1>
 </p> De façon générale, l'installation du serveur suppose&nbsp;:</p>
 
@@ -135,13 +142,38 @@ Pour vérifier que la GLIB est bien installée, faire éventuellement&nbsp;
 pkg-config --modversion glib-2.0  pour vérifier
 </code>
 </pre>
-   <h3>wgrib2</h3>
-   <p>RCube utilise dans le script r3ecmf <code>wgrib2</code> pour extraire une région.<p>
+   <h3>CDO</h3>
+
+<p>CDO pour "Climate Data Operators" est un ensemble d'opérateurs en ligne de commande permettant de manipuler
+ des modèles météorologiques ou climatologique. Les formats de fichiers supportés sont entre 
+autres : GRIB 1/2. Il y a plus de 600 opérateurs disponibles.</p>
+
+<p>L'utilitaire <code>r3gribget</code> utilise CDO travers de deux opérateurs.</p>
+<ul>
+   <li>-sellonlatbox pour extraire une région, </li>
+   <li>-invertlat pour inverser les latitudes. </li>
+</ul>
+
+<p>Exemple&nbsp;:</p> 
+<code><pre>
+   cdo -sellonlatbox,-25.0,-1.0,20.0,50.0 interECMWF-000 extract.grib
+   cdo -invertlat extract.grib extract0.grib
+</pre></code>
+
+   <p>RCube l'utilise dans l'utilitaire <code>r3gribget</code> pour extraire une région.<p>
    <p> Si grib2 n'est pas installé, le téléchargement direct des fichiers ECMWF et ou Météo France n'est pas possible </p>
    <p> Le logiciel fonctionne avec la NOAA même sans wgrib2.</p>
-   <p>
-   <p>Pour l'installation, le script suivant est recommandé&nbsp;:</p>
-   <code>https://gist.github.com/wxguy/945d18af773c2208a33a5e0429a4b813/revisions</code>
+
+<p>Installation&nbsp;:</p>
+<pre><code>
+sudo apt install cdo
+</code></pre>
+<p>Vérification de l'installation&nbsp;:</p>
+<pre><code>
+cdo -V
+</code></pre>
+
+
 
       <h2>Construction du code</h2>
 
@@ -630,6 +662,30 @@ automatiser la récupération aux dates T, T+6h, T+12h, T+18h.</p>
          </tr>
       </tbody>
    </table>
+
+<h1 ="chap9">9. Chargement des GRIB</h1>
+
+<p>L'utilitaire <code>r3gribget</code> permet télécharger les fichiers Grib de la NOAA et de l'ECMWF.<p>
+
+<p>Synopsys&nbsp;: <code>
+<pre>
+r3gribget mode maxStep topLat leftLon bottomLat rightLon
+</pre></code>
+
+<ul>
+<li>mode&nbsp;: 1 pour NOAA, 2 pour ECMWF</li>
+<li>maxStep&nbsp; step maximal (384 pour NOAA)</li>
+<li>topLat, letLon, bottomLat, rightLon&nbsp;: Zone géographique</li>
+</ul>
+
+<p>Calcul du run (00Z, 06Z, 12Z, 18Z) automatique en fonction de l'heure UTC et d'un delay (constante dans le code).</p>
+
+<p>Création de fichiers temporaires .tmp</p>
+<p>le fichier résultant se trouve dans le répertoire Grib, créé si besoin.</p>
+
+<p>La compilation nécessite l'installation préalable de ECCODES (ECMWF) et de CDO.</p>
+
+<code>gcc -o r3gribget r3gribget.c -leccodes -lcurl `pkg-config --cflags --libs glib-2.0`</code>
 
 </div>
 <div class="notes">

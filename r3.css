@@ -54,6 +54,26 @@ header a:hover {
    margin-right: 5px;
 }
 
+/* bouton minimaliste pour options avancées dans boite routing launch */
+.small-button {
+    background: none;
+    border: none;
+    color: gray;
+    font-size: 12px;
+    cursor: pointer;
+    text-decoration: underline;
+    padding: 4px;
+}
+
+.small-button:hover {
+    color: black;
+}
+
+.hidden {
+    display: none;
+    transition: all 0.3s ease-in-out;
+}
+
 .footer {
    position: fixed;
    bottom: 0;
@@ -176,7 +196,7 @@ header a:hover {
 
 .modal-content button {
    margin-top: 30px; /*Ajoute de l'espace entre le formulaire et les boutons */
-   padding: 10px; Augmente la zone cliquable */
+   padding: 10px;    /*Augmente la zone cliquable */
 }
 
 /* Style du spinner */
