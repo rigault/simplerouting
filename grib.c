@@ -901,7 +901,12 @@ GString *gribToJson (const char *fileName) {
       g_string_append_printf (jString, "{}\n");
       return jString;
    }
-   if ((! readGribLists (gribName, &gZone)) || (! readGribParameters (gribName, &gZone))) {
+   if (! readGribLists (gribName, &gZone)) {
+      fprintf (stderr, "In gribToJson Error reading: %s\n", gribName);
+      g_string_append_printf (jString, "{}\n");
+      return jString;
+   }
+   if (! readGribParameters (gribName, &gZone)) {
       fprintf (stderr, "In gribToJson Error reading: %s\n", gribName);
       g_string_append_printf (jString, "{}\n");
       return jString;
@@ -912,7 +917,7 @@ GString *gribToJson (const char *fileName) {
       return jString;
    }
    for (size_t i = 0; i < N_METEO_ADMIN; i++) {// search name of center
-      if (meteoTab [i].id == zone.centreId) {
+      if (meteoTab [i].id == gZone.centreId) {
          g_strlcpy (centreName, meteoTab [i].name, sizeof (centreName));
          break;
       }
