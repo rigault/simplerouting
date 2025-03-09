@@ -98,8 +98,8 @@ static inline int findFirst (int nIsoc) {
    for (int i = 0; i < isoDesc [nIsoc].size; i++) {
       next = (i >= (isoDesc[nIsoc].size -1)) ? 0 : i + 1;
       // pythagore distance in degrees
-      d = hypot (isocArray [nIsoc * MAX_SIZE_ISOC + next].lat - isocArray [nIsoc * MAX_SIZE_ISOC + next].lat,
-                (isocArray [nIsoc * MAX_SIZE_ISOC + next].lon - isocArray [nIsoc * MAX_SIZE_ISOC + i].lon) * cos (DEG_TO_RAD * isocArray [nIsoc * MAX_SIZE_ISOC + next].lat));
+      d = hypot (isocArray [nIsoc * MAX_SIZE_ISOC + i].lat - isocArray [nIsoc * MAX_SIZE_ISOC + next].lat,
+                (isocArray [nIsoc * MAX_SIZE_ISOC + i].lon - isocArray [nIsoc * MAX_SIZE_ISOC + next].lon) * cos (DEG_TO_RAD * isocArray [nIsoc * MAX_SIZE_ISOC + next].lat));
       /* d = orthoDist (isocArray [nIsoc * MAX_SIZE_ISOC + i].lat, isocArray [nIsoc * MAX_SIZE_ISOC + i].lon, \
                     isocArray [nIsoc * MAX_SIZE_ISOC + next].lat, isocArray [nIsoc * MAX_SIZE_ISOC + next].lon);*/
       if (d > distMax) {
@@ -1339,11 +1339,11 @@ GString *isochronesToJson () {
    GString *jsonString = g_string_new ("[\n");
    Pp *newIsoc = NULL; // array of points
    if ((newIsoc = malloc (MAX_SIZE_ISOC * sizeof(Pp))) == NULL) {
-      fprintf (stderr, "In generateIsochronesJson: error in memory newIsoc allocation\n");
+      fprintf (stderr, "In isochronesToJson: error in memory newIsoc allocation\n");
       return NULL;
    }
    
-   for (int i = 0; i < nIsoc; i += MAX (1, par.stepIsocDisp)) {
+   for (int i = 0; i < nIsoc; i += 1) {
       g_string_append_printf (jsonString, "   [\n"); 
       index = isoDesc [i].first;
       for (int j = 0; j < isoDesc [i].size; j++) {
@@ -1364,33 +1364,50 @@ GString *isochronesToJson () {
 }
 
 /*! generate json description of track boats */
-static GString *routeToJson (SailRoute *route, int index, bool isoc) {
-   //GString *jString = g_string_new ("{\n");
+GString *routeToJson (SailRoute *route, int index, bool isoc) {
    GString *jString = g_string_new ("");
+   char strSail [MAX_SIZE_NAME];
    
-
    // current route
    if (route->n > 0) {
       int iComp = (route->competitorIndex < 0) ? 0 : route->competitorIndex;
       gchar *gribBaseName = g_path_get_basename (par.gribFileName);
       gchar *gribCurrentBaseName = g_path_get_basename (par.currentGribFileName);
 
-      g_string_append_printf (jString, "\"%s\": {\n\"heading\": %.0lf, \"rank\": %d, \"duration\":%d, \"totDist\":%.2lf, \n",
+      g_string_append_printf (jString, "\"%s\": {\n\"heading\": %.0lf, \"rank\": %d, \"duration\": %d, \"totDist\": %.2lf, \n",
          competitors.t[iComp].name, route->t [index].lCap, 0, (int) (route->duration * 3600), route->totDist);
 
-      g_string_append_printf (jString, "\"calculationTime\": %.4lf, ", route->calculationTime);
+      g_string_append_printf (jString, "\"isocTimeStep\": %.4lf,\n", route->isocTimeStep * 3600);
+      g_string_append_printf (jString, "\"calculationTime\": %.4lf,\n", route->calculationTime);
+      g_string_append_printf (jString, "\"destinationReached\": %s,\n", (route->destinationReached) ? "true" : "false");
+      g_string_append_printf (jString, "\"motorDuration\": %.2lf,\n", route->motorDuration);
+      g_string_append_printf (jString, "\"motorDist\": %.2lf, \"starboardDist\": %.2lf, \"portDist\": %.2lf,\n", route->motorDist, route->tribordDist, route->babordDist);
+      g_string_append_printf (jString, "\"nSailChange\": %d, \"nAmureChange\": %d,\n", route->nSailChange, route->nAmureChange);
+
+      g_string_append_printf (jString, "\"bottomLat\": %.2lf, \"leftLon\": %.2lf, \"topLat\": %.2lf, \"rightLon\": %.2lf,\n",
+         zone.latMin, zone.lonLeft, zone.latMax, zone.lonRight);
+ 
       g_string_append_printf (jString, "\"polar\": \"%s\", \"grib\": \"%s\", \"gribCurrent\": \"%s\", \"track\": [\n", 
          route->polarFileName, gribBaseName, gribCurrentBaseName);
       g_free (gribBaseName);
       g_free (gribCurrentBaseName);
 
       for (int i = 0; i < route->n; i++) {
-         g_string_append_printf (jString, "   [%.6f, %.6f],\n", route->t[i].lat, route->t[i].lon);
+         fSailName (route->t[i].sail, strSail, sizeof (strSail)),
+         g_string_append_printf (jString, "   [%.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, \"%s\", %s],\n", 
+            route->t[i].lat, route->t[i].lon,
+            route->t[i].sog, route->t[i].twd ,route->t[i].tws, 
+            route->t[i].g, route->t[i].w ,route->t[i].stamina, 
+            strSail, (route->t[i].motor) ? "true" : "false");
       }
       if (route->destinationReached)
          g_string_append_printf (jString, "   [%.6f, %.6f]\n", par.pDest.lat, par.pDest.lon);
       else
-         g_string_append_printf (jString, "   [%.6f, %.6f]\n", route->t[route->n - 1].lat, route->t[route->n - 1].lon); // no comma
+         g_string_append_printf (jString, "   [%.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, \"%s\", %s]\n", 
+            route->t[route->n - 1].lat, route->t[route->n - 1].lon, 
+            route->t[route->n - 1].sog, route->t[route->n - 1].twd ,route->t[route->n - 1].tws, 
+            route->t[route->n - 1].g, route->t[route->n - 1].w ,route->t[route->n - 1].stamina, 
+            strSail, (route->t[route->n - 1].motor) ? "true" : "false") ; // no comma
 
       g_string_append_printf (jString, "]\n}\n");
    }
@@ -1401,7 +1418,11 @@ static GString *routeToJson (SailRoute *route, int index, bool isoc) {
          g_string_free (isocString, TRUE);
       }
    }
-   //g_string_append_printf (jString, "}\n");
+   /*char buffer [MAX_SIZE_BUFFER] = "";
+   char footer [MAX_SIZE_LINE] = "";
+   routeToStr (route, buffer, MAX_SIZE_BUFFER, footer, sizeof (footer));
+   printf ("%s\n", buffer); 
+   */
    return jString;
 }
 
@@ -1506,6 +1527,7 @@ GString *bestTimeReportToJson (ChooseDeparture *chooseDeparture, bool isoc) {
 
    g_string_append_printf (res, "%s}\n", jString->str);
    g_string_free (jRoute, TRUE);
+
    return res;
 }
 

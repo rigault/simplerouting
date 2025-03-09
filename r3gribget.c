@@ -1,8 +1,9 @@
 /*! 
-   Download grib files from ECMWF or NOAA
-   see synopsys : <mode (1=NOAA, 2=ECMWF)> <maxStep> <topLat> <leftLon> <bottomLat> <rightLon>
+   Download grib files from ECMWF or NOAA, METEO FRANCE, METEO CONDULT
+   see synopsys : <mode> [<maxStep> <topLat> <leftLon> <bottomLat> <rightLon>]
+   only <mode> for METEO CONSULT (mode 5xy and 6xy)
    Compilation: gcc -o r3gribget r3gribget.c -leccodes -lcurl `pkg-config --cflags --libs glib-2.0`
-   calculate automatically the run depending on UTC tme and DELAY
+   calculate automatically the run depending on UTC time and estimated DELAY 
 */
 
 #include <glib.h>
@@ -10,39 +11,74 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdbool.h>
 #include <time.h>
-#include <glib.h>
 #include <curl/curl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
-#define GRIB_DIR           "grib"
-#define MAX_CMD            512
-#define MAX_STEP           384   
-#define MAX_SIZE_LINE      1024
-#define SYNOPSYS           "<mode (1=NOAA, 2=ECMWF)> <maxStep> <topLat> <leftLon> <bottomLat> <rightLon>"
+#define SYNOPSYS "<mode> [<maxStep> <topLat> <leftLon> <bottomLat> <rightLon>]\n\
+mode: 1 NOAA, 2 ECMWF, 3 ARPEGE, 4 AROME\n\
+for METEO CONSULT WIND: mode = 50y with no other parameter,\n\
+for METEO CONSULT CURRENT: mode = 60y with no other parameter.\n\
+Example: ./r3getgrib 1 96 60 -20 10 1 # NOAA request up to 96 hours, and specified region\n\
+Example: ./r3getgrib 1                # NOAA request with default values\n\
+Example: ./r3getgrib 502              # METEO CONSULT Request for Wind Centre_Atlantique"
+
+#define GRIB_DIR                    "grib"
+#define MAX_CMD                     512
+#define MAX_STEP                    384   
+#define MAX_SIZE_LINE               1024
+#define SHORTNAMES                  "10u/10v/gust"
 
 // NOAA parameters
-#define NOAA_ROOT          "R3_NOAA_Inter"
-#define NOAA_DELAY         4
-#define NOAA_BASE_URL      "https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl"
-#define MAX_STEP_NOAA      384 // 16 days
+#define NOAA_ROOT                   "R3_NOAA_Inter"
+#define NOAA_DELAY                  4 // hours
+#define NOAA_BASE_URL               "https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl"
+#define MAX_STEP_NOAA               384 // 16 days
 
 // ECMWF parameters
-#define ECMWF_ROOT         "R3_ECMWF_Inter"
-#define ECMWF_DELAY        10
-#define ECMWF_BASE_URL     "https://data.ecmwf.int/forecasts"
-#define ECMWF_SHORTNAMES   "10u/10v/gust"
-#define MAX_STEP_ECMWF      240 // 10 days
+#define ECMWF_ROOT                  "R3_ECMWF_Inter"
+#define ECMWF_DELAY                 10 // hours
+#define ECMWF_BASE_URL              "https://data.ecmwf.int/forecasts"
+#define MAX_STEP_ECMWF              240 // 10 days
 
-enum {NOAA = 1, ECMWF = 2};
+// METEO FRANCE parameters
+#define METEO_FRANCE_ROOT           "R3_METEO_FRANCE_Inter"
+#define METEO_FRANCE_DELAY          6
+#define METEO_FRANCE_BASE_URL       "https://object.data.gouv.fr/meteofrance-pnt/pnt/"
+#define MAX_STEP_AROME              48  // 2 days
+#define MAX_STEP_ARPEGE             102 // 4days &nd 12 hours
+
+// METEO CONSULT parameters
+#define N_METEO_CONSULT_WIND_URL    6
+#define N_METEO_CONSULT_CURRENT_URL 6
+#define METEO_CONSULT_WIND_DELAY    5  // nb hours after time run to get new grib
+#define METEO_CONSULT_CURRENT_DELAY 12
+#define METEO_CONSULT_ROOT_GRIB_URL "https://static1.mclcm.net/mc2020/int/cartes/marine/grib/"
+#define MAX_N_TRY                   3  // max try for Meteoconsult download
+
+enum {NOAA = 1, ECMWF = 2, ARPEGE = 3, AROME = 4, METEO_CONSULT_WIND = 5, METEO_CONSULT_CURRENT = 6};
+
+const char *METEO_CONSULT_WIND_URL [N_METEO_CONSULT_WIND_URL * 2] = {
+   "Atlantic North",   "%sMETEOCONSULT%02dZ_VENT_%02d%02d_Nord_Atlantique.grb",
+   "Atlantic Center",  "%sMETEOCONSULT%02dZ_VENT_%02d%02d_Centre_Atlantique.grb",
+   "Antilles",         "%sMETEOCONSULT%02dZ_VENT_%02d%02d_Antilles.grb",
+   "Europe",           "%sMETEOCONSULT%02dZ_VENT_%02d%02d_Europe.grb",
+   "Manche",           "%sMETEOCONSULT%02dZ_VENT_%02d%02d_Manche.grb",
+   "Gascogne",         "%sMETEOCONSULT%02dZ_VENT_%02d%02d_Gascogne.grb"
+};
+
+const char *METEO_CONSULT_CURRENT_URL [N_METEO_CONSULT_CURRENT_URL * 2] = {
+   "Atlantic North",    "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Nord_Atlantique.grb",
+   "Atlantic Center",   "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Centre_Atlantique.grb",
+   "Antilles",          "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Antilles.grb",
+   "Europe",            "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Europe.grb",
+   "Manche",            "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Manche.grb",
+   "Gascogne",          "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Gascogne.grb"
+};
 
 /*! remove all .tmp file with prefix */
-void removeAllTmpFilesWithPrefix (const char *prefix) {
+static void removeAllTmpFilesWithPrefix (const char *prefix) {
    char *directory = g_path_get_dirname (prefix); 
    char *base_prefix = g_path_get_basename (prefix);
 
@@ -161,9 +197,9 @@ static bool downloadFile (const char *url, const char *output) {
    return true;
 }
 
-/*! Get the latest NOAA or ECMWF run datetime */
-static void getRunDatetime (int mode, int delay, char *YYYYMMDD, char *HH) {
-   time_t now = time(NULL);
+/*! Get the latest run datetime according to mode (NOAA, etc) */
+static void getRunDatetime (int mode, int delay, char *yyyy, char *mm, char *dd, char *hh) {
+   time_t now = time (NULL);
    struct tm t = *gmtime(&now); // Copie locale de la structure tm
     
    // Apply delay
@@ -174,20 +210,23 @@ static void getRunDatetime (int mode, int delay, char *YYYYMMDD, char *HH) {
    t = *gmtime(&adj_time);
    
    // Calculate last run acailable
-   if (mode == ECMWF) 
+   if (mode == ECMWF || mode == METEO_CONSULT_CURRENT) 
       t.tm_hour = (t.tm_hour / 12) * 12; // ECMWF : 0 ou 12
    else 
       t.tm_hour = (t.tm_hour / 6) * 6;   // NOAA : 0, 6, 12 ou 18
 
-   strftime(YYYYMMDD, 9, "%Y%m%d", &t);
-   snprintf(HH, 3, "%02d", t.tm_hour);
+   snprintf (yyyy, 6, "%4d", (t.tm_year % 9999) + 1900);
+   snprintf (mm, 4, "%02d", (t.tm_mon % 12) + 1);
+   snprintf (dd, 4, "%02d", t.tm_mday % 32);
+   snprintf (hh, 4, "%02d", t.tm_hour % 24);
 }
 
 /*! Concatenate reduced GRIB files into a single file */
-static void concatenateGrib (const char *root, const char *prefix, const char *YYYYMMDD, const char *HH, int lastStep) {
+static void concatenateGrib (const char *root, const char *prefix, const char *yyyy, 
+                             const char *mm, const char *dd, const char *hh, int lastStep) {
    char finalFile [MAX_SIZE_LINE];
    char toRemove [MAX_SIZE_LINE];
-   snprintf (finalFile, sizeof(finalFile), "%s/R3_%s_%s_%s_%03d.grb", GRIB_DIR, prefix, YYYYMMDD, HH, lastStep);
+   snprintf (finalFile, sizeof(finalFile), "%s/R3_%s_%s%s%s_%sZ%03d.grb", GRIB_DIR, prefix, yyyy, mm, dd, hh, lastStep);
 
    printf ("🔄 Concatenating files into %s\n", finalFile);
    FILE *fOut = fopen (finalFile, "wb");
@@ -226,21 +265,21 @@ static void concatenateGrib (const char *root, const char *prefix, const char *Y
 
 /*! Process NOAA GRIB downloads with maxStep limit */
 static void fetchNoaa (int maxStep, double topLat, double leftLon, double bottomLat, double rightLon) {
-   char yyyymmdd [9], hh [3];
-   getRunDatetime (NOAA, NOAA_DELAY, yyyymmdd, hh);
+   char yyyy [5], mm [3], dd [3], hh [3];
+   getRunDatetime (NOAA, NOAA_DELAY, yyyy, mm, dd, hh);
    maxStep = MIN (maxStep, MAX_STEP_NOAA);
 
-   printf("📅 NOAA Run selected: %s/%s (Max Step: %d)\n", yyyymmdd, hh, maxStep);
+   printf("📅 NOAA Run selected: %s-%s-%s %sZ (Max Step: %d)\n", yyyy, mm, dd, hh, maxStep);
 
    for (int step = 0; step <= maxStep; step += (step >= 120 ? 3 : 1)) {
       char fileUrl [1024], outputFile [256], reducedFile [256];
 
       snprintf (fileUrl, sizeof (fileUrl),
-             "%s?file=gfs.t%sz.pgrb2.0p25.f%03d&dir=/gfs.%s/%s/atmos"
+             "%s?file=gfs.t%sz.pgrb2.0p25.f%03d&dir=/gfs.%s%s%s/%s/atmos"
              "&subregion=&toplat=%.2f&leftlon=%.2f&rightlon=%.2f&bottomlat=%.2f"
              "&var_GUST=on&var_UGRD=on&var_VGRD=on"
              "&lev_10_m_above_ground=on&lev_surface=on&lev_mean_sea_level=on",
-             NOAA_BASE_URL, hh, step, yyyymmdd, hh, topLat, leftLon, rightLon, bottomLat);
+             NOAA_BASE_URL, hh, step, yyyy, mm, dd, hh, topLat, leftLon, rightLon, bottomLat);
 
       snprintf (outputFile, sizeof (outputFile), "%s/%s_%03d.tmp", GRIB_DIR, NOAA_ROOT, step);
       snprintf (reducedFile, sizeof (reducedFile), "%s/%s_reduced_%03d.tmp", GRIB_DIR, NOAA_ROOT, step);
@@ -253,26 +292,24 @@ static void fetchNoaa (int maxStep, double topLat, double leftLon, double bottom
       }
       rename (outputFile, reducedFile);
    }
-   concatenateGrib (NOAA_ROOT, "NOAA",  yyyymmdd, hh, maxStep);
+   concatenateGrib (NOAA_ROOT, "NOAA",  yyyy, mm, dd, hh, maxStep);
 }
 
 /*! Process ECMWF GRIB downloads with maxStep limit */
 static void fetchEcmwf (int maxStep, double topLat, double leftLon, double bottomLat, double rightLon) {
-   char yyyymmdd [9], hh [3];
-   getRunDatetime (ECMWF, ECMWF_DELAY, yyyymmdd, hh);
+   char yyyy [5], mm [3], dd [3], hh [3];
+   getRunDatetime (ECMWF, ECMWF_DELAY, yyyy, mm, dd, hh);
 
    maxStep = MIN (maxStep, MAX_STEP_ECMWF);
 
-   printf ("📅 ECMWF Run selected: %s/%s (Max Step: %d)\n", yyyymmdd, hh, maxStep);
+   printf ("📅 ECMWF Run selected: %s-%s-%s %sZ (Max Step: %d)\n", yyyy, mm, dd, hh, maxStep);
 
    for (int step = 0; step <= maxStep; step += (step >= 144 ? 6 : 3)) {
       char fileUrl [1024], outputFile [256], reducedFile [256];
 
       snprintf(fileUrl, sizeof(fileUrl),
-             "%s/%s/%sz/ifs/0p25/oper/%4d%02d%02d%02d0000-%dh-oper-fc.grib2",
-             ECMWF_BASE_URL, yyyymmdd, hh,
-             atoi (yyyymmdd) / 10000, atoi (yyyymmdd) % 10000 / 100, atoi (yyyymmdd) % 100,
-             atoi (hh), step);
+             "%s/%s%s%s/%sz/ifs/0p25/oper/%s%s%s%s0000-%dh-oper-fc.grib2",
+             ECMWF_BASE_URL, yyyy, mm, dd, hh, yyyy, mm, dd, hh, step);
 
       snprintf(outputFile, sizeof (outputFile), "%s/%s_%03d.tmp", GRIB_DIR, ECMWF_ROOT, step);
       snprintf(reducedFile, sizeof (reducedFile), "%s/%s_reduced_%03d.tmp", GRIB_DIR, ECMWF_ROOT, step);
@@ -282,35 +319,161 @@ static void fetchEcmwf (int maxStep, double topLat, double leftLon, double botto
          maxStep = step;
          break;
       }
-      reduce (GRIB_DIR, outputFile, ECMWF_SHORTNAMES, topLat, leftLon, bottomLat, rightLon, reducedFile);
+      reduce (GRIB_DIR, outputFile, SHORTNAMES, topLat, leftLon, bottomLat, rightLon, reducedFile);
    }
-   concatenateGrib (ECMWF_ROOT, "ECMWF", yyyymmdd, hh, maxStep);
+   concatenateGrib (ECMWF_ROOT, "ECMWF", yyyy, mm, dd, hh, maxStep);
 }
 
-int main(int argc, char *argv[]) {
-   if (argc != 7) {
+/*! Process ARPEGE GRIB downloads with maxStep limit */
+static void fetchArpege (int maxStep, double topLat, double leftLon, double bottomLat, double rightLon) {
+   char yyyy [5], mm [3], dd [3], hh [3];
+   const int arpegeStepMin [] = {0, 25, 49, 73};
+   const int arpegeStepMax [] = {24, 48, 72, 102};
+   const int maxI = (maxStep >= 73) ? 4 :
+                   (maxStep >= 49) ? 3 : 
+                   (maxStep >= 25) ? 2 : 1; 
+
+   int resolution = 25; // 0.25 degree
+   
+   getRunDatetime (ARPEGE, METEO_FRANCE_DELAY, yyyy, mm, dd, hh);
+
+   maxStep = arpegeStepMax [maxI - 1];
+
+   printf ("📅 ARPEGE Run selected: %s-%s-%s/%s (Max Step: %d)\n", yyyy, mm, dd, hh, maxStep);
+
+   for (int i = 0; i < maxI; i += 1) {
+      char fileName [512], fileUrl [1024], outputFile [256], reducedFile [256];
+      int stepMin = arpegeStepMin [i];
+      int stepMax = arpegeStepMax [i];
+      snprintf (fileName, sizeof (fileName), "arpege__%03d__SP1__%03dH%03dH__%s-%s-%sT%s:00:00Z.grib2", resolution, stepMin, stepMax, yyyy, mm, dd, hh);
+      snprintf (fileUrl, sizeof (fileUrl), "%s%s-%s-%sT%s:00:00Z/arpege/%03d/SP1/%s", METEO_FRANCE_BASE_URL, yyyy, mm, dd, hh, resolution, fileName);
+
+      snprintf (outputFile, sizeof (outputFile), "%s/%s_%03d.tmp", GRIB_DIR, METEO_FRANCE_ROOT, i);
+      snprintf (reducedFile, sizeof (reducedFile), "%s/%s_reduced_%03d.tmp", GRIB_DIR, METEO_FRANCE_ROOT, i);
+
+      if (!downloadFile(fileUrl, outputFile)) {
+         printf("⚠️ Download failed at index %d, stopping further downloads.\n", i);
+         //maxI = i;
+         break;
+      }
+      reduce (GRIB_DIR, outputFile, SHORTNAMES, topLat, leftLon, bottomLat, rightLon, reducedFile);
+   }
+   concatenateGrib (METEO_FRANCE_ROOT, "ARPEGE", yyyy, mm, dd, hh, maxStep);
+}
+
+/*! Process AROME GRIB downloads with maxStep limit */
+static void fetchArome (int maxStep, double topLat, double leftLon, double bottomLat, double rightLon) {
+   char yyyy [5], mm [3], dd [3], hh [3];
+   int resolution = 1; // here this means 0.1 degree
+   getRunDatetime (AROME, METEO_FRANCE_DELAY, yyyy, mm, dd, hh);
+
+   maxStep = MIN (maxStep, MAX_STEP_AROME);
+
+   printf ("📅 AROME Run selected: %s-%s-%s/%s (Max Step: %d)\n", yyyy, mm, dd, hh, maxStep);
+
+   for (int step = 0; step <= maxStep; step += 1) {
+      char fileUrl [1024], outputFile [256], reducedFile [256];
+      snprintf(fileUrl, sizeof(fileUrl),
+             "%s%s-%s-%sT%s:00:00Z/arome/%03d/HP1/arome__%03d__HP1__%02dH__%s-%s-%sT%s:00:00Z.grib2",
+             METEO_FRANCE_BASE_URL, yyyy, mm, dd, hh, resolution, 
+             resolution, step, yyyy, mm, dd, hh);
+
+      snprintf(outputFile, sizeof (outputFile), "%s/%s_%03d.tmp", GRIB_DIR, METEO_FRANCE_ROOT, step);
+      snprintf(reducedFile, sizeof (reducedFile), "%s/%s_reduced_%03d.tmp", GRIB_DIR, METEO_FRANCE_ROOT, step);
+
+      if (!downloadFile (fileUrl, outputFile)) {
+         printf("⚠️ Download failed at step %d, stopping further downloads.\n", step);
+         maxStep = step;
+         break;
+      }
+      reduce (GRIB_DIR, outputFile, SHORTNAMES, topLat, leftLon, bottomLat, rightLon, reducedFile);
+   }
+   concatenateGrib (METEO_FRANCE_ROOT, "AROME", yyyy, mm, dd, hh, maxStep);
+}
+
+/*! Process METEOCONSULT Wind grib download */
+static void fetchMeteoConsult (int type, int region) {
+   char yyyy [5], mm [3], dd [3], hh [3], url [1024] = "";
+   char finalFile [MAX_SIZE_LINE];
+
+   int nTry = 0;
+   int delay = (type == METEO_CONSULT_WIND) ? METEO_CONSULT_WIND_DELAY : METEO_CONSULT_CURRENT_DELAY;
+   do {
+      getRunDatetime (type, delay, yyyy, mm, dd, hh);
+      int mmInt = atoi (mm);
+      int ddInt = atoi (dd);      
+      int hhInt = atoi (hh);
+
+      if (type == METEO_CONSULT_WIND)
+         snprintf (url, sizeof (url), METEO_CONSULT_WIND_URL [region *2 + 1], METEO_CONSULT_ROOT_GRIB_URL, hhInt, mmInt, ddInt);
+      else
+         snprintf (url, sizeof (url), METEO_CONSULT_CURRENT_URL [region *2 + 1], METEO_CONSULT_ROOT_GRIB_URL, hhInt, mmInt, ddInt);
+      printf ("url: %s\n", url);
+
+      char *baseName= g_path_get_basename (url);
+      snprintf (finalFile, sizeof(finalFile), "%s/R3_%s", GRIB_DIR, baseName);
+      printf ("finalFile: %s\n", finalFile);
+      g_free (baseName);
+
+      if (downloadFile (url, finalFile))
+         break; // success
+      else {
+         fprintf (stderr, "In fetchMeteoConsult Try Failed: %s\n", url); 
+         delay += 6; // try another time with 6 hour older run
+         nTry += 1;
+      }
+   } while (nTry < MAX_N_TRY);
+
+   if (nTry >=  MAX_N_TRY)
+      printf("⚠️ Download failed after: %d try\n", nTry);
+}
+
+int main (int argc, char *argv[]) {
+   double topLat = 60.0, leftLon = -80.0, bottomLat = -20.0, rightLon = 10.0; // default values
+   int maxStep = MAX_STEP;
+   gint64 start = g_get_monotonic_time (); 
+
+   if (argc != 7 && argc != 2) {
       fprintf (stderr, "Usage: %s %s\n", argv[0], SYNOPSYS);
       return EXIT_FAILURE;
    }
 
    int mode = atoi (argv[1]);
-   int maxStep = atoi (argv[2]);
-   double topLat = atof (argv[3]);
-   double leftLon = atof (argv[4]);
-   double bottomLat = atof (argv[5]);
-   double rightLon = atof (argv[6]);
+
+   if (argc != 2 && mode > 0 && mode < 5) {
+      maxStep = atoi (argv[2]);
+      topLat = atof (argv[3]);
+      leftLon = atof (argv[4]);
+      bottomLat = atof (argv[5]);
+      rightLon = atof (argv[6]);
+   }
 
    g_mkdir_with_parents (GRIB_DIR, 0755);
-
-   if (mode == 1)
-     fetchNoaa (maxStep, topLat, leftLon, bottomLat, rightLon);
-   else if (mode == 2)
-     fetchEcmwf (maxStep, topLat, leftLon, bottomLat, rightLon);
-   else {
-      fprintf (stderr, "Invalid mode: Use 1 for NOAA or 2 for ECMWF.\n");
+   switch (mode) {
+   case 1:
+      fetchNoaa (maxStep, topLat, leftLon, bottomLat, rightLon);
+      break;
+   case 2:
+      fetchEcmwf (maxStep, topLat, leftLon, bottomLat, rightLon);
+      break;
+   case 3:
+      fetchArpege (maxStep, topLat, leftLon, bottomLat, rightLon);
+      break;
+   case 4:;
+      fetchArome (maxStep, topLat, leftLon, bottomLat, rightLon);
+      break;
+   case 500: case 501: case 502: case 503: case 504: case 505:
+      fetchMeteoConsult (METEO_CONSULT_WIND, mode % 100);
+      break;
+   case 600: case 601: case 602: case 603: case 604: case 605:
+      fetchMeteoConsult (METEO_CONSULT_CURRENT, mode % 100);
+      break;
+   default:
+      fprintf (stderr, "Invalid mode: Use 1 for NOAA, 2 for ECMWF, 3 for ARPEGE, 4 for AROME, 5xy or 6xy for METEO_CONSULT.\n");
       return EXIT_FAILURE;
    }  
-   printf ("✅ Processing completed.\n");
+   double elapsed = (g_get_monotonic_time () - start) / 1e6; 
+   printf ("✅ Processing completed in: %.2lf seconds.\n", elapsed);
    return EXIT_SUCCESS;
 }
 

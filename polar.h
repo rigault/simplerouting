@@ -3,6 +3,7 @@ extern void    bestVmgBack (double tws, PolMat *mat, double *vmgAngle, double *v
 extern double  maxValInPol (const PolMat *mat);
 extern bool    readPolar (bool check, const char *fileName, PolMat *mat, char *errMessage, size_t maxLen);
 extern char    *polToStr (const PolMat *mat, char *str, size_t maxLen);
-extern GString *polToJson (const char*polarName);
+extern GString *polToJson (const char *fileName, const char *objName);
+extern GString *sailLegendToJson (const char *sailName [], const char *colorStr [], size_t len);
 
 

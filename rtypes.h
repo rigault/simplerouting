@@ -320,7 +320,7 @@ typedef struct {
    double w;      // waves height WW3 model
    double g;      // wind speed gust
    double twd;    // wind direction
-   double tws;    // wind speed un Knots
+   double tws;    // wind speed in Knots
 } SailPoint;
 
 /* Way point route description */
@@ -405,7 +405,6 @@ typedef struct {
    double constCurrentD;                     // the direction of cinstant current if used
    int jFactor;                              // factor for target point distance used in sectorOptimize
    int kFactor;                              // factor for target point distance used in sectorOptimize
-   int minPt;                                // min point per sector. See sectorOptimize
    int nSectors;                             // number of sector for optimization by sector
    char workingDir [MAX_SIZE_FILE_NAME];     // working directory
    char gribFileName [MAX_SIZE_FILE_NAME];   // name of grib file
@@ -488,7 +487,6 @@ typedef struct {
       bool open;
    } nmea [N_MAX_NMEA_PORTS];
    int nNmea;                                // number of ports activated
-   int serverPort;                           // for rserver
 } Par;
 
 /*! for point of interest management */

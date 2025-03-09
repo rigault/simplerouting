@@ -199,7 +199,7 @@ char *polToStr (const PolMat *mat, char *str, size_t maxLen) {
 }
 
 /*! write polar information in GString */
-GString *polToJson (const char *fileName) {
+GString *polToJson (const char *fileName, const char *objName) {
    char polarName [MAX_SIZE_FILE_NAME];
    char errMessage [MAX_SIZE_LINE];
    PolMat mat;
@@ -216,8 +216,8 @@ GString *polToJson (const char *fileName) {
       g_string_append_printf (jString, "{}\n");
       return jString;
    }
-   g_string_append_printf (jString, "{\"polarName\": \"%s\", \"nLine\": %d, \"nCol\":%d, \"max\":%.2lf, \"array\":\n[\n", 
-                           polarName, mat.nLine, mat.nCol, maxValInPol (&mat));
+   g_string_append_printf (jString, "{\"%s\": \"%s\", \"nLine\": %d, \"nCol\":%d, \"max\":%.2lf, \"array\":\n[\n", 
+                           objName, polarName, mat.nLine, mat.nCol, maxValInPol (&mat));
 
    for (int i = 0; i < mat.nLine ; i++) {
       g_string_append_printf (jString, "[");
@@ -225,6 +225,16 @@ GString *polToJson (const char *fileName) {
          g_string_append_printf (jString, "%.4f, ", mat.t [i][j]);
       }
       g_string_append_printf (jString, "%.4f]%s\n", mat.t [i][mat.nCol -1], (i < mat.nLine - 1) ? "," : "");
+   }
+   g_string_append_printf (jString, "]}\n");
+   return jString;
+}
+
+/*! write legend about sail in Gstring */
+GString *sailLegendToJson (const char *sailName [], const char *colorStr [], size_t len) {
+   GString *jString = g_string_new ("{\"legend\": [");
+   for (size_t i = 0; i < len; i += 1) {
+      g_string_append_printf (jString, "[\"%s\", \"%s\"]%s", sailName [i], colorStr [i], (i < len -1) ? "," : "");
    }
    g_string_append_printf (jString, "]}\n");
    return jString;

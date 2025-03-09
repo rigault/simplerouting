@@ -21,6 +21,7 @@ extern void    saveRoute (SailRoute *route);
 extern bool    exportRouteToGpx (const SailRoute *route, const gchar *filename);
 extern bool    dumpIsocToFile (const char *fileName);
 extern GString *isochronesToJson ();
+extern GString *routeToJson (SailRoute *route, int index, bool isoc);
 extern GString *allCompetitorsToJson (int n, bool isoc);
 extern GString *bestTimeReportToJson (ChooseDeparture *chooseDeparture, bool isoc);
 

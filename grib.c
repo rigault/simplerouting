@@ -555,7 +555,6 @@ static bool readGribLists (const char *fileName, Zone *zone) {
    char shortName [MAX_SIZE_SHORT_NAME];
    size_t lenName;
    bool found = false;
-   memset (zone, 0,  sizeof (Zone));
    // Message handle. Required in all the ecCodes calls acting on a message.
    codes_handle* h = NULL;
 
@@ -563,6 +562,7 @@ static bool readGribLists (const char *fileName, Zone *zone) {
        fprintf (stderr, "In readGribLists, ErrorUnable to open file %s\n", fileName);
        return false;
    }
+   memset (zone, 0,  sizeof (Zone));
 
    // Loop on all the messages in a file
    while ((h = codes_handle_new_from_file(0, f, PRODUCT_GRIB, &err)) != NULL) {
@@ -698,9 +698,7 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
    size_t lenName;
    const long GUST_GFS = 180;
    char str [MAX_SIZE_LINE];
-   memset (zone, 0,  sizeof (Zone));
    zone->wellDefined = false;
-
    if (! readGribLists (fileName, zone)) {
       return false;
    }

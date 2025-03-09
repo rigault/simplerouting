@@ -1175,7 +1175,6 @@ bool readParam (const char *fileName) {
          forbidZoneAdd (pLine, par.nForbidZone);
          par.nForbidZone += 1;
       }
-      else if (sscanf (pLine, "SERVER_PORT:%d", &par.serverPort) > 0);
       else if (sscanf (pLine, "SMTP_SERVER:%255s", par.smtpServer) > 0);
       else if (sscanf (pLine, "SMTP_USER_NAME:%255s", par.smtpUserName) > 0);
       else if (sscanf (pLine, "MAIL_PW:%255s", par.mailPw) > 0);
@@ -1325,7 +1324,6 @@ bool writeParam (const char *fileName, bool header, bool password) {
    fprintf (f, "WINDY_API_KEY:   %s\n", par.windyApiKey);
    fprintf (f, "GOOGLE_API_KEY:  %s\n", par.googleApiKey);
    fprintf (f, "WEBKIT:          %s\n", par.webkit);
-   fprintf (f, "SERVER_PORT:     %d\n", par.serverPort);
    fprintf (f, "SMTP_SERVER:     %s\n", par.smtpServer);
    fprintf (f, "SMTP_USER_NAME:  %s\n", par.smtpUserName);
    fprintf (f, "IMAP_SERVER:     %s\n", par.imapServer);
