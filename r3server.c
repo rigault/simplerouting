@@ -267,7 +267,7 @@ static const char* getCurrentDate () {
 }
 
 /*! log client Request */
-/bin/bash: ligne 1: q : commande introuvable
+static void logRequest (const char* fileName, const char *remote_addr, const char *user_agent, ClientRequest *client) {
    const char *date = getCurrentDate();
    FILE *logFile = fopen (fileName, "a");
    if (logFile == NULL) {
