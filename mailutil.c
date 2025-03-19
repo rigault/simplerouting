@@ -20,6 +20,28 @@ struct uploadStatus {
    size_t bytes_left;
 };
 
+/*! replace $ by sequence */
+char *dollarSubstitute (const char* str, char *res, size_t maxLen) {
+#ifdef _WIN32
+   g_strlcpy (res, str, maxLen); // no issue with $ with Windows 
+   return res;
+#else  
+   res [0] = '\0';
+   if (str == NULL) return NULL;
+   int len = 0;
+   for (size_t i = 0; (i < maxLen) && (str[i] != '\0'); ++i) {
+      if (str[i] == '$') {
+         res[len++] = '\\';
+         res[len++] = '$';
+      } else {
+         res[len++] = str[i];
+      }
+   }
+   res[len] = '\0';
+   return res;
+#endif
+}
+
 /*! callback function to send email content */
 static size_t payloadSource (void *ptr, size_t size, size_t nmemb, void *userp) {
    struct uploadStatus *upload_ctx = (struct uploadStatus *) userp;
@@ -56,6 +78,15 @@ static bool smtpSendPython (const char *toAddress, const char *object, const cha
    return true;
 }
 
+/*! Replace \n with \r\n */
+char *normalizeNewlines(const char *message) {
+   GRegex *regex = g_regex_new("\n", 0, 0, NULL);
+   char *normalized = g_regex_replace_literal(regex, message, -1, 0, "\r\n", 0, NULL);
+   g_regex_unref(regex);
+   return normalized; // Retourne une nouvelle chaîne allouée
+}
+
+
 /*! send using smtp mail with object and messsage to toAddress */
 bool smtpSend (const char *toAddress, const char *object, const char *message) {
    CURL *curl;
@@ -64,21 +95,30 @@ bool smtpSend (const char *toAddress, const char *object, const char *message) {
    if (par.python)
       return smtpSendPython (toAddress, object, message);
 
+   printf ("in Smtp: %s\n", message);
+
+   char *normalizedMessage = normalizeNewlines(message);
+   if (!normalizedMessage) {
+      return false;
+   }
+
    // email content building
-   size_t payload_size = strlen (toAddress) + strlen (par.smtpUserName) + strlen (object) + strlen (message) + 256;
-   char *payload = (char *) malloc (payload_size);
+   size_t payload_size = strlen(toAddress) + strlen(par.smtpUserName) + strlen(object) + strlen(normalizedMessage) + 256;
+   char *payload = g_malloc(payload_size);
    if (payload == NULL) {
       fprintf (stderr, "In smtpSend: Error malloc\n");
       return false;
    }
 
-   snprintf (payload, payload_size,
-            "To: %s\r\n"
-            "From: %s\r\n"
-            "Subject: %s\r\n"
-            "\r\n"
-            "%s\r\n",
-            toAddress, par.smtpUserName, object, message);
+   snprintf(payload, payload_size,
+         "To: %s\r\n"
+         "From: %s\r\n"
+         "Subject: %s\r\n"
+         "\r\n"
+         "%s\r\n",
+         toAddress, par.smtpUserName, object, normalizedMessage);
+
+   g_free(normalizedMessage);
 
    struct uploadStatus upload_ctx = {payload, strlen(payload)};
 

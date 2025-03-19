@@ -8,7 +8,6 @@
 
 #include <glib.h>
 #include <stdio.h>
-#include <float.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,7 +16,10 @@
 #include <fcntl.h>
 #include "rtypes.h"  
 #include "rutil.h"
-#include "aisgps.h"
+#include "r3util.h"
+#include <bits/termios-c_cflag.h>         // for CLOCAL, CREAD, CS8, CSIZE, CSTOPB
+#include <glib/gtypes.h>                  // for GINT_TO_POINTER, GPOINTER_TO_INT
+#include <time.h>                         // for time, tm, time_t, difftime, mktime
 
 #define AIS_BAUD_RATE_UNIX     B38400       // for AIS NMEA USB configuration Unix
 #define GPS_BAUD_RATE_UNIX     B9600        // for GPS NMEA USB configuration Unix
@@ -30,7 +32,6 @@
 #define SIZE_DATE_TIME        10            // Date and time in NMEA GPS frame
 #define MAX_SIZE_NMEA         1024          // for NMEA Frame buffer size
 
-MyGpsData my_gps_data; 
 GHashTable *aisTable;
 
 /*! value in NMEA GPS frame*/

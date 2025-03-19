@@ -1,4 +1,3 @@
-extern MyGpsData my_gps_data; 
 extern GHashTable *aisTable;
 
 extern bool aisTableInit (void);

@@ -457,9 +457,9 @@ typedef struct {
    int aisDisp;                              // AIS display
    int shpPointsDisp;                        // display points only for SHP files
    int stepIsocDisp;                         // display one isochrone over stepIsocDisp
-   int penalty0;                             // penalty in minutes for tack
-   int penalty1;                             // penalty in minutes fot Gybe
-   int penalty2;                             // penalty in minutes for sail change
+   int penalty0;                             // penalty in seconds for tack
+   int penalty1;                             // penalty in seconds fot Gybe
+   int penalty2;                             // penalty in seconds for sail change
    double motorSpeed;                        // motor speed if used
    double threshold;                         // threshold for motor use
    double nightEfficiency;                   // efficiency of team at night
@@ -473,6 +473,7 @@ typedef struct {
    int  python;                              // true if python script used for mail grib request
    char smtpServer [MAX_SIZE_NAME];          // SMTP server name
    char smtpUserName [MAX_SIZE_NAME];        // SMTP user name
+   char smtpTo [MAX_SIZE_NAME];              // SMTP destination for r3server
    char imapServer [MAX_SIZE_NAME];          // IMAP server name
    char imapUserName [MAX_SIZE_NAME];        // IMAP user name
    char imapMailBox [MAX_SIZE_NAME];         // IMAP mail box
@@ -487,6 +488,8 @@ typedef struct {
       bool open;
    } nmea [N_MAX_NMEA_PORTS];
    int nNmea;                                // number of ports activated
+   int withWaves;                            // true if waves are considered
+   int withCurrent;                          // true if current is  considered
 } Par;
 
 /*! for point of interest management */

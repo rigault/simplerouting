@@ -1,4 +1,4 @@
-long/*! compilation: gcc -c grib.c `pkg-config --cflags glib-2.0` */
+/*! compilation: gcc -c grib.c `pkg-config --cflags glib-2.0` */
 #include <glib.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,7 +10,7 @@ long/*! compilation: gcc -c grib.c `pkg-config --cflags glib-2.0` */
 #include <locale.h>
 #include "eccodes.h"
 #include "rtypes.h"
-#include "rutil.h"
+#include "r3util.h"
 #include "inline.h"
 #include <grib_api.h>  // for ProductKind
 
@@ -466,15 +466,6 @@ static bool findFlow (double lat, double lon, double t, double *rU, double *rV, 
 /*! use findflow to get wind and waves */
 void findWindGrib (double lat, double lon, double t, double *u, double *v, \
    double *gust, double *w, double *twd, double *tws ) {
-
-   /**twd = 0;
-   *tws = 5;
-   *w = 0;
-   *gust = 5;
-	*u = - KN_TO_MS * par.constWindTws * sin (DEG_TO_RAD * par.constWindTwd);
-	*v = - KN_TO_MS * par.constWindTws * cos (DEG_TO_RAD * par.constWindTwd);
-   return;*/
-
    double msl, prate;
    if (par.constWindTws != 0) {
       *twd = par.constWindTwd;
@@ -520,7 +511,6 @@ void findCurrentGrib (double lat, double lon, double t, double *uCurr,\
       *vCurr = -KN_TO_MS * par.constCurrentS * cos (DEG_TO_RAD * par.constCurrentD);
       *tcd = par.constCurrentD; // direction
       *tcs = par.constCurrentS; // speed
-
    }
    else {
       if (t <= currentZone.timeStamp [currentZone.nTimeStamp - 1]) {
@@ -531,7 +521,7 @@ void findCurrentGrib (double lat, double lon, double t, double *uCurr,\
    }
 }
 
-/*! Modify arrr with new value if not already in array. Return new array size*/
+/*! Modify array with new value if not already in array. Return new array size*/
 static long updateLong (long value, size_t n, size_t maxSize, long array []) {
    bool found = false;
    for (size_t i = 0; i < n; i++) {

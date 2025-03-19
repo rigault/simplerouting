@@ -34,13 +34,12 @@ static inline bool isInZone (double lat, double lon, Zone *zone) {
 
 /*! true wind direction */
 static inline double fTwd (double u, double v) {
-	double val = 180 + RAD_TO_DEG * atan2 (u, v);
-   return (val > 180) ? val - 360 : val;
+	double val = 180.0 + RAD_TO_DEG * atan2 (u, v);
+   return (val > 180.0) ? val - 3600 : val;
 }
 
 /*! true wind speed. cf Pythagore */
 static inline double fTws (double u, double v) {
-    //return MS_TO_KN * sqrt ((u * u) + (v * v));
     return MS_TO_KN * hypot (u, v);
 }
 
@@ -68,14 +67,12 @@ static inline double interpolate (double x, double x0, double x1, double fx0, do
 
 /*! return givry correction to apply to direct or loxodromic cap to get orthodromic cap  */
 static inline double givry (double lat1, double lon1, double lat2, double lon2) {
-   double theta = lon1 - lon2;
-   double latM = (lat1 + lat2) / 2;
-   return (theta/2) * sin (latM * DEG_TO_RAD);
+   return ((lon1 - lon2) / 2.0) * sin ((lat1 + lat2) / 2.0 * DEG_TO_RAD);
 }
 
 /*! return loxodromic cap from origin to destination */
 static inline double directCap (double lat1, double lon1, double lat2, double lon2) {
-   return RAD_TO_DEG * atan2 ((lon2 - lon1) * cos (DEG_TO_RAD * (lat1+lat2)/2), lat2 - lat1);
+   return RAD_TO_DEG * atan2 ((lon2 - lon1) * cos (DEG_TO_RAD * (lat1 + lat2) / 2.0), lat2 - lat1);
 }
 
 /*! return initial orthodromic cap from origin to destination */
@@ -84,15 +81,15 @@ static inline double orthoCap (double lat1, double lon1, double lat2, double lon
 }
 
 /*! return initial orthodromic cap from origin to destination, no givry correction */
-static inline double otherOrthoCap (double lat1, double lon1, double lat2, double lon2) {
-    lat1 = DEG_TO_RAD * lat1;
-    lat2 = DEG_TO_RAD * lat2;
-    double delta_lon = DEG_TO_RAD * (lon2 - lon1);
+static inline double orthoCap2 (double lat1, double lon1, double lat2, double lon2) {
+    lat1 *= DEG_TO_RAD;
+    lat2 *= DEG_TO_RAD;
+    double delta_lon = (lon2 - lon1) * DEG_TO_RAD;
 
     double y = sin(delta_lon) * cos(lat2);
     double x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(delta_lon);
-    double cap = RAD_TO_DEG * atan2(y, x);
-    return fmod (cap + 360.0, 360.0);
+    
+    return fmod(RAD_TO_DEG * atan2(y, x) + 360.0, 360.0);
 }
 
 /*! return loxodromic distance in nautical miles from origin to destination */
@@ -126,77 +123,132 @@ static inline double loxoDist (double lat1, double lon1, double lat2, double lon
    // return sqrt (delta_lat * delta_lat + (q * delta_lon) * (q * delta_lon)) * EARTH_RADIUS;
 }
 
-
 /*! return orthodomic distance in nautical miles from origin to destination*/
 static inline double orthoDist (double lat1, double lon1, double lat2, double lon2) {
-   double theta = lon1 - lon2;
-   double distRad = acos (
-      sin (lat1 * DEG_TO_RAD) * sin (lat2 * DEG_TO_RAD) + 
-      cos (lat1 * DEG_TO_RAD) * cos (lat2 * DEG_TO_RAD) * cos (theta * DEG_TO_RAD)
-   );
-   return fabs (60 * RAD_TO_DEG * distRad);
+    lat1 *= DEG_TO_RAD;
+    lat2 *= DEG_TO_RAD;
+    double theta = (lon1 - lon2) * DEG_TO_RAD;
+
+    double distRad = acos(sin(lat1) * sin(lat2) + cos(lat1) * cos(lat2) * cos(theta));
+
+    return 60.0 * RAD_TO_DEG * distRad;
+}
+
+
+/*! return orthodomic distance in nautical miles from origin to destinationi, Haversine formula
+   time consuming */
+static inline double orthoDist2 (double lat1, double lon1, double lat2, double lon2) {
+    lat1 *= DEG_TO_RAD;
+    lat2 *= DEG_TO_RAD;
+    double dLat = lat2 - lat1;
+    double dLon = (lon2 - lon1) * DEG_TO_RAD;
+
+    double a = sin(dLat / 2) * sin(dLat / 2) + cos(lat1) * cos(lat2) * sin(dLon / 2) * sin(dLon / 2);
+    double c = 2 * atan2(sqrt(a), sqrt(1 - a));
+
+    return 60.0 * RAD_TO_DEG * c;
 }
 
 /*! find in polar boat speed or wave coeff */
-static inline double findPolar (double twa, double w, PolMat mat) {
+static inline double oldFindPolar (double twa, double w, const PolMat *mat) {
    int l, c, lInf, cInf, lSup, cSup;
    if (twa > 180.0) twa = 360.0 - twa;
    else if (twa < 0.0) twa = -twa;
-   for (l = 1; l < mat.nLine; l++) 
-      if (mat.t [l][0] > twa) break;
-   lSup = (l < mat.nLine - 1) ? l : mat.nLine - 1;
+
+   for (l = 1; l < mat->nLine; l++) 
+      if (mat->t [l][0] > twa) break;
+
+   lSup = (l < mat->nLine - 1) ? l : mat->nLine - 1;
    lInf = (l == 1) ? 1 : l - 1;
-   for (c = 1; c < mat.nCol; c++) 
-      if (mat.t [0][c] > w) break;
-   cSup = (c < mat.nCol - 1) ? c : mat.nCol - 1;
+
+   for (c = 1; c < mat->nCol; c++) 
+      if (mat->t [0][c] > w) break;
+
+   cSup = (c < mat->nCol - 1) ? c : mat->nCol - 1;
    cInf = (c == 1) ? 1 : c - 1;
-   double s0 = interpolate (twa, mat.t [lInf][0], mat.t [lSup][0], mat.t [lInf][cInf], mat.t [lSup][cInf]);
-   double s1 = interpolate (twa, mat.t [lInf][0], mat.t [lSup][0], mat.t [lInf][cSup], mat.t [lSup][cSup]);
-   return interpolate (w, mat.t [0][cInf], mat.t [0][cSup], s0, s1);
+
+   double lInf0 = mat->t [lInf][0];
+   double lSup0 = mat->t [lSup][0];
+   
+   double s0 = interpolate (twa, lInf0, lSup0, mat->t [lInf][cInf], mat->t [lSup][cInf]);
+   double s1 = interpolate (twa, lInf0, lSup0, mat->t [lInf][cSup], mat->t [lSup][cSup]);
+   return interpolate (w, mat->t [0][cInf], mat->t [0][cSup], s0, s1);
+}
+
+/*! dichotomic search */
+static inline int binarySearch (const double *arr, int size, double val) {
+   int low = 1, high = size; // ✅ Inclure `size` pour être cohérent avec la boucle for
+   while (low < high) {
+      int mid = (low + high) / 2;
+      if (arr [mid] == val) 
+         return mid + 1;
+      if (arr[mid] > val) 
+         high = mid;  // ✅ On cherche le premier élément strictement > val
+      else 
+         low = mid + 1;
+   }
+   return low;  // ✅ `low` est maintenant le premier indice où `arr[low] > val`
+}
+
+/*! find in polar boat speed or wave coeff and sail number if sailMat != NULL */
+static inline double findPolar (double twa, double w, const PolMat *mat, const PolMat *sailMat, int *sail) {
+   const int nLine = mat->nLine;   // local copy for perf
+   const int nCol = mat->nCol;  
+   int l, c, lInf, cInf, lSup, cSup;
+   double s0, s1;
+   int bestL, bestC; // for sail
+
+   if (twa > 180.0) twa = 360.0 - twa;
+   else if (twa < 0.0) twa = -twa;
+
+   for (l = 1; l < nLine; l++) {
+      if (mat->t [l][0] > twa) break;
+   }
+   lSup = (l < nLine - 1) ? l : nLine - 1;
+   lInf = (l == 1) ? 1 : l - 1;
+   
+   c = binarySearch (&mat->t [0][0], nCol - 1, w);
+   //printf ("c = %d   ", c); 
+   //for (c = 1; c < nCol; c++) {
+     // if (mat->t [0][c] > w) break;
+   //}
+   //printf ("c = %d\n", c);
+   cSup = (c < nCol - 1) ? c : nCol - 1;
+   cInf = (c == 1) ? 1 : c - 1;
+
+   // sail
+   if (sailMat != NULL && sailMat->nLine == nLine && sailMat->nCol == nCol) { // sail requested
+      bestL = ((twa - mat->t [lInf][0]) < (mat->t [lInf][0] - twa)) ? lInf : lSup; // for sail
+      bestC = ((w - mat->t [0][cInf]) < (mat->t [0][cSup] - twa)) ? cInf : cSup; // for sail
+      *sail = sailMat->t [bestL][bestC]; // sail found
+   }
+   else *sail = 0;
+
+   double lInf0 = mat->t [lInf][0];
+   double lSup0 = mat->t [lSup][0];
+   double invRangeL = 1.0 / (lSup0 - lInf0);
+
+   if (lSup0  == lInf0) s0 = s1 = mat->t [lInf][cInf];
+   else {
+      s0 = mat->t [lInf][cInf] + (twa - lInf0) * (mat->t [lSup][cInf] - mat->t [lInf][cInf]) * invRangeL;
+      s1 = mat->t [lInf][cSup] + (twa - lInf0) * (mat->t [lSup][cSup] - mat->t [lInf][cSup]) * invRangeL;
+   }
+   if (mat->t [0][cInf] == mat->t [0][cSup]) return s0;
+   return s0 + (w - mat->t [0][cInf]) * (s1 - s0) / (mat->t [0][cSup] - mat->t [0][cInf]);
 }
 
 /*! find in polar boat closest int value without interpolation, for Sail identification */
-static inline int closestInPolar (double twa, double w, PolMat mat) {
-   const double epsilon = 0.01;
-   int bestL = 0, bestC = 0;
-   double dist = 0.0, bestDist = HUGE_VAL;
-   if (mat.nLine == 0 || mat.nCol == 0)
-      return 0;
-   if (twa > 180.0) twa = 360.0 - twa;
-   else if (twa < 0.0) twa = -twa;
-   for (int l = 1; l < mat.nLine; l++) {
-      dist = fabs (mat.t [l][0] - twa);
-      if (dist < bestDist) {
-         bestL = l;
-         bestDist = dist;
-      }
-   }  
-   dist = 0.0;
-   bestDist = HUGE_VAL;
-   for (int c = 1; c < mat.nCol; c++) {
-      dist = fabs (mat.t [0][c] - w);
-      if (dist < bestDist) {
-         bestC = c;
-         bestDist = dist;
-      }
-   }  
-   // printf ("bestL = %d, bestC = %d\n", bestL, bestC);
-   //adjust in case low wind
-   while ((mat.t [bestL][bestC] < epsilon) && (bestC < mat.nCol))
-      bestC += 1;
-   return (bestC < mat.nCol) ? mat.t [bestL][bestC] : 0;
-}
-
 /*! return max speed of boat at tws for all twa */
-static inline double maxSpeedInPolarAt (double tws, const PolMat *mat) {
+static inline double maxSpeedInPolarAt(double tws, const PolMat *mat) {
    double max = 0.0;
    double speed;
-   for (int i = 1; i < mat->nLine; i++) {
-      speed = findPolar (mat->t [i][0], tws, *mat);
+   int sail;
+   const int n = mat->nLine; // local storage
+
+   for (int i = 1; i < n; i++) {
+      speed = findPolar (mat->t[i][0], tws, mat, NULL, &sail);
       if (speed > max) max = speed;
    }
    return max;
 }
-
-
 

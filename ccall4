@@ -1,8 +1,8 @@
 #!/bin/bash
 CFLAGS="-Wall -Wextra -Wpedantic -Wformat=2 -Wwrite-strings -Wredundant-decls -Wmissing-include-dirs -Wnested-externs -std=c11 -O2"
 
-gcc $CFLAGS -c engine.c `pkg-config --cflags glib-2.0`
-gcc $CFLAGS -c option.c `pkg-config --cflags glib-2.0`
+gcc $CFLAGS -c -O3 engine.c `pkg-config --cflags glib-2.0`
+gcc $CFLAGS -c -O3 option.c `pkg-config --cflags glib-2.0`
 gcc $CFLAGS -c aisgps.c `pkg-config --cflags glib-2.0`
 gcc $CFLAGS -c grib.c `pkg-config --cflags glib-2.0`
 gcc $CFLAGS -c polar.c `pkg-config --cflags glib-2.0`
@@ -10,6 +10,7 @@ gcc $CFLAGS -c mailutil.c `pkg-config --cflags glib-2.0`
 gcc $CFLAGS -c dashboardVR.c `pkg-config --cflags gtk4`
 gcc $CFLAGS -c displaytext.c `pkg-config --cflags gtk4`
 gcc $CFLAGS -c rshputil.c 
+gcc $CFLAGS -c r3util.c `pkg-config --cflags glib-2.0` 
 gcc $CFLAGS -Wno-format-nonliteral -c rutil.c `pkg-config --cflags glib-2.0` 
 
 #gcc -c show4.c `pkg-config --cflags gtk4`
@@ -19,7 +20,7 @@ gcc $CFLAGS -Wno-pedantic -Wno-unused-parameter -Wno-stringop-truncation -c show
 #gcc -c show4.c `pkg-config --cflags gtk4` $(pkg-config --cflags webkit2gtk-4.1)
 
 #gcc show4.o option.o rutil.o engine.o -o routing -lcurl -lgps -lshp -leccodes -lm $(pkg-config --cflags --libs webkit2gtk-4.1) `pkg-config --cflags --libs gtk4`
-gcc show4.o option.o rutil.o grib.o polar.o engine.o aisgps.o mailutil.o editor.o dashboardVR.o displaytext.o rshputil.o -o routing -std=c11 -lcurl -lshp -leccodes -lm `pkg-config --cflags --libs gtk4 gtksourceview-5`
+gcc show4.o option.o r3util.o rutil.o grib.o polar.o engine.o aisgps.o mailutil.o editor.o dashboardVR.o displaytext.o rshputil.o -o routing -std=c11 -lcurl -lshp -leccodes -lm `pkg-config --cflags --libs gtk4 gtksourceview-5`
 # -lnova required if libnova used
 rm -f *.o
 mv routing ../.

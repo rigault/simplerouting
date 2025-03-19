@@ -34,6 +34,7 @@
 // #include <webkit2/webkit2.h>
 #include "shapefil.h"
 #include "rtypes.h"
+#include "r3util.h"
 #include "rutil.h"
 #include "grib.h"
 #include "polar.h"
@@ -1544,6 +1545,7 @@ static void focusOnPointInRoute (cairo_t *cr, SailRoute *route)  {
    char sInfoRoute [MAX_SIZE_LINE] = "";
    int i;
    double lat, lon;
+   struct tm tm0 = gribDateToTm (zone.dataDate [0], zone.dataTime [0] / 100);
    if (route->n == 0) {
       gtk_label_set_text (GTK_LABEL(labelInfoRoute), sInfoRoute);
       return;
@@ -1579,7 +1581,7 @@ static void focusOnPointInRoute (cairo_t *cr, SailRoute *route)  {
             (int) (route->t[i].twd + 360) % 360,\
             twa, route->t[i].tws,\
             MS_TO_KN * route->t[i].g, route->t[i].w,\
-            (isDayLight (route->t[i].time, lat, lon)) ? "Day" : "Night");
+            (isDayLight (&tm0, route->t[i].time, lat, lon)) ? "Day" : "Night");
    }
    // showUnicode (cr, BOAT_UNICODE, getX (lon), getY (lat) - 20);
    if (i >= 0) {
@@ -2345,8 +2347,9 @@ static void getPolarXYbyValue (int type, int l, double w, double width, \
    double height, double radiusFactor, double *x, double *y) {
 
    PolMat *ptMat = (type == WAVE_POLAR) ? &wavePolMat : &polMat; 
+   int sail;
    double angle = (90.0 - ptMat->t [l][0]) * DEG_TO_RAD;  // convert to Radius
-   double val = findPolar (ptMat->t [l][0], w, *ptMat);
+   double val = findPolar (ptMat->t [l][0], w, ptMat, NULL, &sail);
    double radius = val * radiusFactor;
    *x = width / 2.0 + radius * cos(angle);
    *y = height / 2.0 - radius * sin(angle);
@@ -2673,14 +2676,14 @@ static gboolean onPolarMotionEvent (GtkEventControllerMotion *controller, double
    double twa = round (RAD_TO_DEG * atan2 (x - polarCenterX, polarCenterY - y));
    char *str;
    char strSail [MAX_SIZE_NAME] = "";            
-   double val = findPolar (twa, selectedTws, *ptMat);
+   int sail;
+   double val = findPolar (twa, selectedTws, ptMat, &sailPolMat, &sail);
 
    if (polarType == WAVE_POLAR) {
       str = g_strdup_printf ("TWS: %7.2lf Kn, TWA: %7.2lf°, Adjust: %7.2lf%%", selectedTws, twa, val);
    }
-   else { 
+   else {
       if ((sailPolMat.nCol != 0) && (sailPolMat.nLine != 0)) { // sail information exist
-         int sail = closestInPolar (twa, selectedTws, sailPolMat);   
          fSailName (sail, strSail, sizeof (strSail));
          str = g_strdup_printf ("TWS: %7.2lf Kn, TWA: %7.2lf°, Speed: %7.2lf Kn,    %s", selectedTws, twa, val, strSail);
       }
@@ -5790,7 +5793,7 @@ static void cbScenarioEdit () {
    readParam (parameterFileName);
    if (par.mostRecentGrib) {                     // most recent grib will replace existing grib
       snprintf (directory, sizeof (directory), "%sgrib/", par.workingDir); 
-      mostRecentFile (directory, ".gr", par.gribFileName, sizeof (par.gribFileName));
+      mostRecentFile (directory, ".gr", "", par.gribFileName, sizeof (par.gribFileName));
    }
    initScenario ();
    destroySurface ();
@@ -6150,7 +6153,7 @@ static void virtualRegDashboardImport () {
    char directory [MAX_SIZE_DIR_NAME];
 
    snprintf (directory, sizeof (directory), "%sVRdashboard/", par.workingDir); 
-   if (! mostRecentFile (directory, ".csv", fileName, sizeof (fileName))) { // most recent csv file found
+   if (! mostRecentFile (directory, ".csv", "", fileName, sizeof (fileName))) { // most recent csv file found
       infoMessage ("No Virtual Regatta dashboard file found", GTK_MESSAGE_WARNING);
       return;
    }
@@ -6545,19 +6548,19 @@ static void change () {
 
    // Create penalty
    labelCreate (tabParam, "Tack",                     0, 5);
-   GtkWidget *spinPenalty0 = gtk_spin_button_new_with_range (0, 60, 1);
+   GtkWidget *spinPenalty0 = gtk_spin_button_new_with_range (0, 3600, 1); // seconds
    gtk_spin_button_set_value (GTK_SPIN_BUTTON(spinPenalty0), par.penalty0);
    gtk_grid_attach(GTK_GRID (tabParam), spinPenalty0, 1, 5, 1, 1);
    g_signal_connect (spinPenalty0, "value-changed", G_CALLBACK (intSpinUpdate), &par.penalty0);
 
    labelCreate (tabParam, "Gybe",                     0, 6);
-   GtkWidget *spinPenalty1 = gtk_spin_button_new_with_range (0, 60, 1);
+   GtkWidget *spinPenalty1 = gtk_spin_button_new_with_range (0, 3600, 1); // seconds
    gtk_spin_button_set_value (GTK_SPIN_BUTTON (spinPenalty1), par.penalty1);
    gtk_grid_attach(GTK_GRID (tabParam), spinPenalty1, 1, 6, 1, 1);
    g_signal_connect (spinPenalty1, "value-changed", G_CALLBACK (intSpinUpdate), &par.penalty1);
 
    labelCreate (tabParam, "Sail Change",              0, 7);
-   GtkWidget *spinPenalty2 = gtk_spin_button_new_with_range (0, 60, 1);
+   GtkWidget *spinPenalty2 = gtk_spin_button_new_with_range (0, 3600, 1); // seconds
    gtk_spin_button_set_value (GTK_SPIN_BUTTON (spinPenalty2), par.penalty2);
    gtk_grid_attach(GTK_GRID (tabParam), spinPenalty2, 1, 7, 1, 1);
    g_signal_connect (spinPenalty2, "value-changed", G_CALLBACK (intSpinUpdate), &par.penalty2);
@@ -8198,7 +8201,7 @@ int main (int argc, char *argv[]) {
    
    if (par.mostRecentGrib) {                     // most recent grib will replace existing grib
       snprintf (directory, sizeof (directory), "%sgrib/", par.workingDir); 
-      mostRecentFile (directory, ".gr", par.gribFileName, sizeof (par.gribFileName));
+      mostRecentFile (directory, ".gr", "", par.gribFileName, sizeof (par.gribFileName));
    }
    initScenario ();
 

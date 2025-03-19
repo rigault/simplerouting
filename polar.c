@@ -8,7 +8,7 @@
 #include <locale.h>
 #include "rtypes.h"
 #include "inline.h"
-#include "rutil.h"
+#include "r3util.h"
 
 /* str to double accepting both . or , as decimal separator */
 static bool strtodNew (const char *str, double *v) {
@@ -153,10 +153,11 @@ double maxValInPol (const PolMat *mat) {
 /*! return VMG: angle and speed at TWS : pres */
 void bestVmg (double tws, PolMat *mat, double *vmgAngle, double *vmgSpeed) {
    *vmgSpeed = -1;
+   int bidon;
    double vmg;
    for (int i = 1; i < mat->nLine; i++) {
       if (mat->t [i][0] > 90) break; // useless over 90°
-      vmg = findPolar (mat->t [i][0], tws, *mat) * cos (DEG_TO_RAD * mat->t [i][0]);
+      vmg = findPolar (mat->t [i][0], tws, mat, NULL, &bidon) * cos (DEG_TO_RAD * mat->t [i][0]);
       if (vmg > *vmgSpeed) {
          *vmgSpeed = vmg;
          *vmgAngle = mat->t [i][0];
@@ -167,10 +168,11 @@ void bestVmg (double tws, PolMat *mat, double *vmgAngle, double *vmgSpeed) {
 /*! return VMG back: angle and speed at TWS : vent arriere */
 void bestVmgBack (double tws, PolMat *mat, double *vmgAngle, double *vmgSpeed) {
    *vmgSpeed = -1;
+   int bidon;
    double vmg;
    for (int i = 1; i < mat->nLine; i++) {
       if (mat->t [i][0] < 90) continue; // useless under  90° for Vmg Back
-      vmg = fabs (findPolar (mat->t [i][0], tws, *mat) * cos (DEG_TO_RAD * mat->t [i][0]));
+      vmg = fabs (findPolar (mat->t [i][0], tws, mat, NULL, &bidon) * cos (DEG_TO_RAD * mat->t [i][0]));
       if (vmg > *vmgSpeed) {
          *vmgSpeed = vmg;
          *vmgAngle = mat->t [i][0];
@@ -198,7 +200,7 @@ char *polToStr (const PolMat *mat, char *str, size_t maxLen) {
    return str;
 }
 
-/*! write polar information in GString */
+/*! write polar information in GString Json format */
 GString *polToJson (const char *fileName, const char *objName) {
    char polarName [MAX_SIZE_FILE_NAME];
    char errMessage [MAX_SIZE_LINE];
@@ -230,7 +232,7 @@ GString *polToJson (const char *fileName, const char *objName) {
    return jString;
 }
 
-/*! write legend about sail in Gstring */
+/*! write legend about sail in Gstring Json format */
 GString *sailLegendToJson (const char *sailName [], const char *colorStr [], size_t len) {
    GString *jString = g_string_new ("{\"legend\": [");
    for (size_t i = 0; i < len; i += 1) {

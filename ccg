@@ -1,0 +1,10 @@
+#!/bin/bash
+CFLAGS="-Wall -Wextra -Wpedantic -Wformat=2 -Wwrite-strings -Wredundant-decls -Wmissing-include-dirs -Wnested-externs -O2 -Wno-format-nonliteral"
+gcc $CFLAGS -o r3gribget r3gribget.c -lcurl `pkg-config --cflags --libs glib-2.0`
+rm -f *.o
+mv r3gribget ../.
+
+
+
+
+

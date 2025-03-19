@@ -2,30 +2,20 @@
    compilation: gcc -c dashboardVR.c `pkg-config --cflags glib-2.0` 
 :*/
 #include <gtk/gtk.h>
-#include <float.h>   
-#include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
+#include <time.h>
 #include <math.h>
 #include "rtypes.h"
+#include "r3util.h"
 #include "rutil.h"
 
-#define MAX_N_SHIP_TYPE          2
 #define MAX_STAMINA_MANOEUVRE    3
 #define MAX_TWS_STAMINA          30
 #define MAX_ENERGY_STAMINA       100
 #define MAX_COL_VR_DASHBOARD     20
 #define MIN_COL_VR_DASHBOARD     11
-
-struct {
-   char name [MAX_SIZE_NAME];
-   double cShip;  
-   double tMin [3];
-   double tMax [3];
-} shipParam [MAX_N_SHIP_TYPE] = {
-   {"Imoca", 1.2, {300, 300, 420}, {660, 660, 600}}, 
-   {"Normal", 1.0, {300, 300, 336}, {660, 660, 480}}
-};
 
 struct {
    int index;
@@ -37,42 +27,6 @@ struct {
    GtkWidget *wLoss [MAX_STAMINA_MANOEUVRE];
    GtkWidget *wRecup;
 } shipData;
-
-/*! return penalty in seconds for manoeuvre tyopr. Depend on tws and energy. Give also sTamina coefficient */
-static double fPenalty (int shipIndex, int type, double tws, double energy, double *cStamina) {
-   if (type < 0 || type > 2) {
-      fprintf (stderr, "In fPenalty, type unknown: %d\n", type);
-      return -1;
-   };
-   const double kPenalty = 0.015;
-   double cShip = shipParam [shipIndex].cShip;
-   *cStamina = 2 - fmin (energy, 100.0) * kPenalty;
-   double tMin = shipParam [shipIndex].tMin [type];
-   double tMax = shipParam [shipIndex].tMax [type];
-   double fTws = 50.0 - 50.0 * cos (G_PI * ((fmax (10.0, fmin (tws, 30.0))-10.0)/(30.0 - 10.0)));
-   //printf ("cShip: %.2lf, cStamina: %.2lf, tMin: %.2lf, tMax: %.2lf, fTws: %.2lf\n", cShip, cStamina, tMin, tMax, fTws);
-   return  cShip * (*cStamina) * (tMin + fTws * (tMax - tMin) / 100.0);
-}
-
-/*! return point loss with manoeuvre types. Depends on tws and fullPack */
-double fPointLoss (int shipIndex, int type, double tws, bool fullPack) {
-   const double fPCoeff = (type == 2 && fullPack) ? 0.8 : 1;
-   double loss = (type == 2) ? 0.2 : 0.1;
-   double cShip = shipParam [shipIndex].cShip;
-   double fTws = (tws <= 10.0) ? 0.02 * tws + 1 : 
-                 (tws <= 20.0) ? 0.03 * tws + 0.9 : 
-                 (tws <= 30) ? 0.05 * tws + 0.5 :  
-                 2.0;
-   return fPCoeff * loss * cShip * fTws;
-}
-
-/*! return type in second to get bacl on energy point */
-double fTimeToRecupOnePoint (double tws) {
-   const double timeToRecupLow = 5;   // minutes
-   const double timeToRecupHigh = 15; // minutes
-   double fTws = 1.0 - cos (G_PI * (fmin (tws, 30.0)/30.0));
-   return 60 * (timeToRecupLow + fTws * (timeToRecupHigh - timeToRecupLow) / 2.0);
-}
 
 /*! make calculation (penalty, point moss, time to recover for every type of manoeuvre */
 static void calculation () {
