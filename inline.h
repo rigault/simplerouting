@@ -129,7 +129,7 @@ static inline double orthoDist (double lat1, double lon1, double lat2, double lo
     lat2 *= DEG_TO_RAD;
     double theta = (lon1 - lon2) * DEG_TO_RAD;
 
-    double distRad = acos(sin(lat1) * sin(lat2) + cos(lat1) * cos(lat2) * cos(theta));
+    double distRad = acos (sin(lat1) * sin(lat2) + cos(lat1) * cos(lat2) * cos(theta));
 
     return 60.0 * RAD_TO_DEG * distRad;
 }

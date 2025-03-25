@@ -927,6 +927,9 @@ GString *paramToJson (Par *par) {
    g_string_append_printf (jsonString, "   \"grib\": \"%s\",\n", fileName); 
    g_free (fileName);
 
+   g_string_append_printf (jsonString, "   \"bottomLat\": %.2lf, \"leftLon\": %.2lf, \"topLat\": %.2lf, \"rightLon\": %.2lf,\n",
+            zone.latMin, zone.lonLeft, zone.latMax, zone.lonRight);
+
    fileName = g_path_get_basename (par->currentGribFileName);
    g_string_append_printf (jsonString, "   \"currentGrib\": \"%s\",\n", fileName); 
    g_free (fileName);

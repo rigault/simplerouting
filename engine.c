@@ -274,7 +274,7 @@ static int buildNextIsochrone (const Pp *pOr, const Pp *pDest, const Pp *isoList
       if (!isInZone(isoPt->lat, isoPt->lon, &zone) && (par.constWindTws == 0))
          continue;
 
-      findWindGrib(isoPt->lat, isoPt->lon, t, &u, &v, &gust, &w, &twd, &tws);
+      findWindGrib (isoPt->lat, isoPt->lon, t, &u, &v, &gust, &w, &twd, &tws);
       if (tws > par.maxWind)
          continue; // avoid location where wind speed too high...
 
@@ -294,7 +294,7 @@ static int buildNextIsochrone (const Pp *pOr, const Pp *pDest, const Pp *isoList
          newPt.toIndexWp = pDest->toIndexWp;
 
          struct tm localTm = tm0; // working on local copy imprpve performances
-         efficiency = isDayLight(&localTm, t, isoPt->lat, isoPt->lon) ? par.dayEfficiency : par.nightEfficiency;
+         efficiency = isDayLight (&localTm, t, isoPt->lat, isoPt->lon) ? par.dayEfficiency : par.nightEfficiency;
 
          if (motor) {
             sog = par.motorSpeed;
@@ -336,10 +336,10 @@ static int buildNextIsochrone (const Pp *pOr, const Pp *pDest, const Pp *isoList
          newPt.sector = 0;
 
          if (par.allwaysSea || isSea(tIsSea, newPt.lat, newPt.lon)) {
-            newPt.dd = orthoDist(newPt.lat, newPt.lon, pDest->lat, pDest->lon);
-            double alpha = orthoCap(pOr->lat, pOr->lon, newPt.lat, newPt.lon) - pOrToPDestCog;
+            newPt.dd = orthoDist (newPt.lat, newPt.lon, pDest->lat, pDest->lon);
+            double alpha = orthoCap (pOr->lat, pOr->lon, newPt.lat, newPt.lon) - pOrToPDestCog;
 
-            newPt.vmc = orthoDist(newPt.lat, newPt.lon, pOr->lat, pOr->lon) * cos(DEG_TO_RAD * alpha);
+            newPt.vmc = orthoDist (newPt.lat, newPt.lon, pOr->lat, pOr->lon) * cos(DEG_TO_RAD * alpha);
             if (newPt.vmc > *bestVmc) *bestVmc = newPt.vmc;
 
             if (lenNewL < MAX_SIZE_ISOC)
@@ -827,7 +827,6 @@ static inline bool goal (Pp *pDest, int nIsoc, const Pp *isoList, int len, doubl
    *lastStepDuration = bestTime;
    return destinationReached;
 }
-
 
 /*! return closest index point to pDest in Isoc, and this point */ 
 static int fClosest (const Pp *isoc, int n, const Pp *pDest, Pp *closest) {

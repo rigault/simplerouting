@@ -31,19 +31,19 @@ Example: ./r3getgrib grib 502              # METEO CONSULT Request for Wind Cent
 #define SHORTNAMES                  "10u/10v/gust"
 
 // NOAA parameters
-#define NOAA_ROOT                   "R3_NOAA_Inter"
+#define NOAA_ROOT                   "GFS_Inter"
 #define NOAA_DELAY                  4 // hours
 #define NOAA_BASE_URL               "https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl"
 #define MAX_STEP_NOAA               384 // 16 days
 
 // ECMWF parameters
-#define ECMWF_ROOT                  "R3_ECMWF_Inter"
+#define ECMWF_ROOT                  "ECMWF_Inter"
 #define ECMWF_DELAY                 10 // hours
 #define ECMWF_BASE_URL              "https://data.ecmwf.int/forecasts"
 #define MAX_STEP_ECMWF              240 // 10 days
 
 // METEO FRANCE parameters
-#define METEO_FRANCE_ROOT           "R3_METEO_FRANCE_Inter"
+#define METEO_FRANCE_ROOT           "METEO_FRANCE_Inter"
 #define METEO_FRANCE_DELAY          6
 #define METEO_FRANCE_BASE_URL       "https://object.data.gouv.fr/meteofrance-pnt/pnt/"
 #define MAX_STEP_AROME              48  // 2 days
@@ -52,8 +52,8 @@ Example: ./r3getgrib grib 502              # METEO CONSULT Request for Wind Cent
 // METEO CONSULT parameters
 #define N_METEO_CONSULT_WIND_URL    6
 #define N_METEO_CONSULT_CURRENT_URL 6
-#define METEO_CONSULT_WIND_DELAY    5  // nb hours after time run to get new grib
-#define METEO_CONSULT_CURRENT_DELAY 12
+#define METEO_CONSULT_WIND_DELAY    4  // nb hours after time run to get new grib
+#define METEO_CONSULT_CURRENT_DELAY 4
 #define METEO_CONSULT_ROOT_GRIB_URL "https://static1.mclcm.net/mc2020/int/cartes/marine/grib/"
 #define MAX_N_TRY                   3  // max try for Meteoconsult download
 
@@ -232,7 +232,7 @@ static void concatenateGrib (const char *root, const char *prefix, const char *y
                              const char *mm, const char *dd, const char *hh, int lastStep) {
    char finalFile [MAX_SIZE_LINE];
    char toRemove [MAX_SIZE_LINE];
-   snprintf (finalFile, sizeof(finalFile), "%s/R3_%s_%s%s%s_%sZ%03d.grb", gribDir, prefix, yyyy, mm, dd, hh, lastStep);
+   snprintf (finalFile, sizeof(finalFile), "%s/%s_%s%s%s_%sZ_%03d.grb", gribDir, prefix, yyyy, mm, dd, hh, lastStep);
 
    FILE *fOut = fopen (finalFile, "wb");
    if (!fOut) {
@@ -295,7 +295,7 @@ static void fetchNoaa (int maxStep, double topLat, double leftLon, double bottom
       }
       rename (outputFile, reducedFile);
    }
-   concatenateGrib (NOAA_ROOT, "NOAA",  yyyy, mm, dd, hh, maxStep);
+   concatenateGrib (NOAA_ROOT, "GFS",  yyyy, mm, dd, hh, maxStep);
 }
 
 /*! Process ECMWF GRIB downloads with maxStep limit */
@@ -415,7 +415,7 @@ static void fetchMeteoConsult (int type, int region) {
       printf ("url: %s\n", url);
 
       char *baseName= g_path_get_basename (url);
-      snprintf (finalFile, sizeof(finalFile), "%s/R3_%s", gribDir, baseName);
+      snprintf (finalFile, sizeof(finalFile), "%s/%s", gribDir, baseName);
       printf ("finalFile: %s\n", finalFile);
       g_free (baseName);
 
