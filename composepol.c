@@ -7,11 +7,12 @@
 #include <stdlib.h>
 #include "rtypes.h"
 #include "inline.h"
+#include "r3util.h"
 #include "rutil.h"
 #include "polar.h"
 #define MAX_POLAR_FILES 10
-#define OUTPUT_RES "VRrespol.csv"
-#define OUTPUT_SAIL "VRrespol.sailpol"
+#define OUTPUT_RES "VRresPOL.csv"
+#define OUTPUT_SAIL "VRresPOL.sailpol"
 
  
 int sailID [MAX_N_SAIL] = {1, 2, 3, 4, 5, 6, 7, 8};
@@ -75,7 +76,7 @@ static void analyse (const PolMat *mat) {
 
 /*! mix matrix n  matrix */
 static void compose (int nPol) {
-   sailPolMat.t [0][0] = resMat.t [0][0] = -1;  // first cell
+   sailMat.t [0][0] = resMat.t [0][0] = -1;  // first cell
    int nLine = polMatTab [0].nLine;
    int nCol = polMatTab [0].nCol;
    sailMat.nLine = resMat.nLine = nLine;
