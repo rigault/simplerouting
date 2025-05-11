@@ -2,9 +2,6 @@
 extern Zone zone;                      // wind
 extern Zone currentZone;               // current
 
-/*! grib data description */
-extern FlowP *tGribData [];            // wind, current
-
 /*! list of wayPoint */
 extern WayPointList wayPoints;
 
@@ -32,6 +29,7 @@ extern char *tIsSea;                   // array of byte. 0 if earth, 1 if sea
 extern CompetitorsList competitors;
 
 /*! functions defined in r3util.c */
+extern char   *epochToStr (time_t t, bool seconds, char *str, size_t len);
 extern struct tm gribDateToTm (long intDate, double nHours);
 extern bool   isDayLight (struct tm *tm0, double t, double lat, double lon);
 extern char  *fSailName (int val, char *str, size_t maxLen);

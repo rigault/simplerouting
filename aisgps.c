@@ -15,8 +15,6 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include "rtypes.h"  
-#include "rutil.h"
-#include "r3util.h"
 #include <bits/termios-c_cflag.h>         // for CLOCAL, CREAD, CS8, CSIZE, CSTOPB
 #include <glib/gtypes.h>                  // for GINT_TO_POINTER, GPOINTER_TO_INT
 #include <time.h>                         // for time, tm, time_t, difftime, mktime
@@ -32,7 +30,16 @@
 #define SIZE_DATE_TIME        10            // Date and time in NMEA GPS frame
 #define MAX_SIZE_NMEA         1024          // for NMEA Frame buffer size
 
+/* defined in r3util.c */
+extern Par par;
+extern char   *epochToStr (time_t t, bool seconds, char *str, size_t len);
+extern double offsetLocalUTC (void);
+extern char   *latToStr (double lat, int type, char* str, size_t maxLen);
+extern char   *lonToStr (double lon, int type, char* str, size_t maxLen);
+
 GHashTable *aisTable;
+/*! see aisgps file */
+MyGpsData my_gps_data; 
 
 /*! value in NMEA GPS frame*/
 struct {
@@ -52,8 +59,31 @@ struct {
    char uAlt;
 } gpsRecord;
 
+/*! produce in str Json GPS informations */
+bool gpsToJson (char * str, size_t len) {
+   if (! my_gps_data.OK) return false;
+
+   char status = (my_gps_data.nSat <= 0) ? '-' : my_gps_data.status;
+   char uAlt = ((my_gps_data.uAlt == 'M') || (my_gps_data.uAlt == 'm')) ? 'm' : '-'; 
+   snprintf (str, len,
+     "{\n"
+     "  \"time\": \"%ld\",\n"
+     "  \"lat\": %.6lf,\n"
+     "  \"lon\": %.6lf,\n"
+     "  \"alt %c\": %.2f,\n"
+     "  \"sog\": %.2lf,\n"
+     "  \"cog\": %.2lf,\n"
+     "  \"numSat\": %d,\n"
+     "  \"status\": \"%c\"\n"
+     "}\n",
+     my_gps_data.time, my_gps_data.lat, my_gps_data.lon, uAlt, my_gps_data.alt, my_gps_data.sog, my_gps_data.cog,
+     my_gps_data.nSat, status
+   );
+   return true;
+}
+
 /*! gps information for helpInfo */
-char *nmeaInfo (char *strGps, int maxLen) {
+char *nmeaInfo (char *strGps, size_t maxLen) {
    char str [MAX_SIZE_LINE];
    strGps [0] = '\0';
    for (int i = 0; i < par.nNmea; i++) {
@@ -76,26 +106,26 @@ static char* midToCountry (const char *fileName, int mid, char *country) {
       return NULL;
    }
    while (fgets (line, MAX_SIZE_LINE, f) != NULL) {
-      if ((sscanf (line, "%d %32[^\n]", &n, country) > 1) && (n == mid))
+      if ((sscanf (line, "%d;%255[^\n]", &n, country) > 1) && (n == mid))
          break;
    }
    fclose (f);
-   return (mid == n) ? country : NULL;
+   if (mid != n) g_strlcpy (country, "NA", 3);
+   return country;
 }
 
 /*! Function to calculate the new position after moving a distance at a given bearing */
 static void movePosition (double lat, double lon, double sog, double cog, double t, double *newLat, double *newLon) {
    double d = sog * t; // distance traveled
-   double bearing_rad = cog * DEG_TO_RAD;
+   cog *= DEG_TO_RAD;
+   lat *=  DEG_TO_RAD;
+   lon *=  DEG_TO_RAD;
 
-   double lat1 = lat * DEG_TO_RAD;
-   double lon1 = lon * DEG_TO_RAD;
+   *newLat = lat + (d * cos (cog)) / EARTH_RADIUS;
+   *newLon = lon + (d * sin (cog)) / (EARTH_RADIUS * cos(lat));
 
-   double new_lat = lat1 + (d * cos(bearing_rad)) / EARTH_RADIUS;
-   double new_lon = lon1 + (d * sin(bearing_rad)) / (EARTH_RADIUS * cos(lat1));
-
-   *newLat = new_lat * RAD_TO_DEG;
-   *newLon = new_lon * RAD_TO_DEG;
+   *newLat *= RAD_TO_DEG;
+   *newLon *= RAD_TO_DEG;
 }
 
 /*! collision detection function 
@@ -171,18 +201,12 @@ bool aisTableInit (void) {
       fprintf (stderr, "In aisTableInit, Error: Init Hash table for AIS \n");
       return false;
    }
-   else
-      return true;
+   else return true;
 }
 
 /*! just for testing */
 bool testAisTable () {
    AisRecord *ship = calloc (1, sizeof(AisRecord));
-   if (!ship) {
-      fprintf (stderr, "In testAisTable, Erreur d'allocation mémoire pour ship1\n");
-      return false;
-   }
-    
    ship->mmsi = 227191400;
    ship->lat = 48.858844;
    ship->lon = 2.294351;
@@ -190,20 +214,22 @@ bool testAisTable () {
    ship->lat = 45.2;
    ship->lon = -2.5;
    ship->cog = 45;
+   ship->sog = 5;
    ship->lastUpdate = time (NULL) - 60;
    g_hash_table_insert(aisTable, GINT_TO_POINTER(ship->mmsi), ship);
 
-   ship = calloc (1, sizeof(AisRecord));
-   ship->mmsi = 607191800;
+   ship = calloc (1, sizeof (AisRecord));
+   ship->mmsi = 232191800;
    g_strlcpy (ship->name, "bobo", 21);
    ship->lat = 45.3;
    ship->lon = -2.2;
    ship->cog = -45;
-   ship->lastUpdate = time (NULL) - 3600;
+   ship->sog = 15;
+   ship->lastUpdate = time (NULL) - 600;
    g_hash_table_insert(aisTable, GINT_TO_POINTER(ship->mmsi), ship);
 
-   ship = calloc (1, sizeof(AisRecord));
-   ship->mmsi = 999193900;
+   ship = calloc (1, sizeof (AisRecord));
+   ship->mmsi = 224193900;
    g_strlcpy (ship->name, "coco", 21);
    ship->lat = 45.4;
    ship->lon = -3;
@@ -217,40 +243,93 @@ bool testAisTable () {
 
 /*! ais information to string */
 int aisToStr (char *str, size_t maxLen) {
-   char strLat [MAX_SIZE_NAME] = "", strLon [MAX_SIZE_NAME] = "";
-   char line [MAX_SIZE_LINE];
-   char strDate [MAX_SIZE_DATE];
-   char country [32];
+   char strLat [MAX_SIZE_NAME] = "", strLon[MAX_SIZE_NAME] = "";
+   char line [MAX_SIZE_STD];
+   char strDate [MAX_SIZE_STD];
+   char country [MAX_SIZE_LINE];
    int count = 0;
 
-   // use GHashTableIter to iterare on all elements
-   GHashTableIter iter;
-   gpointer key, value;
-   g_hash_table_iter_init (&iter, aisTable);
+   // Copy values to be thread safe
+   GList *values = g_hash_table_get_values(aisTable);
+   GList *l;
 
-   snprintf (str, MAX_SIZE_LINE, \
+   snprintf(str, MAX_SIZE_LINE,
       "Name                  Country       MinDist      MMSI        Lat          Lon    SOG  COG LastUpdate                 \n");
-   while (g_hash_table_iter_next(&iter, &key, &value)) {
-      AisRecord *ship = (AisRecord *)value;
-      // printf ("Ship MMSI=%d, Lat=%f, Lon=%f\n", ship->mmsi, ship->lat, ship->lon);
-      if ((midToCountry (par.midFileName, ship->mmsi / 1000000, country)) == NULL)
-         g_strlcpy (country, "NA", 3);
-      country [12] = '\0'; // truncated before snprint
-      
-      snprintf (line, MAX_SIZE_LINE, "%-21s %-12s %8.0d %9d %-12s %-12s %6.2lf %4d %-s\n",
+
+   for (l = values; l != NULL; l = l->next) {
+      AisRecord *ship = (AisRecord *)l->data;
+
+      midToCountry (par.midFileName, ship->mmsi / 1000000, country);
+
+      country[12] = '\0'; // truncate
+
+      snprintf(line, sizeof (line), "%-21s %-12s %8.0d %9d %-12s %-12s %6.2lf %4d %-s\n",
          ship->name,
          country,
          ship->minDist,
          ship->mmsi,
-         latToStr (ship->lat, par.dispDms, strLat, sizeof (strLat)), 
-         lonToStr (ship->lon, par.dispDms, strLon, sizeof (strLon)),
+         latToStr(ship->lat, par.dispDms, strLat, sizeof(strLat)),
+         lonToStr(ship->lon, par.dispDms, strLon, sizeof(strLon)),
          ship->sog,
          ship->cog,
-         epochToStr (ship->lastUpdate, false, strDate, MAX_SIZE_DATE));
+         epochToStr(ship->lastUpdate, false, strDate, MAX_SIZE_DATE));
 
-      g_strlcat (str, line, maxLen);
+      g_strlcat(str, line, maxLen);
       count += 1;
    }
+
+   g_list_free(values); // Libère seulement la liste, pas les éléments
+
+   return count;
+}
+
+/*! ais information to JSon string */
+int aisToJson (char *str, size_t maxLen) {
+   char line [MAX_SIZE_STD];
+   char country [MAX_SIZE_LINE];
+   int count = 0;
+   int cog = 0;
+
+   // Copy values to be thread safe
+   GList *values = g_hash_table_get_values(aisTable);
+   if (values == NULL) {
+      g_strlcpy(str, "[]\n", maxLen);
+      return 0;
+   }
+   GList *l;
+
+   g_strlcpy(str, "[\n", maxLen);
+
+   for (l = values; l != NULL; l = l->next) {
+      AisRecord *ship = (AisRecord *)l->data;
+      country [MAX_SIZE_LINE - 1] = '\0';
+      if ((ship->mmsi / 1000000) == 111) {
+         printf("SAR Aircraft MMSI: %d\n", ship->mmsi);
+         g_strlcpy (country, "Aircraft", 9);
+      }
+      else midToCountry (par.midFileName, ship->mmsi / 1000000, country);
+  
+      cog = (ship->cog < 0) ? ship->cog + 360 : ship->cog;
+
+      snprintf(line, sizeof (line), 
+         "%s{\"messageId\": %d, \"name\": \"%s\", \"country\": \"%s\", \"mindist\": %d, \"mmsi\": %d, \"lat\": %.4lf, \"lon\": %.4lf, \"sog\": %.2lf, \"cog\": %d, \"lastupdate\": %ld}",
+         (count == 0) ? "   " : ",\n   ",
+         ship->messageId,
+         ship->name,
+         country,
+         ship->minDist,
+         ship->mmsi,
+         ship->lat,
+         ship->lon,
+         ship->sog,
+         cog,
+         ship->lastUpdate);
+
+      g_strlcat(str, line, maxLen);
+      count += 1;
+   }
+   g_strlcat(str, "\n]\n", maxLen);
+   g_list_free(values);
    return count;
 }
 
@@ -265,12 +344,12 @@ static void removeOldShips (time_t tMax) {
       AisRecord *ship = (AisRecord *) value;
       // printf ("%d %ld\n", ship->mmsi, ship->lastUpdate);
       if (difftime (current_time, ship->lastUpdate) > tMax) {
-         g_hash_table_iter_remove (&iter); // Supprime l'élément de la table
+         g_hash_table_iter_remove (&iter); // remove element in table
       }
    }
 }
 
-/*! copy s to d and replace ",," occurence by ",-1," */
+/*! copy s to d and replace ",," occurrences by ",-1," */
 static void strcpymod (char *d, const char *s) {
    char previous = '\0';
    while (*s) {
@@ -372,7 +451,8 @@ static void copyGpsData () {
 		if (gpsRecord.EW == 'W')
 		   my_gps_data.lon = - my_gps_data.lon;
       my_gps_data.alt = gpsRecord.alt;
-      my_gps_data.cog = gpsRecord.cog;
+      my_gps_data.uAlt = gpsRecord.uAlt;
+      my_gps_data.cog = (gpsRecord.cog < 0) ? gpsRecord.cog + 360.0 : gpsRecord.cog;
       my_gps_data.sog = MS_TO_KN * gpsRecord.sog;
       my_gps_data.status = gpsRecord.status;
       my_gps_data.nSat = gpsRecord.numSV;
@@ -391,17 +471,21 @@ static void decodeAisPayload (const char *payload) {
    extractBits (payload, bits);
    printf ("Bits: %s\n", bits);
 
-   int messageId = getIntFromBits(bits, 0, 6); // message ID conversion
+   int messageId = getIntFromBits(bits, 0, 6);  // message ID conversion
    int mmsi = getIntFromBits(bits, 8, 30);      // MMSI extraction
 
    char shipName [MAX_SIZE_SHIP_NAME] = {0};
+   //int altitude = NIL;
    int latitude = NIL;
    int longitude = NIL;
    int partNumber = NIL;       // for message with ID = 24
    int speed = NIL;
    int course = NIL;
    double latC, lonC;          // possible  collision point
-   AisRecord *ship;
+   AisRecord *ship = getRecord (mmsi);   
+   if (ship == NULL) return;
+   ship->messageId = messageId;
+
 
    switch (messageId) {
    case 1: case 2: case 3:    // Class A report position
@@ -414,6 +498,13 @@ static void decodeAisPayload (const char *payload) {
       getStringFromBits (bits, 112, 120, shipName);      
       char *pt = strchr (shipName, '@');
       if (pt != NULL) *pt = '\0';                          
+      break;
+   case 9:    // Standard SAR Aircraft Position Report
+      //altitude = getIntFromBits(bits, 38, 12);
+      speed = getIntFromBits(bits, 50, 10);
+      longitude = getSignedIntFromBits(bits, 61, 28);
+      latitude = getSignedIntFromBits(bits, 89, 27);
+      course = getIntFromBits(bits, 116, 12);
       break;
    case 18:                   // Class B report position
       speed = getIntFromBits (bits, 46, 10);
@@ -433,12 +524,10 @@ static void decodeAisPayload (const char *payload) {
       }
       break;
    default:
-      printf ("Unsupported message type: %d\n\n", messageId); 
+      printf ("Unsupported message type: %d, MMSI: %d\n\n", messageId, mmsi);
+      strcpy (ship->name, "_Unsupported"); 
       return;
    }
-
-   ship = getRecord (mmsi);   
-   if (ship == NULL) return;
 
    if ((speed >= 0) && (speed < maxSog)) ship->sog = ((double) speed) / 10.0;
    if (latitude != NIL) ship->lat = ((double) latitude) / 600000.0;
@@ -449,15 +538,12 @@ static void decodeAisPayload (const char *payload) {
 
    if (my_gps_data.OK) {
       int x = collisionDetection (my_gps_data.lat, my_gps_data.lon, my_gps_data.sog, my_gps_data.cog,
-                               ship->lat, ship->lon, ship->sog, ship->cog, &latC, &lonC);
-      if (x < 0) 
-         ship->minDist = x;
-      else if (ship->minDist >= MILLION)
-         ship->minDist = -2;
-      else ship -> minDist = 1852 * x; // in meters
+                                  ship->lat, ship->lon, ship->sog, ship->cog, &latC, &lonC);
+      if (x < 0) ship->minDist = x;
+      else if (ship->minDist >= MILLION) ship->minDist = -2;
+      else ship -> minDist = NM_TO_M * x; // in meters
    }
-   else
-      ship->minDist = -3;
+   else ship->minDist = -3;
 
    printf("Message ID: %d %s\n", messageId, (partNumber == 0) ? "A" : (partNumber == 1) ? "B" : "");
    printf("MMSI: %d\n", mmsi);
@@ -493,7 +579,7 @@ static bool decodeNMEA (const char *line) {
    } aisFrame;
 
    if (line [0] == '!')
-      printf ("%s\n", line);
+      printf ("AIS frame: %s\n", line);
 
    strcpymod (lig, line);
    if ((sscanf (lig, "!AIVD%c, %d, %d, %d, %c, %128s, %d,", &aisFrame.charType, &aisFrame.nb, &aisFrame.i, &aisFrame.x,\
@@ -585,8 +671,8 @@ static HANDLE configureSerialPort (const char *portName, int baudRate) {
 /*! read serial USB port to get NMEA GPS AIS info, Window environment */
 void *getNmea (gpointer x) {
    int index = GPOINTER_TO_INT (x);
-   char buffer[MAX_SIZE_NMEA];
-   char tempBuffer[MAX_SIZE_NMEA * 2] = {0};
+   char buffer [MAX_SIZE_NMEA];
+   char tempBuffer [MAX_SIZE_NMEA * 2] = {0};
    DWORD bytesRead;
    size_t tempBufferPos = 0;
 
@@ -638,7 +724,10 @@ void *getNmea (gpointer x) {
 static int configureSerialPort (int fd, int baudRate) {
    struct termios options;
    // get options of serial port
-   tcgetattr(fd, &options);
+   if (tcgetattr(fd, &options) != 0) {
+      perror("tcgetattr");
+      return -1;
+   }
 
    speed_t iSpeed = cfgetispeed(&options);
    printf ("old speed if   : %d\n", iSpeed);
@@ -653,8 +742,25 @@ static int configureSerialPort (int fd, int baudRate) {
    options.c_cflag &= ~CSIZE;              // 
    options.c_cflag |= CS8;                 // 8 data bits
 
-   // apply new option
-   tcsetattr(fd, TCSANOW, &options);
+   /* 
+   // Mode non-canonique, pas d’écho, pas de signal spécial
+   options.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);
+
+   // Pas de transformation d’entrée
+   options.c_iflag &= ~(IXON | IXOFF | IXANY);
+   options.c_iflag &= ~(INLCR | ICRNL | IGNCR);
+
+   // Pas de transformation de sortie
+   options.c_oflag &= ~OPOST;
+
+   // Configuration du délai de lecture
+   options.c_cc[VMIN]  = 1;
+   options.c_cc[VTIME] = 0;
+   */
+   if (tcsetattr(fd, TCSANOW, &options) != 0) {
+      perror ("tcsetattr");
+      return -1;
+   }
    return 0;
 }
 
@@ -664,13 +770,16 @@ void *getNmea (gpointer x) {
    char buffer [MAX_SIZE_NMEA];
    int bytes_read;
 
-   int fd = open (par.nmea [index].portName, O_RDONLY | O_NOCTTY | O_NDELAY); // serial port
+   int fd = open (par.nmea [index].portName, O_RDWR | O_NOCTTY); // serial port
 
    if (fd == -1) {
-      fprintf (stderr, "In getNmea     : cannot open input flow %s\n", par.nmea [index].portName);
+      fprintf (stderr, "In getNmea      : cannot open input flow %s : %s\n", par.nmea[index].portName, strerror(errno));
       return NULL;
    }
-   configureSerialPort (fd, par.nmea [index].speed);
+   if (configureSerialPort (fd, par.nmea [index].speed) == -1) {
+      fprintf (stderr, "In getNmea Error serial Port configuration %s:\n", par.nmea[index].portName);
+      return NULL;
+   }
    printf ("In getNmea     : %s open with speed index: %d\n", par.nmea [index].portName, par.nmea [index].speed);
    par.nmea [index].open = true;
 

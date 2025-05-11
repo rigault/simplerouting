@@ -24,6 +24,7 @@
  * \section Usage
  * \li ./routing [-<option>] [<parameterFile>] */
 
+#include <glib.h>
 #include <string.h>
 #include <stdlib.h>
 #include <locale.h>
@@ -34,6 +35,7 @@
 #include <stdio.h>
 #include "rtypes.h"
 #include "rutil.h"
+#include "r3util.h"
 #include "option.h"
 
 char parameterFileName [MAX_SIZE_FILE_NAME];

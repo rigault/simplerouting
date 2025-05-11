@@ -201,6 +201,17 @@ void optionManage (char option) {
          printf ("coeff: %.2lf\n", findPolar (twa, w, &wavePolMat, NULL, &sail) / 100.0);
       }
       break;
+   case 'q':
+      readPolar (true, par.polarFileName, &polMat, errMessage, sizeof (errMessage));
+      polToStr (&polMat, buffer, MAX_SIZE_BUFFER);
+      printf ("%s\n", buffer);
+      while (true) {
+         printf ("tws = " );
+         if (scanf ("%lf", &tws) < 1) break;
+         printf ("oldMaxSpeedInPolarAt   : %.4lf\n", oldMaxSpeedInPolarAt (tws, &polMat));
+         printf ("newMaxSpeedInPolarAt: %.4lf\n", maxSpeedInPolarAt (tws, &polMat));
+      }
+      break;
    case 'r': // routing
       if (par.mostRecentGrib) {// most recent grib will replace existing grib
          snprintf (directory, sizeof (directory), "%sgrib/", par.workingDir); 

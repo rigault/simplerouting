@@ -7,7 +7,7 @@ extern ChooseDeparture chooseDeparture;         // for choice of departure time
 extern HistoryRouteList historyRoute;           // history of calculated routes
 extern SailRoute route;                         // current route
 
-extern bool    storeRoute (SailRoute *route, const Pp *pOr, const Pp *pDest, double lastStepDuration);
+extern bool    storeRoute (SailRoute *route, const Pp *pOr, const Pp *pDest);
 extern bool    allIsocToStr (char *str, size_t maxLen);
 extern bool    isoDescToStr (char *str, size_t maxLen);
 extern bool    routeToStr (const SailRoute *route, char *str, size_t maxLen, char *footer, size_t maxLenFooter);
@@ -21,9 +21,9 @@ extern void    saveRoute (SailRoute *route);
 extern bool    exportRouteToGpx (const SailRoute *route, const gchar *filename);
 extern bool    dumpIsocToFile (const char *fileName);
 extern GString *isochronesToJson ();
-extern GString *routeToJson (SailRoute *route, int index, bool isoc);
-extern GString *allCompetitorsToJson (int n, bool isoc);
-extern GString *bestTimeReportToJson (ChooseDeparture *chooseDeparture, bool isoc);
+extern GString *routeToJson (SailRoute *route, int index, bool isoc, bool isoDesc);
+extern GString *allCompetitorsToJson (int n, bool isoc, bool isoDesc);
+extern GString *bestTimeReportToJson (ChooseDeparture *chooseDeparture, bool isoc, bool isoDesc);
 
 
 

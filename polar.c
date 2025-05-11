@@ -222,7 +222,7 @@ GString *polToJson (const char *fileName, const char *objName) {
                            objName, polarName, mat.nLine, mat.nCol, maxValInPol (&mat));
 
    for (int i = 0; i < mat.nLine ; i++) {
-      g_string_append_printf (jString, "[");
+      g_string_append_printf (jString, "   [");
       for (int j = 0; j < mat.nCol - 1; j++) {
          g_string_append_printf (jString, "%.4f, ", mat.t [i][j]);
       }
@@ -233,10 +233,10 @@ GString *polToJson (const char *fileName, const char *objName) {
 }
 
 /*! write legend about sail in Gstring Json format */
-GString *sailLegendToJson (const char *sailName [], const char *colorStr [], size_t len) {
+GString *sailLegendToJson (const char *sailName [], size_t len) {
    GString *jString = g_string_new ("{\"legend\": [");
    for (size_t i = 0; i < len; i += 1) {
-      g_string_append_printf (jString, "[\"%s\", \"%s\"]%s", sailName [i], colorStr [i], (i < len -1) ? "," : "");
+      g_string_append_printf (jString, "\"%s\"%s", sailName [i], (i < len -1) ? ", " : "");
    }
    g_string_append_printf (jString, "]}\n");
    return jString;

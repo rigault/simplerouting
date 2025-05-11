@@ -27,6 +27,7 @@ Example: ./r3getgrib grib 502              # METEO CONSULT Request for Wind Cent
 
 #define MAX_CMD                     512
 #define MAX_STEP                    384   
+#define MAX_SIZE_DIR                128
 #define MAX_SIZE_LINE               1024
 #define SHORTNAMES                  "10u/10v/gust"
 
@@ -47,7 +48,7 @@ Example: ./r3getgrib grib 502              # METEO CONSULT Request for Wind Cent
 #define METEO_FRANCE_DELAY          6
 #define METEO_FRANCE_BASE_URL       "https://object.data.gouv.fr/meteofrance-pnt/pnt/"
 #define MAX_STEP_AROME              48  // 2 days
-#define MAX_STEP_ARPEGE             102 // 4days &nd 12 hours
+#define MAX_STEP_ARPEGE             102 // 4 days and 12 hours
 
 // METEO CONSULT parameters
 #define N_METEO_CONSULT_WIND_URL    6
@@ -79,7 +80,13 @@ const char *METEO_CONSULT_CURRENT_URL [N_METEO_CONSULT_CURRENT_URL * 2] = {
    "Gascogne",          "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Gascogne.grb"
 };
 
-char gribDir [128];
+char gribDir [MAX_SIZE_DIR];
+
+/*! Check if a file exists and is non-empty */
+static bool fileExists (const char *filename) {
+   struct stat buffer;
+   return (stat (filename, &buffer) == 0 && buffer.st_size > 0);
+}
 
 /*! remove all .tmp file with prefix */
 static void removeAllTmpFilesWithPrefix (const char *prefix) {
@@ -110,20 +117,24 @@ static void removeAllTmpFilesWithPrefix (const char *prefix) {
    Select shortnames and subregion defined by lon and lat values and produce output file
    return true if all OK */
 static bool reduce (const char *dir, const char *inFile, const char *shortNames, double latMax, double lonLeft, double latMin, double lonRight, const char *outFile) {
-   char toRemove [MAX_SIZE_LINE], toRemove2 [MAX_SIZE_LINE];
+   char toRemove [MAX_SIZE_LINE];
    const char* tempCompact = "compacted.tmp";
-   const char* tempCompact2 = "compacted2.tmp";
    char command [MAX_SIZE_LINE];
    char fullFileName [MAX_SIZE_LINE];
    snprintf (toRemove, sizeof (toRemove),"%s/%s", dir, tempCompact);
-   snprintf (toRemove2, sizeof (toRemove2),"%s/%s", dir, tempCompact2);
    snprintf (command, MAX_SIZE_LINE, "grib_copy -w shortName=%s %s %s/%s", shortNames, inFile, dir, tempCompact);
    if (system(command) != 0) {
       fprintf (stderr, "In reduce, Error call: %s\n", command);
       remove (toRemove);
       return false;
    }
-
+   if (verbose) {
+      printf ("command; %s\n", command);
+      if (fileExists (toRemove))
+         printf ("toRemove exist: %s\n", toRemove); 
+      else
+         printf ("toRemove does not exist: %s\n", toRemove); 
+   }
    snprintf (fullFileName, MAX_SIZE_LINE, "%s/%s", dir, tempCompact);
    if (access (fullFileName, F_OK) != 0) {
       fprintf (stderr, "In reduce, Error: file does no exist: %s\n", fullFileName);
@@ -131,36 +142,18 @@ static bool reduce (const char *dir, const char *inFile, const char *shortNames,
       return false;
    }
 
-   snprintf (command, MAX_SIZE_LINE, "cdo -sellonlatbox,%.2lf,%.2lf,%.2lf,%.2lf %s/%s %s/%s",  
-      lonLeft, lonRight, latMin, latMax, dir, tempCompact, dir, tempCompact2);
-
-   if (verbose) printf ("First cdo: %s\n", command);
-   //cdo -sellonlatbox,-25.0,-1.0,20.0,50.0 grib/compacted.tmp grib/output.grb
-
+   snprintf (command, MAX_SIZE_LINE, "wgrib2 %s/%s -small_grib %.0lf:%.0lf %.0lf:%.0lf %s >/dev/null",
+      dir, tempCompact, lonLeft, lonRight, latMin, latMax, outFile);
+   
+   if (verbose) printf ("wrib2: %s\n", command);
    if (system (command) != 0) {
-      fprintf (stderr, "In reduce, Error call: %s\n", command);
+      fprintf (stderr, "In reduce, Error call: %s, no: %d\n", command, errno);
       remove (toRemove);
-      remove (toRemove2);
       return false;
    }
-   snprintf (command, MAX_SIZE_LINE, "cdo -invertlat %s/%s %s", dir, tempCompact2, outFile);
-   if (verbose) printf ("Second cdo: %s\n", command);
-   if (system (command) != 0) {
-      fprintf (stderr, "In reduce, Error call: %s\n", command);
-      remove (toRemove);
-      remove (toRemove2);
-      return false;
-   }
-   //cdo -invertlat extract.grib extract0.grib
+   if (verbose) printf ("remove: %s\n", toRemove);
    remove (toRemove);
-   remove (toRemove2);
    return true;
-}
-
-/*! Check if a file exists and is non-empty */
-static bool fileExists (const char *filename) {
-   struct stat buffer;
-   return (stat (filename, &buffer) == 0 && buffer.st_size > 0);
 }
 
 /*! Download a file using cURL */
@@ -232,6 +225,7 @@ static void concatenateGrib (const char *root, const char *prefix, const char *y
                              const char *mm, const char *dd, const char *hh, int lastStep) {
    char finalFile [MAX_SIZE_LINE];
    char toRemove [MAX_SIZE_LINE];
+   struct stat st;
    snprintf (finalFile, sizeof(finalFile), "%s/%s_%s%s%s_%sZ_%03d.grb", gribDir, prefix, yyyy, mm, dd, hh, lastStep);
 
    FILE *fOut = fopen (finalFile, "wb");
@@ -240,16 +234,15 @@ static void concatenateGrib (const char *root, const char *prefix, const char *y
       return;
    }
 
-   for (int step = 0; step <= MAX_STEP; step++) {
+   for (int step = 0; step <= lastStep; step++) {
       char inputFile [MAX_SIZE_LINE];
       snprintf (inputFile, sizeof (inputFile), "%s/%s_reduced_%03d.tmp", gribDir, root, step);
-      // printf ("concat: %s\n", inputFile);
-
-      if (!fileExists (inputFile)) continue;
+      if (verbose && stat (inputFile, &st) == 0)
+         printf ("concat: %s, size: %ld\n", inputFile, st.st_size);
 
       FILE *fIn = fopen (inputFile, "rb");
       if (!fIn) {
-         fprintf (stderr, "⚠️ Warning: Could not open %s\n", inputFile);
+         if (verbose) fprintf (stderr, "⚠️ In concantenateGrib Warning: Could not open %s\n", inputFile);
          continue;
       }
       char buffer [4096];
@@ -263,7 +256,10 @@ static void concatenateGrib (const char *root, const char *prefix, const char *y
    fclose (fOut);
    snprintf (toRemove, sizeof (toRemove),"%s/%s", gribDir, root);
    removeAllTmpFilesWithPrefix (toRemove);
-   printf ("✅ Concatenation completed: %s\n", finalFile);
+   if (stat (finalFile, &st) == 0)
+      printf ("✅ Concatenation completed: %s, size: %ld\n", finalFile, st.st_size);
+   else 
+      printf ("In concatenateGrib, Error: no finalFile: %s\n", finalFile);
 }
 
 /*! Process NOAA GRIB downloads with maxStep limit */
@@ -323,6 +319,8 @@ static void fetchEcmwf (int maxStep, double topLat, double leftLon, double botto
          break;
       }
       reduce (gribDir, outputFile, SHORTNAMES, topLat, leftLon, bottomLat, rightLon, reducedFile);
+      if (verbose && !fileExists (reducedFile))
+         fprintf (stderr, "in fetchEcmf, Error: %s Does no exist !\n", reducedFile);
    }
    concatenateGrib (ECMWF_ROOT, "ECMWF", yyyy, mm, dd, hh, maxStep);
 }

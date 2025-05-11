@@ -18,5 +18,7 @@ gcc -fanalyzer -c editor.c `pkg-config --cflags gtk4 gtksourceview-5`
 gcc -fanalyzer -c displaytext.c `pkg-config --cflags gtk4`
 gcc -fanalyzer -c rshputil.c `pkg-config --cflags gtk4`
 gcc -fanalyzer -c r3server.c `pkg-config --cflags gtk4`
+gcc -fanalyzer -c aisgpsserver.c `pkg-config --cflags gtk4`
+gcc -fanalyzer -c r3gribget.c `pkg-config --cflags gtk4`
 
 rm *.o

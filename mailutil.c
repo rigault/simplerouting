@@ -79,11 +79,11 @@ static bool smtpSendPython (const char *toAddress, const char *object, const cha
 }
 
 /*! Replace \n with \r\n */
-char *normalizeNewlines(const char *message) {
+char *normalizeNewlines (const char *message) {
    GRegex *regex = g_regex_new("\n", 0, 0, NULL);
    char *normalized = g_regex_replace_literal(regex, message, -1, 0, "\r\n", 0, NULL);
    g_regex_unref(regex);
-   return normalized; // Retourne une nouvelle chaîne allouée
+   return normalized; 
 }
 
 
@@ -98,7 +98,7 @@ bool smtpSend (const char *toAddress, const char *object, const char *message) {
    printf ("in Smtp: %s\n", message);
 
    char *normalizedMessage = normalizeNewlines(message);
-   if (!normalizedMessage) {
+   if (! normalizedMessage) {
       return false;
    }
 

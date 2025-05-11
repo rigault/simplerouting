@@ -35,19 +35,17 @@ void printGrib (const Zone *zone, const FlowP *gribData) {
    for (size_t  k = 0; k < zone->nTimeStamp; k++) {
       double t = zone->timeStamp [k];
       printf ("Time: %.0lf\n", t);
-      printf ("lon   lat   u     v     g     w     msl     prate\n");
+      printf ("lon   lat   u     v     g     w\n");
       for (int i = 0; i < zone->nbLat; i++) {
          for (int j = 0; j < zone->nbLon; j++) {
 	         iGrib = (k * zone->nbLat * zone->nbLon) + (i * zone->nbLon) + j;
-            printf (" %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f\n", \
+            printf (" %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f\n", \
             gribData [iGrib].lon, \
 	         gribData [iGrib].lat, \
             gribData [iGrib].u, \
             gribData [iGrib].v, \
             gribData [iGrib].g, \
-            gribData [iGrib].w, \
-            gribData [iGrib].msl, \
-            gribData [iGrib].prate);
+            gribData [iGrib].w);
          }
       }
      printf ("\n");
@@ -369,11 +367,11 @@ static inline long indLon (double lon, const Zone *zone) {
 
 /*! interpolation to get u, v, g (gust), w (waves) at point (lat, lon)  and time t */
 static bool findFlow (double lat, double lon, double t, double *rU, double *rV, \
-   double *rG, double *rW, double *msl, double *prate, Zone *zone, const FlowP *gribData) {
+   double *rG, double *rW, Zone *zone, const FlowP *gribData) {
 
    double t0,t1;
    double latMin, latMax, lonMin, lonMax;
-   double a, b, u0, u1, v0, v1, g0, g1, w0, w1, msl0, msl1, prate0, prate1;
+   double a, b, u0, u1, v0, v1, g0, g1, w0, w1;
    int iT0, iT1;
    FlowP windP00, windP01, windP10, windP11;
    if ((!zone->wellDefined) || (zone->nbLat == 0) || (! isInZone (lat, lon, zone) && par.constWindTws == 0) || (t < 0)){
@@ -394,7 +392,7 @@ static bool findFlow (double lat, double lon, double t, double *rU, double *rV, 
    // printf ("00tws %lf  01tws %lf  10tws %lf 11tws %lf\n", windP00.tws, windP01.tws,windP10.tws,windP11.tws); 
    // speed longitude interpolation at northern latitudes
   
-   // interpolation  for u, v, w, g, msl, prate
+   // interpolation  for u, v, w, g
    a = interpolate (lon, windP00.lon, windP01.lon, windP00.u, windP01.u);
    b = interpolate (lon, windP10.lon, windP11.lon, windP10.u, windP11.u); 
    u0 = interpolate (lat, windP00.lat, windP10.lat, a, b);
@@ -411,16 +409,6 @@ static bool findFlow (double lat, double lon, double t, double *rU, double *rV, 
    b = interpolate (lon, windP10.lon, windP11.lon, windP10.w, windP11.w); 
    w0 = interpolate (lat, windP00.lat, windP10.lat, a, b);
     
-   a = interpolate (lon, windP00.lon, windP01.lon, windP00.msl, windP01.msl); 
-   b = interpolate (lon, windP10.lon, windP11.lon, windP10.msl, windP11.msl); 
-   msl0 = interpolate (lat, windP00.lat, windP10.lat, a, b);
-    
-   a = interpolate (lon, windP00.lon, windP01.lon, windP00.prate, windP01.prate); 
-   b = interpolate (lon, windP10.lon, windP11.lon, windP10.prate, windP11.prate); 
-   prate0 = interpolate (lat, windP00.lat, windP10.lat, a, b);
-    
-   //printf ("lat %lf a %lf  b %lf  00lat %lf 10lat %lf  %lf\n", p.lat, a, b, windP00.lat, windP10.lat, tws0); 
-
    // 4 points at time t1
    windP00 = gribData [iT1 * zone->nbLat * zone->nbLon + indLat(latMax, zone) * zone->nbLon + indLon(lonMin, zone)];  
    windP01 = gribData [iT1 * zone->nbLat * zone->nbLon + indLat(latMax, zone) * zone->nbLon + indLon(lonMax, zone)];
@@ -444,14 +432,6 @@ static bool findFlow (double lat, double lon, double t, double *rU, double *rV, 
    b = interpolate (lon, windP10.lon, windP11.lon, windP10.w, windP11.w); 
    w1 = interpolate (lat, windP00.lat, windP10.lat, a, b);
    
-   a = interpolate (lon, windP00.lon, windP01.lon, windP00.msl, windP01.msl); 
-   b = interpolate (lon, windP10.lon, windP11.lon, windP10.msl, windP11.msl); 
-   msl1 = interpolate (lat, windP00.lat, windP10.lat, a, b);
-   
-   a = interpolate (lon, windP00.lon, windP01.lon, windP00.prate, windP01.prate); 
-   b = interpolate (lon, windP10.lon, windP11.lon, windP10.prate, windP11.prate); 
-   prate1 = interpolate (lat, windP00.lat, windP10.lat, a, b);
-   
    // finally, interpolation twd tws between t0 and t1
    t0 = zone->timeStamp [iT0];
    t1 = zone->timeStamp [iT1];
@@ -459,8 +439,6 @@ static bool findFlow (double lat, double lon, double t, double *rU, double *rV, 
    *rV = interpolate (t, t0, t1, v0, v1);
    *rG = interpolate (t, t0, t1, g0, g1);
    *rW = interpolate (t, t0, t1, w0, w1);
-   *msl = interpolate (t, t0, t1, msl0, msl1);
-   *prate = interpolate (t, t0, t1, prate0, prate1);
 
    return true;
 }
@@ -468,7 +446,6 @@ static bool findFlow (double lat, double lon, double t, double *rU, double *rV, 
 /*! use findflow to get wind and waves */
 void findWindGrib (double lat, double lon, double t, double *u, double *v, \
    double *gust, double *w, double *twd, double *tws ) {
-   double msl, prate;
    if (par.constWindTws != 0) {
       *twd = par.constWindTwd;
       *tws = par.constWindTws;
@@ -476,35 +453,20 @@ void findWindGrib (double lat, double lon, double t, double *u, double *v, \
 	   *v = - KN_TO_MS * par.constWindTws * cos (DEG_TO_RAD * par.constWindTwd);
       *w = 0;
       *gust = hypot (*u, *v); // m/s
+      return;
    }
-   else {
-      findFlow (lat, lon, t, u, v, gust, w, &msl, &prate,  &zone, tGribData [WIND]);
-      *twd = fTwd (*u, *v);
-      *tws = fTws (*u, *v);
-   }
+   findFlow (lat, lon, t, u, v, gust, w, &zone, tGribData [WIND]);
+   *twd = fTwd (*u, *v);
+   *tws = fTws (*u, *v);
    if (par.constWave < 0) *w = 0;
    else if (par.constWave != 0) *w = par.constWave;
-}
-
-/*! use findflow to get rain */
-double findRainGrib (double lat, double lon, double t) {
-   double u, v, g, w, msl, prate;
-   findFlow (lat, lon, t, &u, &v, &g, &w, &msl, &prate, &zone, tGribData [WIND]);
-   return prate;
-}
-
-/*! use findflow to get pressure */
-double findPressureGrib (double lat, double lon, double t) {
-   double u, v, g, w, msl, prate;
-   findFlow (lat, lon, t, &u, &v, &g, &w, &msl, &prate, &zone, tGribData [WIND]);
-   return msl;
 }
 
 /*! use findflow to get current */
 void findCurrentGrib (double lat, double lon, double t, double *uCurr,\
    double *vCurr, double *tcd, double *tcs) {
 
-   double gust, bidon, msl, prate;
+   double gust, bidon;
    *uCurr = 0;
    *vCurr = 0;
    *tcd = 0;
@@ -514,14 +476,13 @@ void findCurrentGrib (double lat, double lon, double t, double *uCurr,\
       *vCurr = -KN_TO_MS * par.constCurrentS * cos (DEG_TO_RAD * par.constCurrentD);
       *tcd = par.constCurrentD; // direction
       *tcs = par.constCurrentS; // speed
+      return;
    }
-   else {
-      if (t <= currentZone.timeStamp [currentZone.nTimeStamp - 1]) {
-         findFlow (lat, lon, t, uCurr, vCurr, &gust, &bidon, &msl, &prate, &currentZone, tGribData [CURRENT]);
-         *tcd = fTwd (*uCurr, *vCurr);
-         *tcs = fTws (*uCurr, *vCurr);
-      }
-   }
+   if (t > currentZone.timeStamp [currentZone.nTimeStamp - 1]) return;
+
+   findFlow (lat, lon, t, uCurr, vCurr, &gust, &bidon, &currentZone, tGribData [CURRENT]);
+   *tcd = fTwd (*uCurr, *vCurr);
+   *tcs = fTws (*uCurr, *vCurr);
 }
 
 /*! Modify array with new value if not already in array. Return new array size*/
@@ -793,14 +754,6 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
             tGribData [iFlow] [iGrib].v = val;
          else if (strcmp (shortName, "gust") == 0)
             tGribData [iFlow] [iGrib].g = val;
-         else if ((strcmp (shortName, "msl") == 0) || (strcmp (shortName, "prmsl") == 0))  { // pressure
-            tGribData [iFlow] [iGrib].msl = val;
-            // printf ("pressure: %.2lf\n", val);
-         }
-         else if (strcmp (shortName, "prate") == 0) { // precipitation
-            tGribData [iFlow] [iGrib].prate = val;
-            // if (val > 0) printf ("prate: %lf\n", val);
-         }
          else if (strcmp (shortName, "swh") == 0)     // waves
             tGribData [iFlow] [iGrib].w = val;
          else if (indicatorOfParameter == GUST_GFS)   // find gust in GFS file specific parameter = 180
@@ -879,6 +832,7 @@ char *gribToStr (const Zone *zone, char *str, size_t maxLen) {
 /*! write grib meta information in GString */
 GString *gribToJson (const char *fileName) {
    char gribName [MAX_SIZE_FILE_NAME];
+   char infoStr [MAX_SIZE_LINE] = "";
    struct stat st;
    char str0 [MAX_SIZE_NAME] = "";
    char str1 [MAX_SIZE_NAME] = "";
@@ -939,7 +893,13 @@ GString *gribToJson (const char *fileName) {
       g_string_append_printf (jString, "\"%s\"%s", gZone.shortName [i], (i < gZone.nShortName -1) ? ", " : ""); // no comma for last
    }
    g_string_append_printf (jString, "],\n");
-   g_string_append_printf (jString, "\"fileName\": \"%s\", \"fileSize\": %ld\n", gribName, st.st_size);
+   g_string_append_printf (jString, "\"fileName\": \"%s\", \"fileSize\": %ld,\n", gribName, st.st_size);
+
+   if ((gZone.nDataDate != 1) || (gZone.nDataTime != 1)) {
+      snprintf (infoStr, MAX_SIZE_LINE, "Warning number of Date: %zu, number of Time: %zu", gZone.nDataDate, gZone.nDataTime);
+   }
+
+   g_string_append_printf (jString, "\"Info\": \"%s\"\n", infoStr);
    g_string_append_printf (jString, "}\n");
    
    return jString;

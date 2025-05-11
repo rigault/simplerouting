@@ -5,10 +5,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>
 #include "rtypes.h"
-#include "inline.h"
 #include "r3util.h"
-#include "rutil.h"
 #include "polar.h"
 #define MAX_POLAR_FILES 10
 #define OUTPUT_RES "VRresPOL.csv"

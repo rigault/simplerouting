@@ -21,7 +21,7 @@
 struct tm;
 
 /*! see aisgps file */
-MyGpsData my_gps_data; 
+extern MyGpsData my_gps_data; 
 
 
 const struct MailService mailServiceTab [N_MAIL_SERVICES] = {
@@ -451,21 +451,6 @@ double diffTimeBetweenNowAndGribOrigin (long intDate, double nHours) {
       fprintf (stderr, "In diffTimeBetweenNowAndGribOrigin, Error\n");
       return -1;
    }
-}
-
-/*! convert epoch time to string with or without seconds */
-char *epochToStr (time_t t, bool seconds, char *str, size_t maxLen) {
-   struct tm *utc = gmtime (&t);
-   if (seconds)
-      snprintf (str, maxLen, "%d-%02d-%02d %02d:%02d:%02d", 
-         utc->tm_year + 1900, utc->tm_mon + 1, utc->tm_mday,
-         utc->tm_hour, utc->tm_min, utc->tm_sec);
-   else
-      snprintf (str, maxLen, "%d-%02d-%02d %02d:%02d", 
-         utc->tm_year + 1900, utc->tm_mon + 1, utc->tm_mday,
-         utc->tm_hour, utc->tm_min);
-      
-   return str;
 }
 
 /*! fill str with polygon information */

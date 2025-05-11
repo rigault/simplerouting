@@ -1,5 +1,3 @@
-extern MyGpsData my_gps_data; 
-
 /*! Meteo service */
 extern const struct MailService mailServiceTab [];
 extern const struct GribService serviceTab [];
@@ -28,7 +26,6 @@ extern bool   isEmpty (const char *str);
 extern bool   analyseCoord (const char *strCoord, double *lat, double *lon);
 extern void   polygonToStr (char *buffer, size_t maxLen);
 extern long   getFileSize (const char *fileName);
-extern char   *epochToStr (time_t t, bool seconds, char *str, size_t len);
 extern int    readPoi (const char *fileName);
 extern bool   writePoi (const char *fileName);
 extern int    findPoiByName (const char *name, double *lat, double *lon);

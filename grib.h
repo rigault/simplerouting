@@ -1,3 +1,6 @@
+/*! grib data description */
+extern FlowP *tGribData [];            // wind, current
+
 extern double  zoneTimeDiff (const Zone *zone1, const Zone *zone0);
 extern void    findWindGrib (double lat, double lon, double t, double *u, double *v, double *gust, double *w, double *twd, double *tws );
 extern double  findRainGrib (double lat, double lon, double t);

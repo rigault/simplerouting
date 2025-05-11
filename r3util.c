@@ -61,10 +61,8 @@ Par par;
 char *tIsSea = NULL; 
 
 /*! geographic zone covered by grib file */
-Zone zone;                          // wind
-Zone currentZone;                   // current
-
-FlowP *tGribData [2] = {NULL, NULL};  // wind, current
+Zone zone;                             // wind
+Zone currentZone;                      // current
 
 /*! return the name of the sail */
 char *fSailName (int val, char *str, size_t maxLen) {
@@ -155,19 +153,20 @@ bool mostRecentFile (const char *directory, const char *pattern0, const char *pa
       if ((strstr (entry->d_name, pattern0) != NULL) 
          && (strstr (entry->d_name, pattern1) != NULL)
          && (stat(filepath, &statbuf) == 0) 
-         && (S_ISREG(statbuf.st_mode) && statbuf.st_mtime > latestTime)) {
+         && (S_ISREG(statbuf.st_mode) 
+         && (statbuf.st_size > 0)  // select file only id not empty
+         && statbuf.st_mtime > latestTime)) {
          latestTime = statbuf.st_mtime;
          if (strlen (entry->d_name) < maxLen)
-            snprintf (name, maxLen, "%s%s", directory, entry->d_name);
+            snprintf (name, maxLen, "%s/%s", directory, entry->d_name);
          else {
-            fprintf (stderr, "In mostRecentFile, Error File name size is: %zu and exceed Max Size: %zu\n", \
-               strlen (entry->d_name), maxLen);
+            fprintf (stderr, "In mostRecentFile, Error File name:%s size is: %zu and exceed Max Size: %zu\n", \
+               entry->d_name, strlen (entry->d_name), maxLen);
             break;
          }
       }
    }
    closedir(dir);
-   
    return (latestTime > 0);
 }
 
@@ -350,6 +349,21 @@ bool readIsSea (const char *fileName) {
    return true;
 } 
 
+/*! convert epoch time to string with or without seconds */
+char *epochToStr (time_t t, bool seconds, char *str, size_t maxLen) {
+   struct tm *utc = gmtime (&t);
+   if (seconds)
+      snprintf (str, maxLen, "%d-%02d-%02d %02d:%02d:%02d", 
+         utc->tm_year + 1900, utc->tm_mon + 1, utc->tm_mday,
+         utc->tm_hour, utc->tm_min, utc->tm_sec);
+   else
+      snprintf (str, maxLen, "%d-%02d-%02d %02d:%02d", 
+         utc->tm_year + 1900, utc->tm_mon + 1, utc->tm_mday,
+         utc->tm_hour, utc->tm_min);
+      
+   return str;
+}
+
 /*! return offset Local UTC in seconds */
 double offsetLocalUTC (void) {
    time_t now;
@@ -376,7 +390,7 @@ char *gribDateTimeToStr (long date, long time, char *str, size_t maxLen) {
 }
 
 /*! convert long date found in grib file in seconds time_t */
-time_t gribDateTimeToEpoch (long date, long time) {
+time_t wronggribDateTimeToEpoch (long date, long time) {
    struct tm tm0 = {0};
    tm0.tm_year = (date / 10000) - 1900;
    tm0.tm_mon = ((date % 10000) / 100) - 1;
@@ -385,6 +399,26 @@ time_t gribDateTimeToEpoch (long date, long time) {
    tm0.tm_min = time % 100;
    tm0.tm_isdst = -1;                        // avoid adjustments with hours summer winter
    return mktime (&tm0);                                 
+}
+
+/*! convert long date found in grib file in seconds time_t */
+time_t gribDateTimeToEpoch (long date, long time) {
+   gint year = date / 10000;
+   gint month = (date % 10000) / 100;
+   gint day = date % 100;
+   gint hour = time / 100;
+   gint minute = time % 100;
+
+   GDateTime *dt = g_date_time_new_utc(year, month, day, hour, minute, 0.0);
+   if (!dt) {
+     fprintf (stderr, "Invalid date/time: %04d-%02d-%02d %02d:%02d UTC",
+              year, month, day, hour, minute);
+     return (time_t)-1;
+   }
+
+   time_t t = g_date_time_to_unix (dt);
+   g_date_time_unref (dt);
+   return t;
 }
 
 /*! calculate difference in hours between departure time and time 0 */

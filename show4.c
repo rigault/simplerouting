@@ -100,6 +100,7 @@ static const bool windowsOS = false;
 #define YELLOW                5              // consistency with colorStr
 #define DEFAULT_GRIB_TIME_STEP         3     // for gribRequestBox
 #define DEFAULT_GRIB_TIME_STEP_INDEX   1     // idem. The index.        
+#define MAX_SOG               20.0           // knots for display...
 
 #define CAIRO_SET_SOURCE_RGB_BLACK(cr)             cairo_set_source_rgb (cr,0,0,0)
 #define CAIRO_SET_SOURCE_RGB_WHITE(cr)             cairo_set_source_rgb (cr,1.0,1.0,1.0)
@@ -4100,7 +4101,7 @@ static void routeGramDraw (GtkDrawingArea *area, cairo_t *cr, \
    // Draw speeds labels and horizontal lines
    cairo_set_font_size (cr, 10);
    const double step = 5.0;
-   double maxMax = MAX (MAX (MS_TO_KN * route.maxGust, route.maxTws), route.maxSog);
+   double maxMax = MAX (MAX (MS_TO_KN * route.maxGust, route.maxTws), MAX_SOG);
    if (maxMax <= 0) {
       fprintf (stderr, "In routeGramDraw: maxMax should be strictly positive\n");
       return;
@@ -4354,7 +4355,7 @@ static void routeGram () {
    snprintf (str0, sizeof (str0), "%.2lf", \
          (route.destinationReached) ? 0 : orthoDist (lastClosest.lat, lastClosest.lon,\
          par.pDest.lat, par.pDest.lon));
-   snprintf (str1, MAX_SIZE_LINE, "%.2lf - %.2lf", route.avrSog, route.maxSog);
+   snprintf (str1, MAX_SIZE_LINE, "%.2lf - %.2lf", route.avrSog, MAX_SOG);
 
    lineRouteGramReport (grid, 3, "mail-forward-symbolic", "Distance To Dest. (NM)", str0, "Avr - Max Speed (Kn)", str1);
 
@@ -7079,7 +7080,7 @@ static void changeLastPoint () {
       }
    }
    lastClosest = isocArray [(nIsoc - 1) * MAX_SIZE_ISOC + selectedPointInLastIsochrone];
-   storeRoute (&route, &par.pOr, &lastClosest, 0);
+   storeRoute (&route, &par.pOr, &lastClosest);
    routeGram ();
 }
 

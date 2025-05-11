@@ -1,0 +1,3 @@
+#!/bin/bash
+./composepol ../pol/polaire_code_zero_vgv.csvf  ../pol/polaire_foc_1_vgv.csvf  ../pol/polaire_gennaker_vgv.csvf  ../pol/polaire_genois_vgv.csvf
+

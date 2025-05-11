@@ -37,6 +37,7 @@
 #define MISSING               (0.001)           // for grib file missing values
 #define MS_TO_KN              (3600.0/1852.0)   // conversion meter/second to knots
 #define KN_TO_MS              (1852.0/3600.0)   // conversion knots to meter/second
+#define NM_TO_M               1852.0            // convert Nautical Mile to meter
 #define EARTH_RADIUS          3440.065          // Earth's radius in nautical miles
 #define RAD_TO_DEG            (180.0/G_PI)      // conversion radius to degree
 #define DEG_TO_RAD            (G_PI/180.0)      // conversion degree to radius
@@ -212,14 +213,14 @@ typedef struct {
 
 /*! Wind point */ 
 typedef struct {
-   double lat;                // latitude
-   double lon;                // longitude
-   double u;                  // east west component of wind or current in meter/s
-   double v;                  // north south component of wind or current in meter/s
-   double w;                  // waves height WW3 model
-   double g;                  // wind speed gust un meter/s
-   double msl;                // mean sea level pressure
-   double prate;              // precipitation rate
+   float lat;                 // latitude
+   float lon;                 // longitude
+   float u;                   // east west component of wind or current in meter/s
+   float v;                   // north south component of wind or current in meter/s
+   float w;                   // waves height WW3 model
+   float g;                   // wind speed gust un meter/s
+   float msl;                 // mean sea level pressure
+   float prate;               // precipitation rate
 } FlowP;                      // either wind or current
 
 /*! zone description */
@@ -265,20 +266,22 @@ typedef struct {
    int    toIndexWp;
    double lat;
    double lon;
-   double dd;     // distance to pDest
-   double vmc;    // velocity made on course
+   double dd;        // distance to pDest
+   double vmc;       // velocity made on course
+   double orthoVmc;  // distance to the middle direction
 } Pp;
 
 /*! isochrone meta data */ 
 typedef struct {
-   int    toIndexWp; // index of waypoint targetted
-   double distance;  // best distance from Isoc to pDest
-   double bestVmc;   // best VMC (distance)
-   int    closest;   // index in Iso of closest point to pDest
-   int    first;     // index of first point, useful for drawAllIsochrones
-   int    size;      // size of isochrone
-   double focalLat;  // focal point Lat
-   double focalLon;  // focal point Lon
+   int    toIndexWp;       // index of waypoint targetted
+   // double distance;        // best distance from Isoc to pDest
+   double bestVmc;         // best VMC (distance)
+   double biggestOrthoVmc; // biggest distance to middle direction 
+   int    closest;         // index in Iso of closest point to pDest
+   int    first;           // index of first point, useful for drawAllIsochrones
+   int    size;            // size of isochrone
+   double focalLat;        // focal point Lat
+   double focalLon;        // focal point Lon
 } IsoDesc;
 
 /*! polat Matrix description */
@@ -290,12 +293,12 @@ typedef struct {
 
 /*! Point for way point route */
 typedef struct {
-   double lat;    // latitude
-   double lon;    // longitude
-   double od;     // orthodomic distance
-   double oCap;   // orthodomic cap 
-   double ld;     // loxodromic distance
-   double lCap;   // loxodromic cap 
+   double lat;                // latitude
+   double lon;                // longitude
+   double od;                 // orthodomic distance
+   double oCap;               // orthodomic cap 
+   double ld;                 // loxodromic distance
+   double lCap;               // loxodromic cap 
 } WayPoint;
 
 /*! Point for Sail Route  */
@@ -352,34 +355,35 @@ typedef struct {
 
 /*! Route description  */
 typedef struct {
-   char   polarFileName [MAX_SIZE_FILE_NAME]; // save the polar name
-   long   dataDate;                         // save Grib date
-   long   dataTime;                         // save Grib time
-   int    nIsoc;                            // number of Isochrones
-   double isocTimeStep;                     // isoc time step for this route in hours
-   int    n;                                // number of steps
-   double calculationTime;                  // compute time to calculate the route
-   double lastStepDuration;                 // in hours
-   double duration;                         // total time in hours of the route
-   double motorDuration;                    // total time in hours using motor
-   double totDist;                          // total distance in NM
-   double motorDist;                        // distance using motor in NM
-   double tribordDist;                      // distance sail tribord in NM
-   double babordDist;                       // distance sail babord in NM
-   int    ret;                              // return value of routing
-   bool   destinationReached;               // true if destination reaches
-   double avrTws;                           // average wind speed of the route
-   double avrGust;                          // average gust of the route
-   double avrWave;                          // average wave of the route
-   double avrSog;                           // average Speed Over Ground
-   double maxTws;                           // max wind speed of the route
-   double maxGust;                          // max gust of the route
-   double maxWave;                          // max wave of the route
-   double maxSog;                           // max Speed Over Ground
-   int    competitorIndex;                  // index of competitor. See CompetitorsList.
-   int    nSailChange;                      // stat: number of sail chage
-   int    nAmureChange;                     // stat: number of amure change
-   SailPoint *t;                            // array of points (maxNIsoc + 0), dynamic allocation
+   char   polarFileName [MAX_SIZE_FILE_NAME];   // save the polar name
+   long   dataDate;                             // save Grib date
+   long   dataTime;                             // save Grib time
+   int    nIsoc;                                // number of Isochrones
+   double isocTimeStep;                         // isoc time step for this route in hours
+   int    n;                                    // number of steps
+   double calculationTime;                      // compute time to calculate the route
+   double lastStepDuration;                     // in hours, last step (to destination)
+   double lastStepWpDuration [MAX_N_WAY_POINT]; // in hours, to waypoints 
+   int    nWayPoints;                           // number of WayPoints (0 if only destination)
+   double duration;                             // total time in hours of the route
+   double motorDuration;                        // total time in hours using motor
+   double totDist;                              // total distance in NM
+   double motorDist;                            // distance using motor in NM
+   double tribordDist;                          // distance sail tribord in NM
+   double babordDist;                           // distance sail babord in NM
+   int    ret;                                  // return value of routing
+   bool   destinationReached;                   // true if destination reaches
+   double avrTws;                               // average wind speed of the route
+   double avrGust;                              // average gust of the route
+   double avrWave;                              // average wave of the route
+   double avrSog;                               // average Speed Over Ground
+   double maxTws;                               // max wind speed of the route
+   double maxGust;                              // max gust of the route
+   double maxWave;                              // max wave of the route
+   int    competitorIndex;                      // index of competitor. See CompetitorsList.
+   int    nSailChange;                          // stat: number of sail chage
+   int    nAmureChange;                         // stat: number of amure change
+   SailPoint *t;                                // array of points (maxNIsoc + 0), dynamic allocation
 } SailRoute;
 
 /*! History Route description  */
@@ -402,7 +406,7 @@ typedef struct {
    double constWindTwd;                      // the direction of constant wind if used
    double constWave;                         // constant wave height if used
    double constCurrentS;                     // if not equal 0, contant current speed Knots
-   double constCurrentD;                     // the direction of cinstant current if used
+   double constCurrentD;                     // the direction of constant current if used
    int jFactor;                              // factor for target point distance used in sectorOptimize
    int kFactor;                              // factor for target point distance used in sectorOptimize
    int nSectors;                             // number of sector for optimization by sector
@@ -507,6 +511,7 @@ typedef struct {
    double lat;
    double lon;
    double alt;
+   char   uAlt;
    double cog;    // degrees
    double sog;    // Knots
    int    status;
@@ -518,6 +523,7 @@ typedef struct {
 /*! value in NMEA AIS frame */
 typedef struct {
    int mmsi;
+   int messageId;
    double lat;
    double lon;
    double sog;
